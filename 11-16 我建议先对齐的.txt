@@ -1,0 +1,630 @@
+关于现在的CFD程序：
+1. 多块网格的实现，首先要从读取网格设置边界条件开始改，不要case.py设置，case.py可以帮助比如说加射流功能、加激波功能等等，其他普通的边界条件还是自己设置好
+2.网格读取使用griden genric，现在还是读的单网格。多块网格除了halo点的问题，还有对齐计算的事儿。
+
+3.边条用meta.json设置但是名字要改改，比如说叫input.json
+包含网格文件名，网格文件名就作为后续文件输出的前缀。
+4.输出的要输出npz文件比较省空间，但是每保存一步就输出当前步的瞬时plt文件（一直只有一个，意思就是新的将旧的替换掉）
+
+可以。你的思路整体是对的，而且和我前面判断的改造方向一致：**边界条件从算例中剥离，网格系统成为边界和拓扑的来源；`case.py` 只保留算例特有物理功能；多 GPU 并行放在多块串行正确之后再做。**
+
+目前项目里没有找到 Gridgen generic 读取代码；但有一个现成的 Tecplot ASCII 输出脚本 `channel_case_iiA/to_tecplot.py`，后面可以改造成“每步覆盖一个瞬时文件”的输出器。
+
+下面按“对现有程序改动最小”的顺序整理。
+
+---
+
+# 一、最终代码职责划分
+
+建议最终形成下面这条链：
+
+```text
+input.json
+   ↓
+配置解析
+   ↓
+网格读取器：Gridgen generic / 现有 OCFD 网格 / 内置网格
+   ↓
+MeshData
+  ├─ 一个或多个网格块
+  ├─ 坐标、尺寸、度量
+  ├─ 块间连接关系
+  ├─ 边界类型和边界分区
+  └─ 输出文件名前缀
+   ↓
+boundary.py：壁面、远场、周期、出口、对称面等通用边界
+   ↓
+case.py：初值、射流、激波、体积力等算例特有功能
+   ↓
+solver.py / viscous.py：纯空间离散和时间推进
+   ↓
+io.py：NPZ 存档 + 滚动 PLT 瞬时文件
+```
+
+核心原则是：
+
+| 模块 | 应该负责 | 不应该负责 |
+|---|---|---|
+| 网格读取器 | 网格块、坐标、边界类型、块连接、边界分区名称 | 判断当前是平板、槽道还是其他物理算例 |
+| `boundary.py` | 通用边界条件的数值实现 | 决定算例物理模型 |
+| `case.py` | 初值、射流、激波、体积力、特殊源项、特殊自定义区 | 普通壁面、远场、出口、周期边界 |
+| `run.py` | 固定调用流程 | 为不同算例写大量 `if case == ...` |
+| `solver.py` | RHS 和时间推进 | 读取网格、解析边界文件 |
+| `io.py` | NPZ、PLT、文件前缀和覆盖逻辑 | 数值计算 |
+
+---
+
+# 二、主程序与 `case.py` 应该统一接口
+
+是的，**主计算程序必须对 case 有统一接口规定**。否则每加一个射流、激波或其他模型，都要改 `run.py` 和求解主链，后面会越来越乱。
+
+建议 `case.py` 最终只提供这种接口：
+
+```python
+class CaseHooks:
+    name: str
+
+    def initial_condition(mesh, params):
+        """根据网格和物性生成初始守恒量。"""
+
+    def source(q, mesh, params, t):
+        """返回算例特有的体积源项 du；没有则返回 0。"""
+
+    def post_update(q, mesh, params, t):
+        """整步后的算例修正，例如特定区域重置、激波发生器；默认不变。"""
+
+    def custom_zones():
+        """声明 case 要处理的自定义边界区名称，例如 JET、SHOCK_INLET。"""
+```
+
+`run.py` 只知道这些接口，不知道具体算例内部逻辑。
+
+主循环变成：
+
+```text
+mesh = load_mesh(input_json)
+boundary = build_boundary(mesh, input_json)
+case = load_case(input_json.case)
+
+q = case.initial_condition(mesh, params)
+
+每个 RK 子步：
+    q = boundary.apply_external(q)
+    q = halo_exchange(q)
+    du = inviscid_rhs(q)
+    du += viscous_rhs(q)
+    du += case.source(q, mesh, params, t)
+    q = rk_combine(q, du)
+
+每个整步后：
+    q = case.post_update(q, mesh, params, t)
+```
+
+普通边界完全不经过 `case.py`。
+
+---
+
+# 三、边界条件的划分方式
+
+## 1. 网格/边界文件提供“在哪里”和“是什么类型”
+
+Gridgen generic 输出的边界信息应转换成统一结构，例如：
+
+```text
+块 0：
+  i-：INTERFACE，连接块 1 的 i+
+  i+：FARFIELD
+  j-：WALL
+  j+：FARFIELD
+  k-：PERIODIC
+  k+：PERIODIC
+
+块 1：
+  i-：INTERFACE，连接块 0 的 i-
+  ...
+```
+
+同时保留边界区名称，例如：
+
+```text
+WALL
+FARFIELD
+OUTFLOW
+PERIODIC
+JET
+SHOCK_INLET
+```
+
+其中：
+
+- `WALL`、`FARFIELD`、`OUTFLOW`、`PERIODIC` 交给 `boundary.py`；
+- `JET`、`SHOCK_INLET` 这类自定义名称可以交给 `case.py` 的 hook；
+- 无法识别的类型要在启动时报错，不要静默按出流处理。
+
+## 2. `boundary.py` 提供“怎么算”
+
+建议把现在分散在 `fields.py`、`channel.py`、`plate.py` 中的通用边界整理成注册表：
+
+```text
+PERIODIC
+OUTFLOW
+FARFIELD
+INFLOW
+WALL
+ISOTHERMAL_WALL
+ADIABATIC_WALL
+SYMMETRY
+INTERFACE
+```
+
+但要注意，边界不止一种填充对象，至少需要区分：
+
+1. **守恒量/状态鬼胞**：无粘和 RK 状态使用；
+2. **原始变量**：速度、温度、压力；
+3. **粘性通量 Ev 鬼胞**：粘性项二阶导数使用；
+4. **标量场**：滤波压力、坐标、度量等辅助场。
+
+所以 `boundary.py` 不应只有一个 `apply(q)`，而应提供一组接口：
+
+```python
+apply_cons_boundary(...)
+apply_primitive_boundary(...)
+apply_viscous_flux_boundary(...)
+apply_scalar_boundary(...)
+```
+
+`INTERFACE` 不直接写数值，而是交给块间 halo 交换模块。
+
+---
+
+# 四、`input.json` 的建议格式
+
+不要再叫 `meta.json`，因为你的设想已经是完整运行输入，不只是元数据。`input.json` 建议作为唯一运行入口配置。
+
+示例结构：
+
+```json
+{
+  "mesh": {
+    "file": "flat_plate.grd",
+    "format": "gridgen_generic",
+    "boundary_file": "flat_plate.bc"
+  },
+
+  "physics": {
+    "gamma": 1.4,
+    "Re": 10000.0,
+    "Ama": 0.0955,
+    "Ref_T": 1.0,
+    "Pr": 0.7
+  },
+
+  "numerics": {
+    "scheme": "OMP6_CD8",
+    "viscous": true,
+    "vis_order": "CD8",
+    "cfl": 0.4,
+    "dt": 9.051060300912213e-6,
+    "filter": false
+  },
+
+  "time": {
+    "end_time": 0.2,
+    "end_step": 100000
+  },
+
+  "case": {
+    "name": "base_flow",
+    "params": {}
+  },
+
+  "output": {
+    "dir": "output",
+    "npz_every": 500,
+    "plt_every": 500,
+    "rolling_plt": true
+  }
+}
+```
+
+输出前缀直接从网格文件名取：
+
+```text
+flat_plate.grd
+    → flat_plate_step000100.npz
+    → flat_plate_step000200.npz
+    → flat_plate_latest.plt
+```
+
+暂时不建议在 `input.json` 里重复写边界类型，因为边界类型应来自 Gridgen 输出文件。`input.json` 只放：
+
+- 网格文件；
+- 参考温度、Re、Ma、Pr 等物性；
+- 数值格式；
+- 时间控制；
+- case 名称和 case 参数；
+- 输出控制。
+
+如果以后确实需要覆盖边界，可以增加：
+
+```json
+"boundary_overrides": {
+  "JET": {
+    "type": "CUSTOM"
+  }
+}
+```
+
+但默认不启用。
+
+---
+
+# 五、多块网格的“对齐计算”要单独做
+
+这是多块网格里除 halo 交换外最容易被低估的部分。
+
+Gridgen generic 文档还没有时，先不要写死格式细节，但要先把对齐结果的数据结构定下来。每个内部接口最终都应该生成一张静态映射表：
+
+```text
+InterfaceMap：
+  本块编号、面编号
+  邻块编号、面编号
+  本块发送切片
+  邻块接收切片
+  坐标轴映射
+  是否需要 reverse
+  是否需要 transpose
+  网格点是否一一对应
+```
+
+## 第一版先只支持
+
+- 网格块界面一一对应；
+- 界面两侧点数相同；
+- 坐标在容差内一致；
+- 不允许非匹配插值；
+- 优先支持坐标轴方向一致的分块；
+- 对方向翻转可以先支持 reverse，暂不一开始支持任意 transpose。
+
+这样可以避免把“多块并行”与“任意结构网格拓扑”两个问题混在一起。
+
+## 对齐流程
+
+1. 读入每个块的三维坐标。
+2. 对六个面建立坐标集合或哈希。
+3. 用容差寻找坐标一致的块面。
+4. 判断界面索引关系：
+   - 完全同向；
+   - 某个索引反转；
+   - 两个局部轴交换。
+5. 预生成 halo 发送/接收切片。
+6. 启动时输出接口报告：
+   - 找到多少个内部接口；
+   - 每个接口两侧尺寸；
+   - 坐标最大偏差；
+   - 是否有未匹配面。
+7. 未匹配面必须来自边界文件；既不能匹配邻块、又没有边界类型的面要直接报错。
+
+---
+
+# 六、推荐的改动顺序
+
+## 第 0 步：固定当前基准
+
+先不碰功能，只保留当前程序的回归基准：
+
+- Sod 一步；
+- TG 若干步；
+- Poiseuille 若干步；
+- channel 一步；
+- plate 一步；
+- 现有单网格 channel 的完整结果。
+
+后续每一步都要求这些结果不发生变化。
+
+---
+
+## 第 1 步：建立统一的网格和边界数据结构，但仍只跑单块
+
+先新增或整理：
+
+- `MeshData`
+- `BlockMesh`
+- `BoundarySpec`
+- `FaceBoundary`
+- `InterfaceMap`
+
+当前已有的 `Grid(nx, ny, nz)` 暂时不要删除，可以先用适配层包起来：
+
+```text
+现有 Grid
+  → 转成单块 MeshData
+```
+
+这一步不改数值，只改数据组织方式。
+
+### 验收标准
+
+- 现有算例全部还能跑；
+- 单块结果与现在一致；
+- 程序仍能使用原有命令行入口。
+
+---
+
+## 第 2 步：把普通边界迁移到 `boundary.py`
+
+将以下通用逻辑从 `fields.py`、`channel.py`、`plate.py` 中抽出来：
+
+- 周期；
+- 出流；
+- 远场；
+- 无滑移壁；
+- 等温壁；
+- 对称面；
+- 通用入口。
+
+`channel.py` 和 `plate.py` 一开始可以继续保留包装函数，内部改调 `boundary.py`，避免一次改太多。
+
+### 验收标准
+
+- channel 单步 RHS 不变；
+- plate 单步 RHS 不变；
+- 壁面、顶部、入口的鬼胞值逐个一致。
+
+---
+
+## 第 3 步：增加 `input.json`
+
+这一步可以和第 1、2 步并行做，但建议在正式接 Gridgen 前完成。
+
+新增一个配置模块，例如：
+
+```text
+runtime_config.py
+```
+
+职责：
+
+- 读取 `input.json`；
+- 校验参数；
+- 生成 `PhysParams`；
+- 生成输出配置；
+- 从网格文件名推导输出前缀；
+- 暂时兼容现有命令行参数。
+
+### 验收标准
+
+- 同一组参数用命令行和 `input.json` 启动，结果一致；
+- 输出文件前缀确实来自网格文件名；
+- 缺参数时错误信息明确。
+
+---
+
+## 第 4 步：实现 Gridgen generic 的单块读取
+
+等你拿到 Gridgen generic 文档后，先只实现：
+
+- 单块坐标读取；
+- 单块边界文件读取；
+- 边界类型映射；
+- 单块度量计算；
+- 单块运行。
+
+不要一开始就同时处理多块。
+
+新增模块建议独立于现有 `mesh.py`，例如：
+
+```text
+mesh_gridgen.py
+```
+
+然后统一返回 `MeshData`。
+
+### 验收标准
+
+- 网格维数和坐标与查看器一致；
+- 每个面的边界类型正确；
+- 用单块 Gridgen 网格跑出的结果，与等价内置网格一致；
+- 度量 `Ajac` 和坐标导数在容差内一致。
+
+---
+
+## 第 5 步：统一 `case.py` 接口
+
+这一步把 `case.py` 从“算例总装厂”改成“算例插件”。
+
+保留：
+
+- 初值；
+- 体积力；
+- 射流；
+- 激波；
+- 特殊区域处理；
+- 自定义边界区 hook。
+
+移除或转交：
+
+- 普通壁面；
+- 远场；
+- 出口；
+- 周期；
+- 网格创建；
+- 边界文件识别。
+
+`run.py` 最终只调用统一接口，不再关心 case 的具体名称。
+
+### 验收标准
+
+- 现有 Sod、TG、Poiseuille、channel、plate 全部变成插件后结果不变；
+- 新增一个空 case 不需要修改 `run.py`；
+- 未注册 case 名称能给出明确错误。
+
+---
+
+## 第 6 步：多块串行读取和块间状态交换
+
+这一步仍然只用单进程，不碰多 GPU。
+
+实现：
+
+1. 读取多个块；
+2. 自动识别内部接口；
+3. 建立对齐映射；
+4. 每块分配自己的 4 层鬼胞；
+5. 实现守恒量状态 halo 交换；
+6. 先只跑无粘 RHS 和 RK3。
+
+### 验收标准
+
+- 两个块拼起来与一个大单块坐标一致；
+- 常数场经过交换后界面鬼胞值正确；
+- 线性场的界面导数与单块一致；
+- 双块 Sod/均匀流结果与单块在 `1e-12` 或运算顺序误差范围内一致；
+- 周期方向跨块交换正确。
+
+---
+
+## 第 7 步：多块度量和粘性通量交换
+
+多块无粘正确后再处理粘性。
+
+需要做：
+
+- 坐标 halo 交换；
+- 每块度量计算；
+- 度量在块界面的一致性检查；
+- 拆分当前 `viscous_rhs()`；
+- 增加粘性通量 `Ev` 的块间交换；
+- 再计算局部散度。
+
+### 验收标准
+
+- 双块线性温度场、速度场的粘性 RHS 与单块一致；
+- Poiseuille 稳态剖面不受分块影响；
+- channel 双块与原单块一致；
+- plate 分块后入口、壁面、顶部结果一致。
+
+---
+
+## 第 8 步：输出系统
+
+这一步可以插在多 GPU 前完成。
+
+### NPZ
+
+目前 `io.py::save_npz` 用的是 `np.savez`，实际上**没有压缩**。如果目标是节省空间，应改为：
+
+- `np.savez_compressed`；或
+- 保留未压缩 NPZ 用于快速重启，压缩 NPZ 用于长期存档。
+
+多块时可以选择：
+
+```text
+每个保存步一个 NPZ，内部包含所有块
+```
+
+或：
+
+```text
+每块一个 NPZ
+```
+
+第一版建议一个保存步一个文件，便于管理；多块很多时再改按块分文件。
+
+### 滚动 PLT
+
+每保存一步，同时写一个瞬时文件，例如：
+
+```text
+flat_plate_latest.plt
+```
+
+新的替换旧的。为避免程序中途崩溃留下半个文件，应该：
+
+1. 先写 `flat_plate_latest.plt.tmp`；
+2. 写完后用原子替换改名为 `flat_plate_latest.plt`。
+
+当前项目里的 `channel_case_iiA/to_tecplot.py` 写的是 **Tecplot ASCII**，可作为第一版基础。需要注意：
+
+- ASCII 实现最简单，但体积较大；
+- 真正的二进制 `.plt` 通常需要 TecIO；
+- 如果后处理工具接受 ASCII 内容，可以先用滚动 ASCII PLT；
+- 否则第一版先生成 `latest.tec`，第二版再接真正的二进制 `.plt`。
+
+多块时滚动文件应包含多个 `ZONE`，每个网格块一个 zone。
+
+---
+
+## 第 9 步：JAX 多 GPU
+
+只有在下面条件全部满足后再做：
+
+- 多块串行正确；
+- 状态 halo 正确；
+- Ev halo 正确；
+- 度量和边界正确；
+- I/O 正确；
+- case 接口稳定。
+
+然后做：
+
+- 一个块对应一张 GPU，或多个同尺寸块打包到一张 GPU；
+- 用 `jax.shard_map` 运行局部块；
+- 用 collective 交换状态和 Ev；
+- 全局最小 `dt`；
+- 全局能量、NaN、CFL 诊断；
+- 分布式或分块输出。
+
+当前 `PARALLEL_3D` 可以作为默认设备网格，但不应再只校验后丢弃。
+
+---
+
+## 第 10 步：更复杂的多块能力
+
+最后再考虑：
+
+- 非匹配界面；
+- 界面插值；
+- 重叠网格；
+- 不同块尺寸；
+- 一块多 GPU 或一块多块；
+- 动网格；
+- 负载均衡；
+- 通信与计算重叠。
+
+这些不应放进第一版，否则改动面会一下子失控。
+
+---
+
+# 七、当前模块到目标模块的迁移关系
+
+| 当前模块 | 后续角色 |
+|---|---|
+| `cases.py` | 算例插件注册表：初值、源项、射流、激波、自定义 zone |
+| `channel.py` | 保留 channel 特有参数和场转换；普通双壁逻辑迁入 `boundary.py` |
+| `plate.py` | 保留平板初值和 Blasius 相关辅助；入口、远场、壁面迁入 `boundary.py` |
+| `fields.py` | 只负责数组布局、鬼胞尺寸和基础切片，不再决定物理边界策略 |
+| `boundary.py` | 从现在的设计笔记变成真正的边界实现和注册表 |
+| `mesh.py` | 保留度量计算和 OCFD 网格适配；Gridgen generic 单独做 reader |
+| `run.py` | 固定流程编排器，不再直接了解具体算例边界 |
+| `io.py` | 增加压缩 NPZ、网格前缀、滚动 PLT |
+| `compare.py` | 增加多块逐块/整体对拍 |
+
+---
+
+# 八、我建议最终锁定的第一阶段范围
+
+为了最快得到可用结果，第一版可以明确限定为：
+
+- 支持 Gridgen generic 多块；
+- 多块界面必须 conforming；
+- 边界类型来自 Gridgen 输出文件；
+- 支持壁面、远场、周期、出口、入口、对称面；
+- 支持多块串行和 JAX 多 GPU；
+- 暂不支持非匹配界面和重叠网格；
+- `case.py` 只提供初值、源项和自定义区域；
+- `input.json` 作为唯一运行配置；
+- NPZ 存档 + 一个滚动瞬时 PLT；
+- 输出前缀默认取网格文件名。
+
+这套顺序的关键是：**先把“网格—边界—case”的职责边界改干净，再做串行多块，最后才做 GPU 并行**。这样每一步都能用当前单块结果回归，出问题也容易定位。
