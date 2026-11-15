@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# pytest 缓存
+.pytest_cache/
+
+# 按需求排除测试目录
+tests/
+
+# 虚拟环境
+.venv/
+venv/
+
+# 编辑器 / 系统文件
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
