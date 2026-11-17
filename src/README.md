@@ -78,6 +78,40 @@ output/sod_step000100.npz
 python -m opencfd_jax.src.run --help
 ```
 
+### 1.1 用 `input.json` 统一配置（第 3 步）
+
+`--config path/to/input.json` 可以一次给出运行参数；命令行仍是最高优先级，不写
+JSON 的字段保持程序默认值：
+
+```powershell
+python -m opencfd_jax.src.run --config experiment\cases\sod_1step.json
+```
+
+JSON 只分六组，外加顶层 `precision`：
+
+| 组 | 字段 |
+|---|---|
+| `mesh` | `format`（`builtin`/`ocfd`）、`file`、`field`、`infile` |
+| `physics` | `Re`、`Ama`、`ref_t`、`pr` |
+| `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv`、`filter`、`nstep_filter`、`filter_s0`、`filter_rth` |
+| `time` | `dt`（`null` 表示自适应）、`cfl`、`end_time`、`end_step` |
+| `case` | `name`、`p_grad`、`forcing_work`、`plate_x0`、`plate_x1`、`plate_h` |
+| `output` | `dir`、`kstep_show`、`kstep_save` |
+
+优先级：程序默认值 → JSON → 显式命令行。显式与否由“参数是否出现在命令行”判断，
+不靠与默认值比较。需要显式关闭 JSON 里的布尔项时用 `--no-viscous`、`--no-filter`、
+`--no-weno-tv`；需要用自适应步长覆盖 JSON 的固定 `dt` 时用 `--adaptive-dt`
+（与 `--dt` 同时给出会报错）。
+
+网格文件名决定输出前缀：给了 `--mesh`/`mesh.file` 就用文件名去最后一个扩展名
+（`OCFD3d-Mesh.dat` → `OCFD3d-Mesh_step000001.npz`），否则用算例名。JSON 内相对
+路径按 JSON 所在目录解析，命令行路径按当前工作目录解析。
+
+`channel` 的网格维数、`RE/AMA/T_REF`、可选 `GAMMA/PR`、`IBC` 与
+`JAC_BOUND/DIF_BOUND` 仍以 `mesh.infile` 的 `.in` 为准；JSON/命令行给了不同的
+物性只会打警告，不改变有效值。JSON 不接受网格维数、边界开关和 `gamma`，出现未知
+字段或不属于当前算例的字段会在启动前报错。
+
 
 
 ***
@@ -552,6 +586,7 @@ python -m opencfd_jax.src.run --case plate `
 | 文件                 | 责任                                |
 | ------------------ | --------------------------------- |
 | `run.py`           | 命令行、正式主循环、RHS 总装、滤波 / 诊断 / 存盘节奏   |
+| `runtime_config.py`| `input.json` 读取 / 校验 / 合并 / 输出前缀（第 3 步） |
 | `cases.py`         | 五种算例的网格、物性、初值、边界与通用体积力            |
 | `fields.py`        | 守恒量数组布局、`Grid`、旧边界导入兼容层          |
 | `boundary.py`      | 通用鬼胞填充、壁面镜像、Ev 与统一边界执行配置       |

@@ -77,6 +77,22 @@ execution: code
 - KTD6. 根据用例 ID 和输出步号建立基准、候选 NPZ 的**一对一**匹配；文件名和 `_meta.step` 必须一致，缺失、额外、重复步号和不合法元数据均 FAIL。对匹配对仍核验原基准文件 SHA-256、字段、dtype、shape、有限值、`t/step/dt` 及逐位数组；报告两侧实际文件名。不能修改或重命名基准，也不能以候选 NPZ 文件整体哈希相同作为数组等价要求。
 - KTD7. 固定步长与 CFL 的现有规则保持：`dt` 有值时固定步长优先，否则采用 CFL。JSON 明确给出 `null` 的 `dt` 表示自适应；提供显式 CLI 自适应入口，以便覆盖 JSON 中的固定 `dt`，与显式 `--dt` 同时出现时报冲突。为 JSON 布尔开关提供显式关闭方式（例如滤波、TV、精度），不让 CLI 缺省值误覆盖；channel/poiseuille 的现有粘性强制行为需要准确提示，不能静默声称关闭成功。
 
+### JSON 与运行参数的对应关系
+
+`--config` 指向可选 JSON 文件，缺省 `None` 表示完全沿用旧 CLI。字段名固定如下；不存在的可选字段沿用旧路径缺省值。表中的映射用于实现和测试，配置不包含网格尺寸或边界开关。
+
+| JSON 分组 | 支持字段 | 现有用途 |
+|---|---|---|
+| `mesh` | `format`、`file`、`field`、`infile` | 格式取 `builtin` 或 `ocfd`；网格、初场、过渡期 `.in` 路径，分别对应现有 `--mesh`、`--field`、`--in`。`builtin` 不要求网格文件 |
+| `physics` | `Re`、`Ama`、`ref_t`、`pr` | 对应现有物性参数；槽道的实际使用遵循 KTD3 |
+| `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv`、`filter`、`nstep_filter`、`filter_s0`、`filter_rth` | 对应同名运行选项；过滤和 TV 的布尔值须可由 CLI 显式开关覆盖 |
+| `time` | `dt`、`cfl`、`end_time`、`end_step` | 固定步长或 CFL 以及停止条件 |
+| `case` | `name`、`p_grad`、`forcing_work`、`plate_x0`、`plate_x1`、`plate_h` | 对应现有算例名称及参数；不包含 `plate_dif_bound` 或其他边界开关 |
+| `output` | `dir`、`kstep_show`、`kstep_save` | 对应现有输出目录及日志、存盘频率 |
+| `precision` | 顶层字符串 `fp64` 或 `fp32` | 对应现有精度选项；CLI 的显式 `--fp64` / `--fp32` 覆盖 |
+
+当前非槽道算例未暴露可配置 `gamma`，表中不把它宣称为可用字段。槽道在过渡期继续从 `.in` 获取 `GAMMA`；统一可配置的 `gamma` 需要单独处理现有 CFL、滤波和元数据差异，不属于本步。每个分组及字段都要明确类型、缺省、适用算例和冲突报错；JSON 指定不适用的字段时不得静默忽略。
+
 ### Configuration Flow
 
 ```mermaid
@@ -97,7 +113,7 @@ flowchart LR
 
 ### Compatibility and Known Limits
 
-- `src/run.py` 当前用于 CFL、滤波和 NPZ 元数据的 `gamma` 固定为 1.4；槽道 RHS 的 `case["gamma"]` 可来自 `.in`。NPZ 中的 `Re/Ama/N` 也可能取自 args 而非槽道实际物性。本步不得把旧元数据称为真实有效配置或顺手改变旧数值；应在独立的有效配置报告中区分来源与使用位置。JSON 值若无法在当前路径真正生效，必须报明确错误，不能静默忽略；需要改变旧算法的情况另行提出。
+- `src/run.py` 当前用于 CFL、滤波和 NPZ 元数据的 `gamma` 固定为 1.4；槽道 RHS 的 `case["gamma"]` 可来自 `.in`。NPZ 中的 `Re/Ama/N` 也可能取自 args 而非槽道实际物性。本步不得把旧元数据称为真实有效配置或顺手改变旧数值；应在独立的有效配置报告中区分来源与使用位置。JSON 值按优先级被 `.in` 或 CLI 合法覆盖时继续运行，并在来源报告标记；字段没有对应执行路径、未实现或无效时应明确报错。需要改变旧算法的情况另行提出。
 - JSON 物性与 `.in` 冲突时，槽道已消费字段 `.in` 优先，即使 CLI 中也有该同名字段；CLI 覆盖 JSON 的规则适用于未由 `.in` 接管的字段。格式、滤波、时间等继续遵循实际运行入口而非被解析但未使用的 `.in` 值。
 - 现有 OCFD 网格文件无完整维数头；Step 3 不能通过文件大小唯一推断各轴长度。`.in` 过渡直到 Step 4 的 CGNS 路径验证完成；Step 3.5 命名迁移独立进行。
 - Step 0 基准、输入及运行/检查脚本当前未全部跟踪。实施前确认可访问、哈希和环境；缺失或不可比时报告阻塞，不使用 `run_step0.py` 的默认 baseline 路径覆盖原数据。
@@ -144,7 +160,7 @@ flowchart LR
 
 ### U4. 七个 JSON 算例与回归交接
 
-**目标：** 用现有基准证明新旧入口结果一致。对应 R1、R5、R6、R8 与 A1～A5，依赖 U2、U3。
+**目标：** 用现有基准证明新旧入口结果一致。对应 R1、R5、R6、R8 与 A1～A4，依赖 U2、U3；A5 的 `.in` 退场验收在 Step 4 执行，本步只记录前提。
 
 **文件：** `experiment/step0_cases.py`、`experiment/run_step0.py`、新增 `experiment/cases/` 下的七个 JSON 配置；`experiment/README.md`、`src/README.md`；扩展 `experiment/test_step3_config.py`。
 

@@ -1,0 +1,7 @@
+{
+  "case": { "name": "channel", "forcing_work": "off" },
+  "mesh": { "infile": "channel_small.in" },
+  "numerics": { "scheme": "WENO7", "vis_order": "CD8", "viscous": true },
+  "time": { "dt": 0.00005, "end_step": 100, "end_time": 0.005 },
+  "output": { "kstep_show": 20, "kstep_save": 20 }
+}

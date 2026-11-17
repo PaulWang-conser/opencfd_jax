@@ -135,6 +135,10 @@ def build_case(args):
     if args.case == "channel":
         # IBC=200 槽道：维数与物性全部来自原码 in 文件，初场可读原码 opencfd.dat。
         from . import channel, infile, mesh
+        if not getattr(args, "infile", None):
+            raise ValueError(
+                "case=channel 需要 .in 文件（--in / mesh.infile）；"
+                "Step 3 的 JSON 不提供网格维数、物性、壁温与边界开关")
         inp = infile.read_ocfd_in(args.infile)
         nx, ny, nz, _ = infile.grid_dims(inp)
         s = infile.summarize(inp)

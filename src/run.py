@@ -19,7 +19,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import boundary, config, io
+from . import boundary, config, io, runtime_config
 from .ana import check_nan, diagnostic_line
 from .cases import apply_forcing, build_case
 from .mesh_data import from_case
@@ -170,71 +170,265 @@ def run(args):
     print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")
 
 
-def main():
-    """解析命令行参数、创建输出目录，并把参数交给 :func:`run` 执行。"""
+def build_parser(explicit_only=False):
+    """构造命令行解析器。
+
+    ``explicit_only=True`` 时所有选项的缺省值改为 ``SUPPRESS``，用于区分
+    “用户显式给了这个参数”与“参数取了缺省值”，从而让 JSON 配置只在用户
+    没有显式覆盖时生效。两套解析器共用同一份参数定义，避免默认值漂移。
+    """
     p = argparse.ArgumentParser(description="opencfd_jax runner")
-    p.add_argument("--case", default="sod",
-                   choices=["sod", "tg", "poiseuille", "channel", "plate"])
-    p.add_argument("--plate-x0", type=float, default=0.05)
-    p.add_argument("--plate-x1", type=float, default=0.25)
-    p.add_argument("--plate-h", type=float, default=0.12)
-    p.add_argument("--plate-dif-bound", default="0 0 0 0 1 0")
-    p.add_argument("--in", dest="infile", default=None,
-                   help="原码 in 文件路径（case=channel 必需，维数与物性都从它读）")
-    p.add_argument("--field", default=None,
-                   help="原码场文件（opencfd.dat / OCFD000xx.dat），case=channel 初场")
-    p.add_argument("--mesh", default=None,
-                   help="原码 OCFD3d-Mesh.dat；给出则按 JAC_BOUND=1 算度量并接进差分主链，"
-                        "不给等于 JAC_BOUND=0（Ajac=1）")
-    p.add_argument("--N", type=int, default=256, help="x 方向网格")
-    p.add_argument("--ny", type=int, default=64, help="poiseuille 的 y 网格")
-    p.add_argument("--nz", type=int, default=4,
-                   help="z 向网格数（原码 in 文件 GRID_3D 的第三个数）")
-    p.add_argument("--scheme", default="UP7",
-                   choices=["UP7", "WENO7-SYMBO", "NND2", "WENO5", "WENO7",
-                            "OMP6-1", "OMP6-2", "OMP6-3",
-                            "OMP6_HR", "OMP6_LD", "OMP6_CD8"])
-    p.add_argument("--cfl", type=float, default=0.4)
-    p.add_argument("--dt", type=float, default=None,
-                   help="固定时间步长（不给则用 CFL 自适应）")
-    p.add_argument("--weno-tv", action="store_true",
-                   help="WENO7-SYMBO 启用 TV 快速路径（光滑区线性权）")
-    p.add_argument("--end-time", type=float, default=0.2)
-    p.add_argument("--end-step", type=int, default=10 ** 9)
-    p.add_argument("--Re", type=float, default=1.0e3)
-    p.add_argument("--Ama", type=float, default=0.1)
-    p.add_argument("--ref-t", type=float, default=None,
-                   help="有量纲参考温度(K)，对应原码 in 文件的 T_REF"
-                        "（缺省 288.15 K，与原码 read_parameters 的缺省一致）")
-    p.add_argument("--pr", type=float, default=0.7, help="Prandtl 数（原码 PR）")
-    p.add_argument("--vis-order", default="CD6", choices=["CD6", "CD8"],
-                   help="粘性项导数格式（原码 SCHEME_VIS）")
-    p.add_argument("--forcing-work", default="on", choices=["on", "off"],
-                   help="体积力是否做功能量源 rho*u*G（原码 channel 模块没有该项，"
-                        "对拍请用 off；run 的物理缺省为 on）")
-    p.add_argument("--p-grad", type=float, default=0.1,
-                   help="poiseuille 体积力（单位质量）")
-    p.add_argument("--viscous", action="store_true")
-    p.add_argument("--filter", action="store_true",
-                   help="启用激波滤波（每 nstep-filter 步一次）")
-    p.add_argument("--nstep-filter", type=int, default=100)
-    p.add_argument("--filter-s0", type=float, default=1.0)
-    p.add_argument("--filter-rth", type=float, default=1.0e-5)
-    p.add_argument("--kstep-show", type=int, default=50)
-    p.add_argument("--kstep-save", type=int, default=500)
-    p.add_argument("--out-dir", default="output")
-    p.add_argument("--fp64", action="store_true",
-                   help="FP64（现在已是缺省，保留仅为兼容旧命令）")
-    p.add_argument("--fp32", action="store_true",
-                   help="切到 FP32（仅性能基准用；对拍/验证不要用）")
-    args = p.parse_args()
+
+    def add(*names, **kwargs):
+        if explicit_only:
+            kwargs["default"] = argparse.SUPPRESS
+        p.add_argument(*names, **kwargs)
+
+    add("--config", default=None,
+        help="input.json 运行配置；命令行显式参数优先于 JSON")
+    add("--case", default="sod",
+        choices=runtime_config.CASE_NAMES)
+    add("--plate-x0", type=float, default=0.05)
+    add("--plate-x1", type=float, default=0.25)
+    add("--plate-h", type=float, default=0.12)
+    add("--plate-dif-bound", default="0 0 0 0 1 0")
+    add("--in", dest="infile", default=None,
+        help="原码 in 文件路径（case=channel 必需，维数与物性都从它读）")
+    add("--field", default=None,
+        help="原码场文件（opencfd.dat / OCFD000xx.dat），case=channel 初场")
+    add("--mesh", default=None,
+        help="原码 OCFD3d-Mesh.dat；给出则按 JAC_BOUND=1 算度量并接进差分主链，"
+             "不给等于 JAC_BOUND=0（Ajac=1）")
+    add("--N", type=int, default=256, help="x 方向网格")
+    add("--ny", type=int, default=64, help="poiseuille 的 y 网格")
+    add("--nz", type=int, default=4,
+        help="z 向网格数（原码 in 文件 GRID_3D 的第三个数）")
+    add("--scheme", default="UP7",
+        choices=runtime_config.SCHEMES)
+    add("--cfl", type=float, default=0.4)
+    add("--dt", type=float, default=None,
+        help="固定时间步长（不给则用 CFL 自适应）")
+    add("--adaptive-dt", action="store_true",
+        help="显式改用 CFL 自适应；用于覆盖 JSON 里的固定 dt")
+    add("--weno-tv", action="store_true",
+        help="WENO7-SYMBO 启用 TV 快速路径（光滑区线性权）")
+    add("--no-weno-tv", action="store_true",
+        help="显式关闭 WENO7-SYMBO 的 TV 快速路径（覆盖 JSON 的 true）")
+    add("--end-time", type=float, default=0.2)
+    add("--end-step", type=int, default=10 ** 9)
+    add("--Re", type=float, default=1.0e3)
+    add("--Ama", type=float, default=0.1)
+    add("--ref-t", type=float, default=None,
+        help="有量纲参考温度(K)，对应原码 in 文件的 T_REF"
+             "（缺省 288.15 K，与原码 read_parameters 的缺省一致）")
+    add("--pr", type=float, default=0.7, help="Prandtl 数（原码 PR）")
+    add("--vis-order", default="CD6", choices=runtime_config.VIS_ORDERS,
+        help="粘性项导数格式（原码 SCHEME_VIS）")
+    add("--forcing-work", default="on", choices=["on", "off"],
+        help="体积力是否做功能量源 rho*u*G（原码 channel 模块没有该项，"
+             "对拍请用 off；run 的物理缺省为 on）")
+    add("--p-grad", type=float, default=0.1,
+        help="poiseuille 体积力（单位质量）")
+    add("--viscous", action="store_true")
+    add("--no-viscous", action="store_true",
+        help="显式关闭粘性项（覆盖 JSON 的 true；channel/poiseuille 仍强制粘性）")
+    add("--filter", action="store_true",
+        help="启用激波滤波（每 nstep-filter 步一次）")
+    add("--no-filter", action="store_true",
+        help="显式关闭激波滤波（覆盖 JSON 的 true）")
+    add("--nstep-filter", type=int, default=100)
+    add("--filter-s0", type=float, default=1.0)
+    add("--filter-rth", type=float, default=1.0e-5)
+    add("--kstep-show", type=int, default=50)
+    add("--kstep-save", type=int, default=500)
+    add("--out-dir", default="output")
+    add("--fp64", action="store_true",
+        help="FP64（现在已是缺省，保留仅为兼容旧命令）")
+    add("--fp32", action="store_true",
+        help="切到 FP32（仅性能基准用；对拍/验证不要用）")
+    return p
+
+
+_NEGATIVE_FLAGS = (("no_viscous", "viscous"), ("no_filter", "filter"),
+                   ("no_weno_tv", "weno_tv"))
+
+
+def resolve_cli(parsed, parser):
+    """把一次显式命令行解析结果整理成配置合并所需的字典。
+
+    负向开关（``--no-*``）在这里折叠成对应布尔参数；``--adaptive-dt``
+    折叠成 ``dt=None``；互相冲突的显式开关直接报错。返回
+    ``(config_path, explicit)``。
+    """
+    explicit = dict(parsed)
+    config_path = explicit.pop("config", None)
+    for negative, positive in _NEGATIVE_FLAGS:
+        if explicit.pop(negative, False):
+            if explicit.get(positive):
+                parser.error(f"--{positive.replace('_', '-')} 与 "
+                             f"--{negative.replace('_', '-')} 不能同时给出")
+            explicit[positive] = False
+    if explicit.pop("adaptive_dt", False):
+        if explicit.get("dt") is not None:
+            parser.error("--dt 与 --adaptive-dt 不能同时给出")
+        explicit["dt"] = None
+    return config_path, explicit
+
+
+def _warn_channel_overrides(args, case):
+    """槽道的 `.in` 已消费字段优先，冲突时如实提示被忽略的来源。"""
+    if args.case != "channel":
+        return
+    params = case["params"]
+    sources = getattr(args, "config_sources", {})
+    for dest, effective in (("Re", params.Re), ("Ama", params.Ama),
+                            ("ref_t", params.Ref_T), ("pr", params.Pr)):
+        value = getattr(args, dest, None)
+        if value is None or sources.get(dest) == "default":
+            continue
+        if not (isinstance(value, (int, float)) and float(value) == float(effective)):
+            label = {"Re": "Re", "Ama": "Ama", "ref_t": "Ref_T", "pr": "Pr"}[dest]
+            print(f"WARNING: 槽道 {label} 以 .in 为准："
+                  f"配置给出 {value!r}，实际 {effective!r}（来源 "
+                  f"{sources.get(dest, 'unknown')} 被忽略）")
+
+
+def _warn_forced_viscous(args):
+    """channel/poiseuille 在 RHS 里强制粘性；显式关闭时如实提示。"""
+    if not getattr(args, "viscous", False) \
+            and args.case in ("channel", "poiseuille"):
+        print(f"WARNING: {args.case} 强制粘性，显式 viscous=false 不会关闭粘性项")
+
+
+def run(args):
+    """执行一次完整计算：设置精度、装配初值与 RHS，然后推进、滤波、诊断并存盘。
+
+    ``args`` 通常由 :func:`main` 的命令行解析器生成；计算到 ``end_time`` 或
+    ``end_step`` 中任一条件满足时停止。输出只写物理内区，不包含鬼胞。
+    """
     if getattr(args, "fp32", False):
         config.disable_x64()
     else:
         config.enable_x64()   # 缺省 FP64
+
+    gamma = 1.4
+    case = build_case(args)
+    desc = from_case(case)
+    execution = boundary.build_execution(case, desc)
+    grid = desc.grid
+    dxs = desc.dxs
+    params = case["params"]
+
+    rhs = build_rhs(case, args, execution=execution)
+    cons = case["cons0"]
+    bcs = execution.bcs
+    bc_apply = execution.callback
+
+    dt_mode = f"fixed({args.dt})" if args.dt is not None else \
+        f"adaptive(cfl={args.cfl})"
+    if args.dt is None:
+        def dt_fn_(q):
+            """按当前流场和 CFL 数计算自适应时间步长。"""
+            return compute_dt(q, grid, gamma, args.cfl, dxs)
+
+        dt_fn = jax.jit(dt_fn_)
+    else:
+        dt_fn = None
+    rhs(cons)
+    if dt_fn is not None:
+        dt_fn(cons)   # 预热编译
+
+    prefix = getattr(args, "out_prefix", None) or args.case
+    print(f"case={args.case} grid={grid.nx}x{grid.ny}x{grid.nz} "
+          f"scheme={args.scheme} "
+          f"viscous={args.viscous} vis-order={args.vis_order} "
+          f"precision={config.precision_name()} "
+          f"Re={params.Re} Ama={params.Ama} Ref_T={params.Ref_T} Pr={params.Pr} "
+          f"metrics={'on' if desc.has_metrics else 'off(Ajac=1)'} "
+          f"dt-mode={dt_mode} out-prefix={prefix} "
+          f"config={getattr(args, 'config_path', None) or 'cli'}")
+    _warn_channel_overrides(args, case)
+    _warn_forced_viscous(args)
+    if (args.viscous or args.case == "poiseuille") and args.ref_t is None \
+            and args.case != "channel":
+        print("WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度"
+              "（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；"
+              "与原码对拍时必须用 --ref-t 给出 in 文件里的同值。")
+    if args.case == "sod" and args.viscous:
+        print("WARNING: sod 初值用 E=p/(gamma-1) 标准约定，与 viscous 的 "
+              "OCFD Ama 缩放约定不匹配——粘性系数无物理意义（不 raise，"
+              "保留灵活性）")
+
+    from .filtering import shock_filter
+    t0 = time.time()
+    t = 0.0
+    step = 0
+    # 定 dt 时可以 jit 整步 + donate 输入缓冲（省一次全场分配，也把 3 次 RHS
+    # dispatch 合成 1 次）。变 dt 时 dt 是参数，仍走同一编译体（不重新编译）。
+    step_jit = jax.jit(lambda q, dt_: rk3_step(q, dt_, rhs, bc_apply=bc_apply),
+                       donate_argnums=(0,))
+    while t < args.end_time and step < args.end_step:
+        if args.dt is not None:
+            dt = min(args.dt, args.end_time - t)
+        else:
+            dt = float(dt_fn(cons))
+            if not (np.isfinite(dt) and dt > 0.0):
+                print(f"bad dt={dt} at step {step}, t={t}")
+                break
+            dt = min(dt, args.end_time - t)
+        cons = step_jit(cons, dt)
+        t += dt
+        step += 1
+        if args.filter and step % args.nstep_filter == 0:
+            d_ = cons[0]
+            kin = 0.5 * (cons[1] ** 2 + cons[2] ** 2 + cons[3] ** 2) / d_
+            p_ = (gamma - 1.0) * (cons[4] - kin)          # 压力标量场（3 维）
+            cons = shock_filter(cons, p_, grid, s0=args.filter_s0,
+                                rth=args.filter_rth, bcs=bcs,
+                                axes=desc.axes)
+        if step % args.kstep_show == 0:
+            print(diagnostic_line(cons, grid, t, step, time.time() - t0))
+        if step % args.kstep_save == 0 or t >= args.end_time:
+            io.save_npz(
+                f"{args.out_dir}/{prefix}_step{step:06d}.npz",
+                {f"cons_{i}": np.asarray(cons[grid.inner()][i]) for i in range(5)},
+                meta={"t": t, "step": step, "dt": dt, "case": args.case,
+                      "N": args.N, "scheme": args.scheme, "gamma": gamma,
+                      "Re": args.Re, "Ama": args.Ama,
+                      "Ref_T": params.Ref_T, "Pr": params.Pr})
+    print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")
+
+
+def _validate_input_paths(args, parser):
+    """启动前检查输入文件；避免进入 JIT 后才因缺文件报错。"""
+    if args.case == "channel" and not getattr(args, "infile", None):
+        parser.error("case=channel 需要 .in 文件（--in / mesh.infile）")
+    for attr, flag in (("mesh", "--mesh"), ("field", "--field"),
+                       ("infile", "--in")):
+        value = getattr(args, attr, None)
+        if value and not os.path.isfile(value):
+            parser.error(f"{flag} 指向的文件不存在或不可读：{value}")
+
+
+def main(argv=None):
+    """解析命令行与 JSON 配置，创建输出目录，并交给 :func:`run` 执行。"""
+    defaults = build_parser().parse_args([])
+    explicit_parser = build_parser(explicit_only=True)
+    config_path, explicit = resolve_cli(
+        vars(explicit_parser.parse_args(argv)), explicit_parser)
+
+    try:
+        cfg = runtime_config.load_config(
+            config_path, case=explicit.get("case")) if config_path else None
+        args = runtime_config.resolve_args(explicit, cfg, defaults)
+    except runtime_config.ConfigError as exc:
+        explicit_parser.error(f"配置错误：{exc}")
+
+    _validate_input_paths(args, explicit_parser)
     os.makedirs(args.out_dir, exist_ok=True)
     run(args)
 
 
 if __name__ == "__main__":
     main()
+

@@ -1,0 +1,6 @@
+{
+  "case": { "name": "sod" },
+  "numerics": { "scheme": "WENO7", "vis_order": "CD8" },
+  "time": { "dt": 0.001, "end_step": 1, "end_time": 0.5 },
+  "output": { "kstep_show": 1, "kstep_save": 1 }
+}

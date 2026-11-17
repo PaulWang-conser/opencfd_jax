@@ -39,7 +39,7 @@ HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parents[1]
 
 sys.path.insert(0, str(HERE))
-from step0_cases import CASES, by_id       # noqa: E402
+from step0_cases import CASES, by_id, config_path   # noqa: E402
 
 
 def sha256_file(path: Path) -> str:
@@ -114,15 +114,23 @@ def safe_rmtree(path: Path, root: Path):
         shutil.rmtree(path)
 
 
-def run_one(case: dict, out_root: Path, python: str) -> dict:
-    """跑一个用例：清目录 → 子进程 → 收 npz → 写 case.json。"""
+def run_one(case: dict, out_root: Path, python: str, arg_source: str = "cli") -> dict:
+    """跑一个用例：清目录 → 子进程 → 收 npz → 写 case.json。
+
+    ``arg_source="json"`` 时改用用例的 ``input.json``（只把 JSON 无可表达的
+    网格维数留在命令行），用于验证 JSON 与旧 CLI 的数值等价。
+    """
     case_out = out_root / case["id"]
     safe_rmtree(case_out, out_root)
     case_out.mkdir(parents=True, exist_ok=True)
 
-    cmd = [python, "-m", "opencfd_jax.src.run", *case["argv"],
+    if arg_source == "json":
+        run_argv = ["--config", str(config_path(case)), *case.get("json_argv", [])]
+    else:
+        run_argv = list(case["argv"])
+    cmd = [python, "-m", "opencfd_jax.src.run", *run_argv,
            "--out-dir", str(case_out)]
-    print(f"\n[{case['id']}] {case['title']}")
+    print(f"\n[{case['id']}] {case['title']}  ({arg_source})")
     print("  " + " ".join(cmd[1:]))
     t0 = time.time()
     proc = subprocess.run(cmd, cwd=str(PROJECT), capture_output=True, text=True)
@@ -139,7 +147,7 @@ def run_one(case: dict, out_root: Path, python: str) -> dict:
                       "sha256": sha256_file(npz), **summary})
     record = {
         "id": case["id"], "title": case["title"], "cover": case["cover"],
-        "note": case["note"], "argv": case["argv"],
+        "note": case["note"], "argv": run_argv, "arg_source": arg_source,
         "command": " ".join(cmd), "wall_seconds": round(wall, 2),
         "returncode": proc.returncode, "files": files,
         "log_tail": log.strip().splitlines()[-6:],
@@ -190,6 +198,8 @@ def main():
     p.add_argument("--out", default=None, help="输出根目录，缺省 experiment/<phase>")
     p.add_argument("--only", nargs="*", default=None, help="只跑这些 id")
     p.add_argument("--python", default=sys.executable)
+    p.add_argument("--arg-source", choices=["cli", "json"], default="cli",
+                   help="走旧命令行（cli）还是用例 JSON（json）；基准始终用 cli")
     p.add_argument("--list", action="store_true", help="只打印用例清单")
     args = p.parse_args()
 
@@ -198,13 +208,16 @@ def main():
             print(f"{c['id']:<24s} {c['title']}\n{'':<24s} 覆盖: {c['cover']}")
         return 0
 
+    if args.phase == "baseline" and args.arg_source == "json":
+        p.error("baseline 只能用 --arg-source cli 生成；JSON 只用于候选验证")
+
     out_root = Path(args.out) if args.out else HERE / args.phase
     out_root.mkdir(parents=True, exist_ok=True)
     cases = [by_id(i) for i in args.only] if args.only else CASES
 
     records = []
     for case in cases:
-        records.append(run_one(case, out_root, args.python))
+        records.append(run_one(case, out_root, args.python, args.arg_source))
 
     manifest_path = out_root / "manifest.json"
     old = {}
@@ -215,6 +228,7 @@ def main():
     manifest = {
         "schema": 1,
         "phase": args.phase,
+        "arg_source": args.arg_source,
         "created": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
         "env": env_info(),
         "git": git_info(),

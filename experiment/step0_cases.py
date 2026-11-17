@@ -29,6 +29,8 @@ CASES = [
                  "--scheme", "WENO7", "--vis-order", "CD8",
                  "--dt", "1e-3", "--end-step", "1", "--end-time", "0.5",
                  "--kstep-show", "1", "--kstep-save", "1"],
+        "config": "cases/sod_1step.json",
+        "json_argv": ["--N", "128", "--ny", "4", "--nz", "4"],
         "note": "1 维问题在 3 维布局里跑（ny=nz=4）；激波尚在隔膜附近，场应保持对称。",
     },
     {
@@ -39,6 +41,8 @@ CASES = [
                  "--scheme", "WENO7", "--vis-order", "CD8", "--cfl", "0.4",
                  "--end-step", "5", "--end-time", "0.5",
                  "--kstep-show", "1", "--kstep-save", "1"],
+        "config": "cases/sod_cfl_5step.json",
+        "json_argv": ["--N", "128", "--ny", "4", "--nz", "4"],
         "note": "每步都存 npz，_meta 里的 dt 就是自适应步长序列。",
     },
     {
@@ -49,6 +53,8 @@ CASES = [
                  "--scheme", "WENO7", "--vis-order", "CD8", "--viscous",
                  "--Re", "1000", "--dt", "2e-3", "--end-step", "10",
                  "--end-time", "1.0", "--kstep-show", "5", "--kstep-save", "5"],
+        "config": "cases/tg_10step.json",
+        "json_argv": ["--N", "64", "--nz", "4"],
         "note": "Re=50 太耗散（原文档示例值），这里取 Re=1000 让耗散项真正参与。",
     },
     {
@@ -60,6 +66,8 @@ CASES = [
                  "--Re", "100", "--Ama", "0.05", "--p-grad", "0.1",
                  "--dt", "1e-3", "--end-step", "5", "--end-time", "1.0",
                  "--kstep-show", "5", "--kstep-save", "5"],
+        "config": "cases/poiseuille_5step.json",
+        "json_argv": ["--N", "32", "--ny", "64", "--nz", "4"],
         "note": ("tests/test_wall_poiseuille.py::test_poiseuille_steady 目前是 skip（壁面"
                  "邻格质量通量泄漏 → 长跑发散）。第 0 步只冻结前 5 步的**有限**演化；"
                  "等 boundary.py 的单侧壁面公式落地后，这条用例应当由 NaN/发散转为"
@@ -73,6 +81,8 @@ CASES = [
                  "--scheme", "WENO7", "--vis-order", "CD8", "--viscous",
                  "--dt", "1e-4", "--end-step", "1", "--end-time", "1.0",
                  "--kstep-show", "1", "--kstep-save", "1"],
+        "config": "cases/plate_1step.json",
+        "json_argv": ["--N", "64", "--ny", "64", "--nz", "4"],
         "note": "验收基准仍是 blasius.py；这里只钉住单步 RHS 的实现细节。",
     },
     {
@@ -86,6 +96,8 @@ CASES = [
                  "--forcing-work", "off",
                  "--dt", "5e-5", "--end-step", "1", "--end-time", "0.4",
                  "--kstep-show", "1", "--kstep-save", "1"],
+        "config": "cases/channel_1step.json",
+        "json_argv": [],
         "note": ("覆盖 JAC_BOUND 度量（Ajac/余子式）+ 真实湍流初场 + 双壁 BC + 体积力。"
                  "输出 22.7 MB，是整套基准里最大的一份。"
                  "必须 --forcing-work off：原码 channel_body_force 只做 du[1] += F*rho，"
@@ -100,11 +112,19 @@ CASES = [
                  "--forcing-work", "off",
                  "--dt", "5e-5", "--end-step", "100", "--end-time", "0.005",
                  "--kstep-show", "20", "--kstep-save", "20"],
+        "config": "cases/channel_small_100step.json",
+        "json_argv": [],
         "note": ("配合 channel_1step 使用：那条冻结「单步 + 真网格」，这条冻结"
                  "「多步 + 便宜网格」。现有 128×129×96 的 20000 步原版长跑结果"
                  "（channel_case_iiA/main_128x129x96）第 0 步不重跑，作为外部参考保留。"),
     },
 ]
+
+
+def config_path(case):
+    """返回用例的 JSON 配置绝对路径。"""
+    return HERE / case["config"]
+
 
 
 def by_id(case_id):

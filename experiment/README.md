@@ -162,7 +162,7 @@ cd D:\Desktop\ocfd2jax\opencfd_jax
 python -m pytest experiment/test_step2_boundary.py -q
 ```
 
-验收结果（2026-11-17，本机）：`23 passed`。Step 0 七例候选重跑 + `check_step0.py`
+验收结果（2026-11-17，本机）：`26 passed`。Step 0 七例候选重跑 + `check_step0.py`
 总判定 PASS，七例全部 `max|diff|=0.000e+00`；全量套件用别名启动器运行，结果为
 `143 passed, 2 skipped, 1 xfailed`。
 
@@ -171,17 +171,47 @@ python -m pytest experiment/test_step2_boundary.py -q
 `src/README.md` 第 7.2 节；边界带公式的核对材料见 `docs/boundary_scheme_notes.md`。
 `special_boundary` 是显式导入入口，不做动态注册，也不允许 I/O 进入 JIT。
 
+## 第 3 步验收：统一运行配置（input.json）
+
+`test_step3_config.py` 覆盖：
+
+- 默认值 / JSON / 显式命令行的合并优先级，显式判定不靠与默认值比较；
+- 未知字段、算例不适用字段（如 Sod 的 `p_grad`）、channel 缺 `.in` 启动前报错；
+- 槽道 `.in` 的物性优先级、`--no-*` 显式关闭、`--adaptive-dt`、`--fp32/--fp64`；
+- 输出前缀取网格文件名，以及在临时目录里旧 CLI 与 JSON 两条路径的 NPZ 逐位一致；
+- 七条 Step 0 用例的 JSON 参数与旧 CLI 参数逐项相等。
+
+```powershell
+cd D:\Desktop\ocfd2jax
+python -m pytest opencfd_jax/experiment/test_step3_config.py -q
+```
+
+七例 JSON 配置放在 `experiment/cases/*.json`，网格维数仍由命令行提供（JSON 明确
+不承载维数/边界开关）。用 JSON 重跑候选并比对：
+
+```powershell
+python opencfd_jax\experiment\run_step0.py --phase candidate_json --arg-source json
+python opencfd_jax\experiment\check_step0.py --candidate opencfd_jax\experiment\candidate_json
+```
+
+验收结果（2026-11-17，本机）：`28 passed`；旧 CLI 候选 7 例 80 场
+`max|diff|=0.000e+00`；JSON 候选同样 7 例 80 场全零。`channel_1step` 的输出名从
+`channel_step000001.npz` 变为 `OCFD3d-Mesh_step000001.npz`，`check_step0.py` 按
+`_stepNNNNNN` 步号与基准一对一映射，基准文件未改名、未重写。
+
 ## 目录结构
 
 ```text
 experiment/
-  step0_cases.py          用例清单（argv 原样，可直接抄进命令行）
+  step0_cases.py          用例清单（argv 与 JSON 配置入口）
   run_step0.py            批量跑 + sha256/统计 + manifest.json + STEP0.md
   check_step0.py          逐点比对 + check_report.json + PASS/FAIL 退出码
   test_step1_mesh.py      第 1 步单块网格/边界描述验收测试
   test_step2_boundary.py  第 2 步统一边界/执行配置验收测试
+  test_step3_config.py    第 3 步 input.json 合并/前缀/等价验收测试
   compare_ocfd_jax.py     原码 dump vs JAX 的单步对拍（--dir/--scheme 可换口径）
   cases/channel_small.in  小网格槽道 in 文件（同 IBC=200 口径）
+  cases/*.json            七条 Step 0 用例的 input.json（第 3 步）
   baseline/               基准数据（7 条用例、28.6 MB、可复现）
     manifest.json         全局清单：环境、git、逐用例命令与哈希
     STEP0.md              自动生成的摘要表
@@ -193,7 +223,7 @@ experiment/
 两个 `ocfd/channel_*` 目录里只保留 `dump/parsed.npz`（各约 100 MB），
 原始文本 dump（各 724 MB）已删除，删掉 npz 会触发重新解析。
 
-`candidate/` 是临时目录，已被 `.gitignore` 排除；`baseline/` 需要随仓库保管
+`candidate/` 与 `candidate_json/` 是临时目录，已被 `.gitignore` 排除；`baseline/` 需要随仓库保管
 （去掉它，第 1~9 步就没有护栏了）。如果不想把 23 MB 的二进制入库，最低要求是
 **`manifest.json` 必须入库**（它含逐文件 sha256，换机后可用它判断"数据是否被动过"），
 数据本体可以留在本地磁盘或用 LFS。

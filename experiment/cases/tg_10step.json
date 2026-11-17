@@ -1,0 +1,7 @@
+{
+  "case": { "name": "tg" },
+  "physics": { "Re": 1000.0 },
+  "numerics": { "scheme": "WENO7", "vis_order": "CD8", "viscous": true },
+  "time": { "dt": 0.002, "end_step": 10, "end_time": 1.0 },
+  "output": { "kstep_show": 5, "kstep_save": 5 }
+}

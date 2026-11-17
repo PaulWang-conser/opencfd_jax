@@ -17,6 +17,7 @@
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +26,59 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from step0_cases import CASES, by_id        # noqa: E402
+
+_STEP_RE = re.compile(r"_step(\d{6})$")
+
+
+def step_of(name: str):
+    """从 ``*_stepNNNNNN.npz`` 提取步号；没有该后缀返回 ``None``。"""
+    match = _STEP_RE.search(Path(name).stem)
+    return int(match.group(1)) if match else None
+
+
+def pair_files(base_files, cand_names):
+    """把基准文件与候选文件一对一配对。
+
+    先按文件名精确匹配（兼容不带步号的历史用例），剩下的一侧再按
+    ``_stepNNNNNN`` 的步号配对。这样网格文件名变化导致输出前缀变化时，
+    基准文件本身不需要改名，检查器仍能逐位比较。
+    """
+    pairs = []
+    problems = []
+    cand_set = set(cand_names)
+    for name in base_files:
+        if name in cand_set:
+            pairs.append((name, name))
+    base_rest = [n for n in base_files if n not in cand_set]
+    cand_rest = [n for n in cand_names if n not in base_files]
+
+    cand_by_step = {}
+    for name in cand_rest:
+        step = step_of(name)
+        if step is not None:
+            cand_by_step.setdefault(step, []).append(name)
+
+    used = set()
+    for name in base_rest:
+        step = step_of(name)
+        if step is None:
+            problems.append(
+                f"基准 {name} 在候选中没有同名文件，且文件名不含步号，无法映射")
+            continue
+        options = cand_by_step.get(step, [])
+        if not options:
+            problems.append(f"基准 {name}（step={step}）在候选中缺少对应文件")
+        elif len(options) > 1:
+            problems.append(
+                f"基准 {name}（step={step}）对应多个候选文件 {options}")
+        else:
+            pairs.append((name, options[0]))
+            used.add(options[0])
+
+    leftovers = [n for n in cand_rest if n not in used]
+    if leftovers:
+        problems.append(f"候选多出无法对应到基准的文件 {sorted(leftovers)}")
+    return pairs, problems
 
 
 def compare_arrays(a: np.ndarray, b: np.ndarray, tol: float) -> dict:
@@ -72,40 +126,52 @@ def compare_case(base_dir: Path, cand_dir: Path, tol: float) -> dict:
     rows, problems = [], []
     if not base_files:
         problems.append("基准文件集合为空")
-    cand_files = sorted(p.name for p in cand_dir.glob("*.npz"))
-    only_base = sorted(set(base_files) - set(cand_files))
-    only_cand = sorted(set(cand_files) - set(base_files))
-    if only_base:
-        problems.append(f"候选缺少文件 {only_base}")
-    if only_cand:
-        problems.append(f"候选多出文件 {only_cand}")
+    cand_names = sorted(p.name for p in cand_dir.glob("*.npz"))
+    pairs, pair_problems = pair_files(base_files, cand_names)
+    problems.extend(pair_problems)
 
-    for name in sorted(set(base_files) & set(cand_files)):
+    for base_name, cand_name in pairs:
         try:
-            with (base_dir / name).open("rb") as source:
+            with (base_dir / base_name).open("rb") as source:
                 digest = hashlib.file_digest(source, "sha256").hexdigest()
-            if digest != base_files[name].get("sha256"):
-                problems.append(f"{name}: 基准 SHA-256 不匹配")
-            with np.load(base_dir / name, allow_pickle=False) as A, np.load(cand_dir / name, allow_pickle=False) as B:
+            if digest != base_files[base_name].get("sha256"):
+                problems.append(f"{base_name}: 基准 SHA-256 不匹配")
+            with np.load(base_dir / base_name, allow_pickle=False) as A, \
+                    np.load(cand_dir / cand_name, allow_pickle=False) as B:
                 if not set(A.files) - {"_meta"}:
-                    problems.append(f"{name}: 没有数值字段")
+                    problems.append(f"{base_name}: 没有数值字段")
                 if set(A.files) != set(B.files):
-                    problems.append(f"{name}: 字段不一致，缺少 {sorted(set(A.files)-set(B.files))}，多出 {sorted(set(B.files)-set(A.files))}")
+                    problems.append(
+                        f"基准 {base_name} / 候选 {cand_name}: 字段不一致，"
+                        f"缺少 {sorted(set(A.files)-set(B.files))}，"
+                        f"多出 {sorted(set(B.files)-set(A.files))}")
                 if "_meta" not in A.files or "_meta" not in B.files:
-                    problems.append(f"{name}: 缺少 _meta")
+                    problems.append(f"基准 {base_name} / 候选 {cand_name}: 缺少 _meta")
                 else:
                     ma = json.loads(A["_meta"].tobytes().decode())
                     mb = json.loads(B["_meta"].tobytes().decode())
                     for key in ("t", "step", "dt"):
                         if key not in ma or key not in mb or ma[key] != mb[key]:
-                            problems.append(f"{name}: _meta.{key} 缺失或不一致")
+                            problems.append(
+                                f"基准 {base_name} / 候选 {cand_name}: "
+                                f"_meta.{key} 缺失或不一致")
+                    expected = step_of(base_name)
+                    if expected is not None and mb.get("step") != expected:
+                        problems.append(
+                            f"候选 {cand_name}: _meta.step={mb.get('step')} "
+                            f"与文件名步号 {expected} 不一致")
                 for key in sorted((set(A.files) & set(B.files)) - {"_meta"}):
                     res = compare_arrays(A[key], B[key], tol)
-                    rows.append({"file": name, "var": key, **res})
+                    rows.append({"file": cand_name, "baseline": base_name,
+                                 "var": key, **res})
                     if not res.get("ok"):
-                        problems.append(f"{name}:{key} {res.get('reason', '数值不一致')} max={res.get('max')} at={res.get('at')}")
+                        problems.append(
+                            f"基准 {base_name} / 候选 {cand_name}:{key} "
+                            f"{res.get('reason', '数值不一致')} "
+                            f"max={res.get('max')} at={res.get('at')}")
         except (OSError, ValueError, KeyError, TypeError, EOFError) as exc:
-            problems.append(f"{name}: 读取或解析失败: {exc}")
+            problems.append(f"基准 {base_name} / 候选 {cand_name}: "
+                            f"读取或解析失败: {exc}")
 
     worst = max((r.get("max", 0.0) for r in rows), default=0.0)
     status = "PASS" if (not problems) else "FAIL"
