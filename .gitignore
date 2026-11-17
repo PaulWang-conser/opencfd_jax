@@ -19,3 +19,10 @@ venv/
 .idea/
 Thumbs.db
 .DS_Store
+
+# 大体积运行产物：原码 dump、网格/初场副本和导出的 plt/tec 不入库
+# （本地保留，可重新生成；单文件超过 100 MB 会阻塞推送）
+experiment/ocfd/**/dump/
+experiment/ocfd/**/*.dat
+outputest/*.plt
+outputest/*.tec
