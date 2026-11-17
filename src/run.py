@@ -22,9 +22,9 @@ import numpy as np
 from . import config, io
 from .ana import check_nan, diagnostic_line
 from .cases import apply_forcing, build_case
-from .fields import Grid
+from .mesh_data import from_case
 from .solver import compute_dt, inviscid_rhs, rk3_step
-from .viscous import PhysParams, viscous_rhs
+from .viscous import viscous_rhs
 
 
 def build_rhs(case, args):
@@ -33,12 +33,13 @@ def build_rhs(case, args):
     返回的 JIT 函数依次组合物理边界、无粘通量散度、可选粘性项、通用体积力
     和槽道专用源项，但不推进流场。激波滤波属于整步后处理，不在这个函数内。
     """
-    grid = case["grid"]
+    desc = from_case(case)
+    grid = desc.grid
     gamma = case["gamma"]
     params = case["params"]
-    bcs = case["bcs"]
-    dxs = case["dxs"]
-    axes = case["axes"]
+    bcs = desc.bcs
+    dxs = desc.dxs
+    axes = desc.axes
 
     weno_tv = None
     if args.scheme == "WENO7-SYMBO" and args.weno_tv:
@@ -48,9 +49,9 @@ def build_rhs(case, args):
     vis_order = {"CD6": 6, "CD8": 8}[args.vis_order]
     bc_apply = case.get("bc_apply")
     src = case.get("source")
-    metrics = case.get("metrics")
-    dif_bound = case.get("dif_bound")
-    dif_axis_map = case.get("dif_axis_map", (0, 1, 2))
+    metrics = desc.metrics
+    dif_bound = desc.dif_bound
+    dif_axis_map = desc.dif_axis_map
     plate_ghosts = args.case == "plate"
 
     def rhs(q):
@@ -88,14 +89,14 @@ def run(args):
 
     gamma = 1.4
     case = build_case(args)
-    grid = case["grid"]
-    dxs = case["dxs"]
+    desc = from_case(case)
+    grid = desc.grid
+    dxs = desc.dxs
     params = case["params"]
 
     rhs = build_rhs(case, args)
     cons = case["cons0"]
-    bcs = case["bcs"]
-    dxs = case["dxs"]
+    bcs = desc.bcs
     bc_apply = case.get("bc_apply")   # IBC=200 壁面条件（无则 None）
 
     dt_mode = f"fixed({args.dt})" if args.dt is not None else \
@@ -117,7 +118,7 @@ def run(args):
           f"viscous={args.viscous} vis-order={args.vis_order} "
           f"precision={config.precision_name()} "
           f"Re={params.Re} Ama={params.Ama} Ref_T={params.Ref_T} Pr={params.Pr} "
-          f"metrics={'on' if case.get('metrics') is not None else 'off(Ajac=1)'} "
+          f"metrics={'on' if desc.has_metrics else 'off(Ajac=1)'} "
           f"dt-mode={dt_mode}")
     if (args.viscous or args.case == "poiseuille") and args.ref_t is None:
         print("WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度"
@@ -154,7 +155,7 @@ def run(args):
             p_ = (gamma - 1.0) * (cons[4] - kin)          # 压力标量场（3 维）
             cons = shock_filter(cons, p_, grid, s0=args.filter_s0,
                                 rth=args.filter_rth, bcs=bcs,
-                                axes=case["axes"])
+                                axes=desc.axes)
         if step % args.kstep_show == 0:
             print(diagnostic_line(cons, grid, t, step, time.time() - t0))
         if step % args.kstep_save == 0 or t >= args.end_time:

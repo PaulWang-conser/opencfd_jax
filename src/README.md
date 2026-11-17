@@ -338,7 +338,23 @@ du = -(F_right - F_left) / h
 
 与原码 channel 逐项对拍时使用 `--forcing-work off`，因为原码对应内核只添加动量源。正式 `run.py` 的默认值为 `on`。
 
+### 7.1 单块网格与边界描述（第 1 步）
 
+文件：`mesh_data.py`。
+
+`run.py`（`build_rhs` / `run`）和 `compare.py`（`cmd_jax_run`）在消费入口由
+`from_case(case)` 即时构造只读快照 `BlockMesh`，而不是另外保存一份配置。描述包含：
+
+* `grid`、`dxs`、`axes`、`bcs`：直接复用算例字典里的对象/值；
+* 六侧 `FaceBoundary`：每侧语义（periodic/outflow/wall/inflow/farfield）、当前
+  执行来源（`halo` / `callback` / `callback+halo`）和该侧的 DIF_BOUND 开关；
+* `dif_bound`、`dif_axis_map`：保留原码六标志与 JAX 轴映射（平板仍是 `(0,2,1)`）；
+* `metrics`、`coords`：只有算例真的提供时才引用；没有就保持 `None`，不伪造。
+
+描述**不驱动**新的边界实现：壁面状态更新、鬼胞填充、粘性通量和源项仍由
+`fields.py`、`channel.py`、`plate.py` 执行；`executor` 只是说明现状。描述也不写回
+算例字典，避免出现两份可独立修改的状态。构造必须发生在创建 JIT 闭包之前；
+之后修改 `case` 不会回溯已经建立的闭包。
 
 ***
 
@@ -496,6 +512,7 @@ python -m opencfd_jax.src.run --case plate `
 | `channel.py`       | 槽道原始变量转换、双壁条件、槽道体积力               |
 | `plate.py`         | 平板入口、出口、下壁和顶部自由来流条件               |
 | `mesh.py`          | 原码网格 / 场读取、坐标补层、曲线网格度量与缓存         |
+| `mesh_data.py`     | 单块网格与六侧边界的只读描述（第 1 步）             |
 | `infile.py`        | 原码 in 文件的键值解析和网格维数校验              |
 | `filtering.py`     | 压力传感器与整步后的选择性激波滤波                 |
 | `ana.py`           | 平均总能量、NaN 检查和诊断行                  |

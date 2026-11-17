@@ -166,17 +166,19 @@ def build_case(args):
         # 度量：给了 --mesh 就用 OCFD3d-Mesh.dat 算（JAC_BOUND=1 的原码路径）；
         # 不给就等于 JAC_BOUND=0（Ajac=1，直角假设）。
         metrics = None
+        coords = None
         if getattr(args, "mesh", None):
-            co = mesh.read_ocfd_mesh(args.mesh, nx, ny, nz)
-            coords = {k: mesh.pad_coords(v, periodic=periodic) for k, v in co.items()}
+            coords = mesh.read_ocfd_mesh(args.mesh, nx, ny, nz)
+            padded = {k: mesh.pad_coords(v, periodic=periodic)
+                      for k, v in coords.items()}
             metrics = mesh.compute_metrics_from_coords(
-                coords, dxs, order=6, jac_bound=jac_bound, periodic=periodic)
+                padded, dxs, order=6, jac_bound=jac_bound, periodic=periodic)
         return dict(grid=grid, cons0=cons, bcs=bcs,
                     dxs=dxs, axes=(0, 1, 2), params=params, forcing=None,
                     gamma=params.gamma,
                     bc_apply=lambda q: bc.apply(q, grid, params),
                     source=lambda q: bc.source(q, grid),
-                    metrics=metrics, dif_bound=dif_bound,
+                    metrics=metrics, coords=coords, dif_bound=dif_bound,
                     channel_bc=bc, scheme_invis=s.get("SCHEME_INVIS"),
                     scheme_vis=s.get("SCHEME_VIS"))
 

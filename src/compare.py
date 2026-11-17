@@ -37,6 +37,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .mesh_data import from_case
+
 # 原版 dump 的守恒量标签，顺序 = pf 的第 0..4 分量
 CONS_TAGS = ("rho", "rhou", "rhov", "rhow", "rhoE")
 
@@ -142,7 +144,6 @@ def cmd_jax_run(args):
                                    forcing_work=getattr(args, "forcing_work", "off"))
     case = build_case(args_case)
     vis_order = {"CD6": 6, "CD8": 8}[getattr(args, "vis_order", "CD6")]
-    grid = case["grid"]
     # 原码差分是 -Ajac*(F_r - F_l)/hx（OCFD_Schemes.cu:306），其中
     # hx = 1/(NX-1)（OCFD_init.cu:29-31，不是 1/NX）。JAX 算例缺省 dx=1/N，
     # 对拍必须显式覆盖，否则 du 就差 N/(N-1)（N=128 时 0.8%，必然超差）。
@@ -150,6 +151,10 @@ def cmd_jax_run(args):
                getattr(args, "dx_z", None))
     dxs = tuple(d if o is None else o for d, o in zip(case["dxs"], dx_over))
     case["dxs"] = dxs
+    # 对拍入口先覆盖步长，再构造描述，保证描述与后续 RHS 用同一组步长。
+    desc = from_case(case)
+    grid = desc.grid
+    dxs = desc.dxs
     params = case["params"]
     gamma = case["gamma"]
 
@@ -168,15 +173,15 @@ def cmd_jax_run(args):
                 f"网格不一致（用 --N/--ny/--nz 对齐 in 文件的三维）")
         cons = cons.at[(v,) + grid.inner()[1:]].set(jnp.asarray(arr))
 
-    metrics = case.get("metrics")
+    metrics = desc.metrics
 
     def rhs(q):
         """按原版 du_comput 的口径组合无粘、粘性和体积力右端项。"""
         # 原码 du_comput 恒算无粘 + 粘性，这里不加 --viscous 条件
-        du = inviscid_rhs(q, grid, gamma=gamma, bcs=case["bcs"],
-                          axes=case["axes"], dx=dxs, scheme=args.scheme,
+        du = inviscid_rhs(q, grid, gamma=gamma, bcs=desc.bcs,
+                          axes=desc.axes, dx=dxs, scheme=args.scheme,
                           metrics=metrics)
-        du = du + viscous_rhs(q, grid, params, case["bcs"], axes=case["axes"],
+        du = du + viscous_rhs(q, grid, params, desc.bcs, axes=desc.axes,
                               dx=dxs, order=vis_order, metrics=metrics)
         du = du + apply_forcing(case, q)
         return du
