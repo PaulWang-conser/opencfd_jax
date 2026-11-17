@@ -1,0 +1,37 @@
+# OpenCFD-SCU input -- 第0步对拍用：channel quick 网格，WENO7 + CD8
+# 相对 channel_case_iiA/quick/opencfd-scu.in 只改三处：
+#   SCHEME_INVIS = UP7（原码 303，对应 JAX --scheme WENO7）
+#   END_TIME = 5e-05（只推进 1 步，配合 dump 版可执行文件）
+#   KSTEP_SHOW/SAVE = 1
+GRID_3D = 96   97   64
+PARALLEL_3D = 1   1   1
+STREAM = 0
+CHARTERIC = 0
+TEST = 0
+
+IPERIODIC = 1   0   1
+JAC_BOUND = 1   1   1
+DIF_BOUND = 0   0   1   1   0   0
+NON_REFLETION = 0   0   0   0   0   0
+
+SCHEME_INVIS = UP7
+SCHEME_VIS = CD8
+
+RE = 190.7
+AMA = 0.0955
+GAMMA = 1.4
+PR = 0.7
+T_REF = 300.0
+EPSL_SW = 0.0
+
+DT = 5e-05
+END_TIME = 5e-05
+KSTEP_SHOW = 1
+KSTEP_SAVE = 1
+INIT_STAT = 1
+
+IBC = 200
+# unused, one dummy integer
+BC_NPARA = 0
+# Tw_bottom  Tw_top  F        (Tw <= 0 -> adiabatic wall)
+BC_RPARA = 1.0   1.0   1.0

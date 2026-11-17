@@ -1,0 +1,122 @@
+{
+  "id": "plate_1step",
+  "title": "平板层流边界层 · 1 步（入口/壁面/远场 + 曲线无关）",
+  "cover": "INFLOW/PLATE 不对称边界、零状态鬼层、dif_bound 边界带、粘性 CD8",
+  "note": "验收基准仍是 blasius.py；这里只钉住单步 RHS 的实现细节。",
+  "argv": [
+    "--case",
+    "plate",
+    "--N",
+    "64",
+    "--ny",
+    "64",
+    "--nz",
+    "4",
+    "--scheme",
+    "WENO7",
+    "--vis-order",
+    "CD8",
+    "--viscous",
+    "--dt",
+    "1e-4",
+    "--end-step",
+    "1",
+    "--end-time",
+    "1.0",
+    "--kstep-show",
+    "1",
+    "--kstep-save",
+    "1"
+  ],
+  "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case plate --N 64 --ny 64 --nz 4 --scheme WENO7 --vis-order CD8 --viscous --dt 1e-4 --end-step 1 --end-time 1.0 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\plate_1step",
+  "wall_seconds": 5.1,
+  "returncode": 0,
+  "files": [
+    {
+      "name": "plate_step000001.npz",
+      "bytes": 656995,
+      "sha256": "d71cb571bab862124ca938503db1c32145c11679009d004b973ec2f61d960ebc",
+      "fields": {
+        "cons_0": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 0.8625108961299489,
+          "max": 1.0048129972201048,
+          "mean": 0.9983559888958049,
+          "nan": 0
+        },
+        "cons_1": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 1.8006777239701413,
+          "mean": 0.9957947928853248,
+          "nan": 0
+        },
+        "cons_2": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": -0.0068720383762460435,
+          "max": 0.05174377606688147,
+          "mean": 0.0008131611132008412,
+          "nan": 0
+        },
+        "cons_3": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_4": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 152.96534887112298,
+          "max": 181.46567988963923,
+          "mean": 178.6244623345042,
+          "nan": 0
+        }
+      },
+      "meta": {
+        "t": 0.0001,
+        "step": 1,
+        "dt": 0.0001,
+        "case": "plate",
+        "N": 64,
+        "scheme": "WENO7",
+        "gamma": 1.4,
+        "Re": 1000.0,
+        "Ama": 0.1,
+        "Ref_T": 288.15,
+        "Pr": 0.7
+      }
+    }
+  ],
+  "log_tail": [
+    "case=plate grid=64x64x4 scheme=WENO7 viscous=True vis-order=CD8 precision=float64 Re=1000.0 Ama=0.1 Ref_T=288.15 Pr=0.7 metrics=off(Ajac=1) dt-mode=fixed(0.0001)",
+    "WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；与原码对拍时必须用 --ref-t 给出 in 文件里的同值。",
+    "0.000100 of ( step 1 ), wall 2.14s, avg(rho*E) = 1.7862446233e+02, nan = False",
+    "done: t=0.0001, steps=1, wall=2.22s"
+  ]
+}

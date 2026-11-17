@@ -1,0 +1,1607 @@
+{
+  "schema": 1,
+  "phase": "baseline",
+  "created": "2026-11-17T12:52:43+08:00",
+  "env": {
+    "python": "3.13.18",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.5.4",
+    "jax": "0.12.0.1",
+    "jax_backend": "cpu"
+  },
+  "git": {
+    "commit": "8bdc59776f02e6a4560c14cc2978738d191e1919",
+    "branch": "docs/next-steps-2026-11-16",
+    "dirty_files": 8
+  },
+  "scheme": {
+    "inviscid": "WENO7",
+    "viscous": "CD8",
+    "precision": "float64",
+    "filter": "off"
+  },
+  "cases": [
+    {
+      "id": "sod_1step",
+      "title": "Sod 激波管 · 1 步（无粘，固定 dt）",
+      "cover": "无粘通量分裂 + WENO7 重构 + 出流/周期边界；单步 du 的冻结",
+      "note": "1 维问题在 3 维布局里跑（ny=nz=4）；激波尚在隔膜附近，场应保持对称。",
+      "argv": [
+        "--case",
+        "sod",
+        "--N",
+        "128",
+        "--ny",
+        "4",
+        "--nz",
+        "4",
+        "--scheme",
+        "WENO7",
+        "--vis-order",
+        "CD8",
+        "--dt",
+        "1e-3",
+        "--end-step",
+        "1",
+        "--end-time",
+        "0.5",
+        "--kstep-show",
+        "1",
+        "--kstep-save",
+        "1"
+      ],
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case sod --N 128 --ny 4 --nz 4 --scheme WENO7 --vis-order CD8 --dt 1e-3 --end-step 1 --end-time 0.5 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\sod_1step",
+      "wall_seconds": 2.7,
+      "returncode": 0,
+      "files": [
+        {
+          "name": "sod_step000001.npz",
+          "bytes": 83552,
+          "sha256": "72b7445645570811db60231044ffc791c6cf1958086e945a4a43b2f1d76b2cfc",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.12499985729098981,
+              "max": 1.0000001497883593,
+              "mean": 0.5625,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": -2.4647178757201495e-09,
+              "max": 0.057189283552769435,
+              "mean": 0.0009,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.24999985198078548,
+              "max": 2.5000000064253416,
+              "mean": 1.3750000000000002,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.001,
+            "step": 1,
+            "dt": 0.001,
+            "case": "sod",
+            "N": 128,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        }
+      ],
+      "log_tail": [
+        "case=sod grid=128x4x4 scheme=WENO7 viscous=False vis-order=CD8 precision=float64 Re=1000.0 Ama=0.1 Ref_T=288.15 Pr=0.7 metrics=off(Ajac=1) dt-mode=fixed(0.001)",
+        "0.001000 of ( step 1 ), wall 0.54s, avg(rho*E) = 1.3750000000e+00, nan = False",
+        "done: t=0.0010, steps=1, wall=0.59s"
+      ]
+    },
+    {
+      "id": "sod_cfl_5step",
+      "title": "Sod 激波管 · 5 步（CFL 自适应 dt）",
+      "cover": "compute_dt 的 CFL 判据（含声速/网格/粘性口径），逐步 dt 序列被冻结",
+      "note": "每步都存 npz，_meta 里的 dt 就是自适应步长序列。",
+      "argv": [
+        "--case",
+        "sod",
+        "--N",
+        "128",
+        "--ny",
+        "4",
+        "--nz",
+        "4",
+        "--scheme",
+        "WENO7",
+        "--vis-order",
+        "CD8",
+        "--cfl",
+        "0.4",
+        "--end-step",
+        "5",
+        "--end-time",
+        "0.5",
+        "--kstep-show",
+        "1",
+        "--kstep-save",
+        "1"
+      ],
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case sod --N 128 --ny 4 --nz 4 --scheme WENO7 --vis-order CD8 --cfl 0.4 --end-step 5 --end-time 0.5 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\sod_cfl_5step",
+      "wall_seconds": 2.68,
+      "returncode": 0,
+      "files": [
+        {
+          "name": "sod_step000001.npz",
+          "bytes": 83584,
+          "sha256": "9dc587fd297e4ad3c406a24cf27de150be163756b0117bd1334b9c58edecca79",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.1249999747888394,
+              "max": 1.000000230417288,
+              "mean": 0.5625,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": -5.419506079643209e-09,
+              "max": 0.05038697675317417,
+              "mean": 0.0007923321138079845,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.2499999867502735,
+              "max": 2.5000000151349373,
+              "mean": 1.3750000000000002,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.0008803690153422049,
+            "step": 1,
+            "dt": 0.0008803690153422049,
+            "case": "sod",
+            "N": 128,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        },
+        {
+          "name": "sod_step000002.npz",
+          "bytes": 83583,
+          "sha256": "65879a8e7a194f53f2a4628206208a88de5641138b7c5ad1b85870fca6185cd7",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.12499974413675256,
+              "max": 1.000000215323392,
+              "mean": 0.5625,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": -2.928152215962617e-07,
+              "max": 0.09643133729885356,
+              "mean": 0.0015311351089499965,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.24999957080760565,
+              "max": 2.500000369761862,
+              "mean": 1.3750000000000002,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.001701261232166663,
+            "step": 2,
+            "dt": 0.0008208922168244581,
+            "case": "sod",
+            "N": 128,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        },
+        {
+          "name": "sod_step000003.npz",
+          "bytes": 83584,
+          "sha256": "4ad5c6c58478283715a1da34b969ca9a27e4dee2d63004da35dec7aed9c2ae4b",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.12499952419451299,
+              "max": 1.0000007541464522,
+              "mean": 0.5625,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": -2.583392557369017e-07,
+              "max": 0.13721829158141746,
+              "mean": 0.002235149262418172,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.24999974360150803,
+              "max": 2.500000156972298,
+              "mean": 1.375,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.0024834991804646355,
+            "step": 3,
+            "dt": 0.0007822379482979726,
+            "case": "sod",
+            "N": 128,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        },
+        {
+          "name": "sod_step000004.npz",
+          "bytes": 83584,
+          "sha256": "7dac7fa68376374b4973d939a8fed3e04bb0e46933747f48d5551a98aa455594",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.12499987362892624,
+              "max": 1.0000006139917204,
+              "mean": 0.5625,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": -8.896656451827472e-08,
+              "max": 0.17149935901040728,
+              "mean": 0.0029213838406411882,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.24999961089113196,
+              "max": 2.500000508872436,
+              "mean": 1.3750000000000002,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.0032459820451568758,
+            "step": 4,
+            "dt": 0.0007624828646922401,
+            "case": "sod",
+            "N": 128,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        },
+        {
+          "name": "sod_step000005.npz",
+          "bytes": 83583,
+          "sha256": "261cdcbd30a978f0c183d0015defea9ed4e867ae5cd21741e77cf5f4ae0c456c",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.12499968335150781,
+              "max": 1.0000001843688957,
+              "mean": 0.5625,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": -3.614005613856642e-07,
+              "max": 0.19847339582041526,
+              "mean": 0.003598212055382533,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                4,
+                128
+              ],
+              "dtype": "float64",
+              "min": 0.2499991767661835,
+              "max": 2.500000877281948,
+              "mean": 1.3750000000000002,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.003998013394869482,
+            "step": 5,
+            "dt": 0.0007520313497126058,
+            "case": "sod",
+            "N": 128,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        }
+      ],
+      "log_tail": [
+        "0.000880 of ( step 1 ), wall 0.53s, avg(rho*E) = 1.3750000000e+00, nan = False",
+        "0.001701 of ( step 2 ), wall 0.57s, avg(rho*E) = 1.3750000000e+00, nan = False",
+        "0.002483 of ( step 3 ), wall 0.58s, avg(rho*E) = 1.3750000000e+00, nan = False",
+        "0.003246 of ( step 4 ), wall 0.58s, avg(rho*E) = 1.3750000000e+00, nan = False",
+        "0.003998 of ( step 5 ), wall 0.59s, avg(rho*E) = 1.3750000000e+00, nan = False",
+        "done: t=0.0040, steps=5, wall=0.59s"
+      ]
+    },
+    {
+      "id": "tg_10step",
+      "title": "Taylor-Green 涡 · 10 步（粘性 Re=1000）",
+      "cover": "周期双轴 + 粘性 CD8 + 2D 涡演化；无粘/粘性组合的单步与多步",
+      "note": "Re=50 太耗散（原文档示例值），这里取 Re=1000 让耗散项真正参与。",
+      "argv": [
+        "--case",
+        "tg",
+        "--N",
+        "64",
+        "--nz",
+        "4",
+        "--scheme",
+        "WENO7",
+        "--vis-order",
+        "CD8",
+        "--viscous",
+        "--Re",
+        "1000",
+        "--dt",
+        "2e-3",
+        "--end-step",
+        "10",
+        "--end-time",
+        "1.0",
+        "--kstep-show",
+        "5",
+        "--kstep-save",
+        "5"
+      ],
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case tg --N 64 --nz 4 --scheme WENO7 --vis-order CD8 --viscous --Re 1000 --dt 2e-3 --end-step 10 --end-time 1.0 --kstep-show 5 --kstep-save 5 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\tg_10step",
+      "wall_seconds": 3.9,
+      "returncode": 0,
+      "files": [
+        {
+          "name": "tg_step000005.npz",
+          "bytes": 656989,
+          "sha256": "72e32cb9f11db0ec56ff12cb6f98bd7399a7c8b4647633daeea52b672fd70ab9",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 0.9999008227283824,
+              "max": 1.0001972458534514,
+              "mean": 0.9999999999999998,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": -0.998011841193383,
+              "max": 0.9980118411933829,
+              "mean": 2.6749300474290805e-18,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": -0.9980118411933837,
+              "max": 0.9980118411933837,
+              "mean": -5.421010862427522e-19,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 178.5490362551741,
+              "max": 179.06944992755922,
+              "mean": 178.82142857142858,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.01,
+            "step": 5,
+            "dt": 0.002,
+            "case": "tg",
+            "N": 64,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        },
+        {
+          "name": "tg_step000010.npz",
+          "bytes": 657006,
+          "sha256": "0a7b0e2843dc75a3f76f4d0cbbf865b674ba992d5f9ccd852b29a850cfac1274",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 0.999607376931147,
+              "max": 1.0005731589789366,
+              "mean": 0.9999999999999996,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": -0.9983196663263705,
+              "max": 0.9983196663263714,
+              "mean": 1.2171863452044296e-18,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": -0.9983196663263713,
+              "max": 0.9983196663263718,
+              "mean": -3.469446951953614e-18,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 178.47568217424683,
+              "max": 179.06966655061248,
+              "mean": 178.82142857142856,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.020000000000000004,
+            "step": 10,
+            "dt": 0.002,
+            "case": "tg",
+            "N": 64,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        }
+      ],
+      "log_tail": [
+        "case=tg grid=64x64x4 scheme=WENO7 viscous=True vis-order=CD8 precision=float64 Re=1000.0 Ama=0.1 Ref_T=288.15 Pr=0.7 metrics=off(Ajac=1) dt-mode=fixed(0.002)",
+        "WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；与原码对拍时必须用 --ref-t 给出 in 文件里的同值。",
+        "0.010000 of ( step 5 ), wall 1.17s, avg(rho*E) = 1.7882142857e+02, nan = False",
+        "0.020000 of ( step 10 ), wall 1.27s, avg(rho*E) = 1.7882142857e+02, nan = False",
+        "done: t=0.0200, steps=10, wall=1.35s"
+      ]
+    },
+    {
+      "id": "poiseuille_5step",
+      "title": "Poiseuille 层流 · 5 步（壁面 + 体积力）",
+      "cover": "WALL 镜像鬼胞、体积力源项、粘性 CD8；已知壁面通量泄漏的当前表现",
+      "note": "tests/test_wall_poiseuille.py::test_poiseuille_steady 目前是 skip（壁面邻格质量通量泄漏 → 长跑发散）。第 0 步只冻结前 5 步的**有限**演化；等 boundary.py 的单侧壁面公式落地后，这条用例应当由 NaN/发散转为与解析抛物线一致——届时需要显式更新基准并记录原因。",
+      "argv": [
+        "--case",
+        "poiseuille",
+        "--N",
+        "32",
+        "--ny",
+        "64",
+        "--nz",
+        "4",
+        "--scheme",
+        "WENO7",
+        "--vis-order",
+        "CD8",
+        "--viscous",
+        "--Re",
+        "100",
+        "--Ama",
+        "0.05",
+        "--p-grad",
+        "0.1",
+        "--dt",
+        "1e-3",
+        "--end-step",
+        "5",
+        "--end-time",
+        "1.0",
+        "--kstep-show",
+        "5",
+        "--kstep-save",
+        "5"
+      ],
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case poiseuille --N 32 --ny 64 --nz 4 --scheme WENO7 --vis-order CD8 --viscous --Re 100 --Ama 0.05 --p-grad 0.1 --dt 1e-3 --end-step 5 --end-time 1.0 --kstep-show 5 --kstep-save 5 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\poiseuille_5step",
+      "wall_seconds": 4.05,
+      "returncode": 0,
+      "files": [
+        {
+          "name": "poiseuille_step000005.npz",
+          "bytes": 329318,
+          "sha256": "dea5128719ca98ea5b72664bb76a0e2c47bf940a776f08a53d68b0d822351f10",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                64,
+                32
+              ],
+              "dtype": "float64",
+              "min": 0.9999984775166746,
+              "max": 1.0000002321378314,
+              "mean": 0.9999999762111977,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                64,
+                32
+              ],
+              "dtype": "float64",
+              "min": 0.014094628321668284,
+              "max": 1.2496948450972236,
+              "mean": 0.8324542711101627,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                64,
+                32
+              ],
+              "dtype": "float64",
+              "min": -7.851914412737248e-06,
+              "max": 7.851914416637985e-06,
+              "mean": -8.552618723368759e-17,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                64,
+                32
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                64,
+                32
+              ],
+              "dtype": "float64",
+              "min": 714.2869853924324,
+              "max": 715.0666003527762,
+              "mean": 714.7027955652402,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.005,
+            "step": 5,
+            "dt": 0.001,
+            "case": "poiseuille",
+            "N": 32,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 100.0,
+            "Ama": 0.05,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        }
+      ],
+      "log_tail": [
+        "case=poiseuille grid=32x64x4 scheme=WENO7 viscous=True vis-order=CD8 precision=float64 Re=100.0 Ama=0.05 Ref_T=288.15 Pr=0.7 metrics=off(Ajac=1) dt-mode=fixed(0.001)",
+        "WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；与原码对拍时必须用 --ref-t 给出 in 文件里的同值。",
+        "0.005000 of ( step 5 ), wall 1.31s, avg(rho*E) = 7.1470279557e+02, nan = False",
+        "done: t=0.0050, steps=5, wall=1.41s"
+      ]
+    },
+    {
+      "id": "plate_1step",
+      "title": "平板层流边界层 · 1 步（入口/壁面/远场 + 曲线无关）",
+      "cover": "INFLOW/PLATE 不对称边界、零状态鬼层、dif_bound 边界带、粘性 CD8",
+      "note": "验收基准仍是 blasius.py；这里只钉住单步 RHS 的实现细节。",
+      "argv": [
+        "--case",
+        "plate",
+        "--N",
+        "64",
+        "--ny",
+        "64",
+        "--nz",
+        "4",
+        "--scheme",
+        "WENO7",
+        "--vis-order",
+        "CD8",
+        "--viscous",
+        "--dt",
+        "1e-4",
+        "--end-step",
+        "1",
+        "--end-time",
+        "1.0",
+        "--kstep-show",
+        "1",
+        "--kstep-save",
+        "1"
+      ],
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case plate --N 64 --ny 64 --nz 4 --scheme WENO7 --vis-order CD8 --viscous --dt 1e-4 --end-step 1 --end-time 1.0 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\plate_1step",
+      "wall_seconds": 5.1,
+      "returncode": 0,
+      "files": [
+        {
+          "name": "plate_step000001.npz",
+          "bytes": 656995,
+          "sha256": "d71cb571bab862124ca938503db1c32145c11679009d004b973ec2f61d960ebc",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 0.8625108961299489,
+              "max": 1.0048129972201048,
+              "mean": 0.9983559888958049,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 1.8006777239701413,
+              "mean": 0.9957947928853248,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": -0.0068720383762460435,
+              "max": 0.05174377606688147,
+              "mean": 0.0008131611132008412,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                4,
+                64,
+                64
+              ],
+              "dtype": "float64",
+              "min": 152.96534887112298,
+              "max": 181.46567988963923,
+              "mean": 178.6244623345042,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.0001,
+            "step": 1,
+            "dt": 0.0001,
+            "case": "plate",
+            "N": 64,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 288.15,
+            "Pr": 0.7
+          }
+        }
+      ],
+      "log_tail": [
+        "case=plate grid=64x64x4 scheme=WENO7 viscous=True vis-order=CD8 precision=float64 Re=1000.0 Ama=0.1 Ref_T=288.15 Pr=0.7 metrics=off(Ajac=1) dt-mode=fixed(0.0001)",
+        "WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；与原码对拍时必须用 --ref-t 给出 in 文件里的同值。",
+        "0.000100 of ( step 1 ), wall 2.14s, avg(rho*E) = 1.7862446233e+02, nan = False",
+        "done: t=0.0001, steps=1, wall=2.22s"
+      ]
+    },
+    {
+      "id": "channel_1step",
+      "title": "单块槽道（真网格 96×97×64）· 1 步",
+      "cover": "原版 in 文件 + 原版初场 + OCFD3d-Mesh.dat 度量链 + IBC=200 双壁",
+      "note": "覆盖 JAC_BOUND 度量（Ajac/余子式）+ 真实湍流初场 + 双壁 BC + 体积力。输出 22.7 MB，是整套基准里最大的一份。必须 --forcing-work off：原码 channel_body_force 只做 du[1] += F*rho，不做 rho*u*G 的做功项，否则 rhoE 会有 ~1e-3 的系统差（实测）。",
+      "argv": [
+        "--case",
+        "channel",
+        "--in",
+        "D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd-scu.in",
+        "--field",
+        "D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd.dat",
+        "--mesh",
+        "D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\OCFD3d-Mesh.dat",
+        "--scheme",
+        "WENO7",
+        "--vis-order",
+        "CD8",
+        "--viscous",
+        "--forcing-work",
+        "off",
+        "--dt",
+        "5e-5",
+        "--end-step",
+        "1",
+        "--end-time",
+        "0.4",
+        "--kstep-show",
+        "1",
+        "--kstep-save",
+        "1"
+      ],
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case channel --in D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd-scu.in --field D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd.dat --mesh D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\OCFD3d-Mesh.dat --scheme WENO7 --vis-order CD8 --viscous --forcing-work off --dt 5e-5 --end-step 1 --end-time 0.4 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\channel_1step",
+      "wall_seconds": 17.18,
+      "returncode": 0,
+      "files": [
+        {
+          "name": "channel_step000001.npz",
+          "bytes": 23840355,
+          "sha256": "89986507db24ef2f99cc914b4bfc8264a2755b5799d1e549cf91380c6af106d7",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                64,
+                97,
+                96
+              ],
+              "dtype": "float64",
+              "min": 0.9756894680939617,
+              "max": 1.370018110908671,
+              "mean": 1.1433582509660545,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                64,
+                97,
+                96
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 23.026447172397212,
+              "mean": 15.229302174796908,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                64,
+                97,
+                96
+              ],
+              "dtype": "float64",
+              "min": -4.6150299493798785,
+              "max": 4.116242443392668,
+              "mean": 0.0005488732266417933,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                64,
+                97,
+                96
+              ],
+              "dtype": "float64",
+              "min": -2.174409496364039,
+              "max": 2.338738593630788,
+              "mean": -0.0009173124210986431,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                64,
+                97,
+                96
+              ],
+              "dtype": "float64",
+              "min": 268.1105873587651,
+              "max": 545.3241897823075,
+              "mean": 386.2928469076646,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 5e-05,
+            "step": 1,
+            "dt": 5e-05,
+            "case": "channel",
+            "N": 256,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 300.0,
+            "Pr": 0.7
+          }
+        }
+      ],
+      "log_tail": [
+        "case=channel grid=96x97x64 scheme=WENO7 viscous=True vis-order=CD8 precision=float64 Re=190.7 Ama=0.0955 Ref_T=300.0 Pr=0.7 metrics=on dt-mode=fixed(5e-05)",
+        "WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；与原码对拍时必须用 --ref-t 给出 in 文件里的同值。",
+        "0.000050 of ( step 1 ), wall 8.04s, avg(rho*E) = 3.8629284691e+02, nan = False",
+        "done: t=0.0001, steps=1, wall=9.19s"
+      ]
+    },
+    {
+      "id": "channel_small_100step",
+      "title": "单块槽道（小型 24×25×16）· 100 步",
+      "cover": "多步连续演化：壁面 BC 每子步重置、体积力、粘性，累计到 t=0.005",
+      "note": "配合 channel_1step 使用：那条冻结「单步 + 真网格」，这条冻结「多步 + 便宜网格」。现有 128×129×96 的 20000 步原版长跑结果（channel_case_iiA/main_128x129x96）第 0 步不重跑，作为外部参考保留。",
+      "argv": [
+        "--case",
+        "channel",
+        "--in",
+        "D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\cases\\channel_small.in",
+        "--scheme",
+        "WENO7",
+        "--vis-order",
+        "CD8",
+        "--viscous",
+        "--forcing-work",
+        "off",
+        "--dt",
+        "5e-5",
+        "--end-step",
+        "100",
+        "--end-time",
+        "0.005",
+        "--kstep-show",
+        "20",
+        "--kstep-save",
+        "20"
+      ],
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case channel --in D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\cases\\channel_small.in --scheme WENO7 --vis-order CD8 --viscous --forcing-work off --dt 5e-5 --end-step 100 --end-time 0.005 --kstep-show 20 --kstep-save 20 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\channel_small_100step",
+      "wall_seconds": 8.71,
+      "returncode": 0,
+      "files": [
+        {
+          "name": "channel_step000020.npz",
+          "bytes": 385652,
+          "sha256": "41d4728c1177b817928a682b6322cd59993a56bc025e1f35302f93d96d03a4e2",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.999999997566385,
+              "max": 1.0000000000073725,
+              "mean": 0.9999999998178938,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0010001914907520149,
+              "mean": 0.0009168599877312287,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": -1.3919010256672396e-10,
+              "max": 2.3581990787067758e-11,
+              "mean": -6.61930698898956e-12,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 195.79663730364248,
+              "max": 195.7966377811881,
+              "mean": 195.7966377446344,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.0010000000000000002,
+            "step": 20,
+            "dt": 5e-05,
+            "case": "channel",
+            "N": 256,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 300.0,
+            "Pr": 0.7
+          }
+        },
+        {
+          "name": "channel_step000040.npz",
+          "bytes": 385652,
+          "sha256": "cafc8cb3835b158bf490045e9f82490b09efa938ab5e3007316d7ce9b1b46040",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.9999999906862709,
+              "max": 1.0000000000654121,
+              "mean": 0.9999999993461404,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.002001030740663488,
+              "mean": 0.0018278424705388497,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": -1.9708833483625355e-09,
+              "max": 3.3500976381042236e-10,
+              "mean": -9.54371358021411e-11,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 195.79663595653926,
+              "max": 195.79663779231822,
+              "mean": 195.79663765333316,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.0019999999999999987,
+            "step": 40,
+            "dt": 5e-05,
+            "case": "channel",
+            "N": 256,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 300.0,
+            "Pr": 0.7
+          }
+        },
+        {
+          "name": "channel_step000060.npz",
+          "bytes": 385652,
+          "sha256": "94369d351f5fea8cddb91f091a5fba68de1a42424ca22f1d86bdd58a1d88d860",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.9999999799638188,
+              "max": 1.000000000260401,
+              "mean": 0.9999999986663746,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.003002402037171348,
+              "mean": 0.0027338395753332603,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": -8.638613918994643e-09,
+              "max": 1.5833133260081034e-09,
+              "mean": -4.220329373018423e-10,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 195.79663385711922,
+              "max": 195.7966378373048,
+              "mean": 195.79663752316793,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.0030000000000000014,
+            "step": 60,
+            "dt": 5e-05,
+            "case": "channel",
+            "N": 256,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 300.0,
+            "Pr": 0.7
+          }
+        },
+        {
+          "name": "channel_step000080.npz",
+          "bytes": 385652,
+          "sha256": "62f906f2f21a2c05cf4c50c78e4e2668eaa649f0cc02ee704071417e51cc9c5e",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.9999999659545866,
+              "max": 1.000000000732313,
+              "mean": 0.9999999978238535,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.00400391287004619,
+              "mean": 0.003635580356091294,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": -2.348500504541438e-08,
+              "max": 4.712507316207433e-09,
+              "mean": -1.1554488930195538e-09,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 195.79663111415863,
+              "max": 195.7966379567084,
+              "mean": 195.79663736408747,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.0040000000000000036,
+            "step": 80,
+            "dt": 5e-05,
+            "case": "channel",
+            "N": 256,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 300.0,
+            "Pr": 0.7
+          }
+        },
+        {
+          "name": "channel_step000100.npz",
+          "bytes": 385653,
+          "sha256": "a72994d60c7cb478b4f3f41ba5ba5fde8ccdbc1486495b34eaa1aba185b4e94c",
+          "fields": {
+            "cons_0": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.9999999491816958,
+              "max": 1.000000001660245,
+              "mean": 0.9999999968329365,
+              "nan": 0
+            },
+            "cons_1": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.005004988011789382,
+              "mean": 0.0045335876743780165,
+              "nan": 0
+            },
+            "cons_2": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": -4.887754912188961e-08,
+              "max": 1.0866000190441157e-08,
+              "mean": -2.4243066672097065e-09,
+              "nan": 0
+            },
+            "cons_3": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "nan": 0
+            },
+            "cons_4": {
+              "shape": [
+                16,
+                25,
+                24
+              ],
+              "dtype": "float64",
+              "min": 195.796627830083,
+              "max": 195.79663820205852,
+              "mean": 195.79663718016425,
+              "nan": 0
+            }
+          },
+          "meta": {
+            "t": 0.0049999999999999975,
+            "step": 100,
+            "dt": 5e-05,
+            "case": "channel",
+            "N": 256,
+            "scheme": "WENO7",
+            "gamma": 1.4,
+            "Re": 1000.0,
+            "Ama": 0.1,
+            "Ref_T": 300.0,
+            "Pr": 0.7
+          }
+        }
+      ],
+      "log_tail": [
+        "0.001000 of ( step 20 ), wall 3.58s, avg(rho*E) = 1.9579663774e+02, nan = False",
+        "0.002000 of ( step 40 ), wall 3.89s, avg(rho*E) = 1.9579663765e+02, nan = False",
+        "0.003000 of ( step 60 ), wall 4.17s, avg(rho*E) = 1.9579663752e+02, nan = False",
+        "0.004000 of ( step 80 ), wall 4.46s, avg(rho*E) = 1.9579663736e+02, nan = False",
+        "0.005000 of ( step 100 ), wall 4.75s, avg(rho*E) = 1.9579663718e+02, nan = False",
+        "done: t=0.0050, steps=100, wall=5.03s"
+      ]
+    }
+  ]
+}

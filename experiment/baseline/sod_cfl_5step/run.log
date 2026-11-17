@@ -1,0 +1,7 @@
+case=sod grid=128x4x4 scheme=WENO7 viscous=False vis-order=CD8 precision=float64 Re=1000.0 Ama=0.1 Ref_T=288.15 Pr=0.7 metrics=off(Ajac=1) dt-mode=adaptive(cfl=0.4)
+0.000880 of ( step 1 ), wall 0.53s, avg(rho*E) = 1.3750000000e+00, nan = False
+0.001701 of ( step 2 ), wall 0.57s, avg(rho*E) = 1.3750000000e+00, nan = False
+0.002483 of ( step 3 ), wall 0.58s, avg(rho*E) = 1.3750000000e+00, nan = False
+0.003246 of ( step 4 ), wall 0.58s, avg(rho*E) = 1.3750000000e+00, nan = False
+0.003998 of ( step 5 ), wall 0.59s, avg(rho*E) = 1.3750000000e+00, nan = False
+done: t=0.0040, steps=5, wall=0.59s

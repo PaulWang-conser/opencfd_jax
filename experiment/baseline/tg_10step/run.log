@@ -1,0 +1,5 @@
+case=tg grid=64x64x4 scheme=WENO7 viscous=True vis-order=CD8 precision=float64 Re=1000.0 Ama=0.1 Ref_T=288.15 Pr=0.7 metrics=off(Ajac=1) dt-mode=fixed(0.002)
+WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；与原码对拍时必须用 --ref-t 给出 in 文件里的同值。
+0.010000 of ( step 5 ), wall 1.17s, avg(rho*E) = 1.7882142857e+02, nan = False
+0.020000 of ( step 10 ), wall 1.27s, avg(rho*E) = 1.7882142857e+02, nan = False
+done: t=0.0200, steps=10, wall=1.35s

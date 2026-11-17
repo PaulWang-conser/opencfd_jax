@@ -1,0 +1,443 @@
+{
+  "id": "sod_cfl_5step",
+  "title": "Sod 激波管 · 5 步（CFL 自适应 dt）",
+  "cover": "compute_dt 的 CFL 判据（含声速/网格/粘性口径），逐步 dt 序列被冻结",
+  "note": "每步都存 npz，_meta 里的 dt 就是自适应步长序列。",
+  "argv": [
+    "--case",
+    "sod",
+    "--N",
+    "128",
+    "--ny",
+    "4",
+    "--nz",
+    "4",
+    "--scheme",
+    "WENO7",
+    "--vis-order",
+    "CD8",
+    "--cfl",
+    "0.4",
+    "--end-step",
+    "5",
+    "--end-time",
+    "0.5",
+    "--kstep-show",
+    "1",
+    "--kstep-save",
+    "1"
+  ],
+  "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case sod --N 128 --ny 4 --nz 4 --scheme WENO7 --vis-order CD8 --cfl 0.4 --end-step 5 --end-time 0.5 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\sod_cfl_5step",
+  "wall_seconds": 2.68,
+  "returncode": 0,
+  "files": [
+    {
+      "name": "sod_step000001.npz",
+      "bytes": 83584,
+      "sha256": "9dc587fd297e4ad3c406a24cf27de150be163756b0117bd1334b9c58edecca79",
+      "fields": {
+        "cons_0": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.1249999747888394,
+          "max": 1.000000230417288,
+          "mean": 0.5625,
+          "nan": 0
+        },
+        "cons_1": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": -5.419506079643209e-09,
+          "max": 0.05038697675317417,
+          "mean": 0.0007923321138079845,
+          "nan": 0
+        },
+        "cons_2": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_3": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_4": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.2499999867502735,
+          "max": 2.5000000151349373,
+          "mean": 1.3750000000000002,
+          "nan": 0
+        }
+      },
+      "meta": {
+        "t": 0.0008803690153422049,
+        "step": 1,
+        "dt": 0.0008803690153422049,
+        "case": "sod",
+        "N": 128,
+        "scheme": "WENO7",
+        "gamma": 1.4,
+        "Re": 1000.0,
+        "Ama": 0.1,
+        "Ref_T": 288.15,
+        "Pr": 0.7
+      }
+    },
+    {
+      "name": "sod_step000002.npz",
+      "bytes": 83583,
+      "sha256": "65879a8e7a194f53f2a4628206208a88de5641138b7c5ad1b85870fca6185cd7",
+      "fields": {
+        "cons_0": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.12499974413675256,
+          "max": 1.000000215323392,
+          "mean": 0.5625,
+          "nan": 0
+        },
+        "cons_1": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": -2.928152215962617e-07,
+          "max": 0.09643133729885356,
+          "mean": 0.0015311351089499965,
+          "nan": 0
+        },
+        "cons_2": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_3": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_4": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.24999957080760565,
+          "max": 2.500000369761862,
+          "mean": 1.3750000000000002,
+          "nan": 0
+        }
+      },
+      "meta": {
+        "t": 0.001701261232166663,
+        "step": 2,
+        "dt": 0.0008208922168244581,
+        "case": "sod",
+        "N": 128,
+        "scheme": "WENO7",
+        "gamma": 1.4,
+        "Re": 1000.0,
+        "Ama": 0.1,
+        "Ref_T": 288.15,
+        "Pr": 0.7
+      }
+    },
+    {
+      "name": "sod_step000003.npz",
+      "bytes": 83584,
+      "sha256": "4ad5c6c58478283715a1da34b969ca9a27e4dee2d63004da35dec7aed9c2ae4b",
+      "fields": {
+        "cons_0": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.12499952419451299,
+          "max": 1.0000007541464522,
+          "mean": 0.5625,
+          "nan": 0
+        },
+        "cons_1": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": -2.583392557369017e-07,
+          "max": 0.13721829158141746,
+          "mean": 0.002235149262418172,
+          "nan": 0
+        },
+        "cons_2": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_3": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_4": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.24999974360150803,
+          "max": 2.500000156972298,
+          "mean": 1.375,
+          "nan": 0
+        }
+      },
+      "meta": {
+        "t": 0.0024834991804646355,
+        "step": 3,
+        "dt": 0.0007822379482979726,
+        "case": "sod",
+        "N": 128,
+        "scheme": "WENO7",
+        "gamma": 1.4,
+        "Re": 1000.0,
+        "Ama": 0.1,
+        "Ref_T": 288.15,
+        "Pr": 0.7
+      }
+    },
+    {
+      "name": "sod_step000004.npz",
+      "bytes": 83584,
+      "sha256": "7dac7fa68376374b4973d939a8fed3e04bb0e46933747f48d5551a98aa455594",
+      "fields": {
+        "cons_0": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.12499987362892624,
+          "max": 1.0000006139917204,
+          "mean": 0.5625,
+          "nan": 0
+        },
+        "cons_1": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": -8.896656451827472e-08,
+          "max": 0.17149935901040728,
+          "mean": 0.0029213838406411882,
+          "nan": 0
+        },
+        "cons_2": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_3": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_4": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.24999961089113196,
+          "max": 2.500000508872436,
+          "mean": 1.3750000000000002,
+          "nan": 0
+        }
+      },
+      "meta": {
+        "t": 0.0032459820451568758,
+        "step": 4,
+        "dt": 0.0007624828646922401,
+        "case": "sod",
+        "N": 128,
+        "scheme": "WENO7",
+        "gamma": 1.4,
+        "Re": 1000.0,
+        "Ama": 0.1,
+        "Ref_T": 288.15,
+        "Pr": 0.7
+      }
+    },
+    {
+      "name": "sod_step000005.npz",
+      "bytes": 83583,
+      "sha256": "261cdcbd30a978f0c183d0015defea9ed4e867ae5cd21741e77cf5f4ae0c456c",
+      "fields": {
+        "cons_0": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.12499968335150781,
+          "max": 1.0000001843688957,
+          "mean": 0.5625,
+          "nan": 0
+        },
+        "cons_1": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": -3.614005613856642e-07,
+          "max": 0.19847339582041526,
+          "mean": 0.003598212055382533,
+          "nan": 0
+        },
+        "cons_2": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_3": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_4": {
+          "shape": [
+            4,
+            4,
+            128
+          ],
+          "dtype": "float64",
+          "min": 0.2499991767661835,
+          "max": 2.500000877281948,
+          "mean": 1.3750000000000002,
+          "nan": 0
+        }
+      },
+      "meta": {
+        "t": 0.003998013394869482,
+        "step": 5,
+        "dt": 0.0007520313497126058,
+        "case": "sod",
+        "N": 128,
+        "scheme": "WENO7",
+        "gamma": 1.4,
+        "Re": 1000.0,
+        "Ama": 0.1,
+        "Ref_T": 288.15,
+        "Pr": 0.7
+      }
+    }
+  ],
+  "log_tail": [
+    "0.000880 of ( step 1 ), wall 0.53s, avg(rho*E) = 1.3750000000e+00, nan = False",
+    "0.001701 of ( step 2 ), wall 0.57s, avg(rho*E) = 1.3750000000e+00, nan = False",
+    "0.002483 of ( step 3 ), wall 0.58s, avg(rho*E) = 1.3750000000e+00, nan = False",
+    "0.003246 of ( step 4 ), wall 0.58s, avg(rho*E) = 1.3750000000e+00, nan = False",
+    "0.003998 of ( step 5 ), wall 0.59s, avg(rho*E) = 1.3750000000e+00, nan = False",
+    "done: t=0.0040, steps=5, wall=0.59s"
+  ]
+}

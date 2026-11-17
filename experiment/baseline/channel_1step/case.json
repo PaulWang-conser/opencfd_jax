@@ -1,0 +1,124 @@
+{
+  "id": "channel_1step",
+  "title": "单块槽道（真网格 96×97×64）· 1 步",
+  "cover": "原版 in 文件 + 原版初场 + OCFD3d-Mesh.dat 度量链 + IBC=200 双壁",
+  "note": "覆盖 JAC_BOUND 度量（Ajac/余子式）+ 真实湍流初场 + 双壁 BC + 体积力。输出 22.7 MB，是整套基准里最大的一份。必须 --forcing-work off：原码 channel_body_force 只做 du[1] += F*rho，不做 rho*u*G 的做功项，否则 rhoE 会有 ~1e-3 的系统差（实测）。",
+  "argv": [
+    "--case",
+    "channel",
+    "--in",
+    "D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd-scu.in",
+    "--field",
+    "D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd.dat",
+    "--mesh",
+    "D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\OCFD3d-Mesh.dat",
+    "--scheme",
+    "WENO7",
+    "--vis-order",
+    "CD8",
+    "--viscous",
+    "--forcing-work",
+    "off",
+    "--dt",
+    "5e-5",
+    "--end-step",
+    "1",
+    "--end-time",
+    "0.4",
+    "--kstep-show",
+    "1",
+    "--kstep-save",
+    "1"
+  ],
+  "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case channel --in D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd-scu.in --field D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd.dat --mesh D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\OCFD3d-Mesh.dat --scheme WENO7 --vis-order CD8 --viscous --forcing-work off --dt 5e-5 --end-step 1 --end-time 0.4 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\channel_1step",
+  "wall_seconds": 17.18,
+  "returncode": 0,
+  "files": [
+    {
+      "name": "channel_step000001.npz",
+      "bytes": 23840355,
+      "sha256": "89986507db24ef2f99cc914b4bfc8264a2755b5799d1e549cf91380c6af106d7",
+      "fields": {
+        "cons_0": {
+          "shape": [
+            64,
+            97,
+            96
+          ],
+          "dtype": "float64",
+          "min": 0.9756894680939617,
+          "max": 1.370018110908671,
+          "mean": 1.1433582509660545,
+          "nan": 0
+        },
+        "cons_1": {
+          "shape": [
+            64,
+            97,
+            96
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 23.026447172397212,
+          "mean": 15.229302174796908,
+          "nan": 0
+        },
+        "cons_2": {
+          "shape": [
+            64,
+            97,
+            96
+          ],
+          "dtype": "float64",
+          "min": -4.6150299493798785,
+          "max": 4.116242443392668,
+          "mean": 0.0005488732266417933,
+          "nan": 0
+        },
+        "cons_3": {
+          "shape": [
+            64,
+            97,
+            96
+          ],
+          "dtype": "float64",
+          "min": -2.174409496364039,
+          "max": 2.338738593630788,
+          "mean": -0.0009173124210986431,
+          "nan": 0
+        },
+        "cons_4": {
+          "shape": [
+            64,
+            97,
+            96
+          ],
+          "dtype": "float64",
+          "min": 268.1105873587651,
+          "max": 545.3241897823075,
+          "mean": 386.2928469076646,
+          "nan": 0
+        }
+      },
+      "meta": {
+        "t": 5e-05,
+        "step": 1,
+        "dt": 5e-05,
+        "case": "channel",
+        "N": 256,
+        "scheme": "WENO7",
+        "gamma": 1.4,
+        "Re": 1000.0,
+        "Ama": 0.1,
+        "Ref_T": 300.0,
+        "Pr": 0.7
+      }
+    }
+  ],
+  "log_tail": [
+    "case=channel grid=96x97x64 scheme=WENO7 viscous=True vis-order=CD8 precision=float64 Re=190.7 Ama=0.0955 Ref_T=300.0 Pr=0.7 metrics=on dt-mode=fixed(5e-05)",
+    "WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；与原码对拍时必须用 --ref-t 给出 in 文件里的同值。",
+    "0.000050 of ( step 1 ), wall 8.04s, avg(rho*E) = 3.8629284691e+02, nan = False",
+    "done: t=0.0001, steps=1, wall=9.19s"
+  ]
+}

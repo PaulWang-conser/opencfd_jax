@@ -1,0 +1,203 @@
+{
+  "id": "tg_10step",
+  "title": "Taylor-Green 涡 · 10 步（粘性 Re=1000）",
+  "cover": "周期双轴 + 粘性 CD8 + 2D 涡演化；无粘/粘性组合的单步与多步",
+  "note": "Re=50 太耗散（原文档示例值），这里取 Re=1000 让耗散项真正参与。",
+  "argv": [
+    "--case",
+    "tg",
+    "--N",
+    "64",
+    "--nz",
+    "4",
+    "--scheme",
+    "WENO7",
+    "--vis-order",
+    "CD8",
+    "--viscous",
+    "--Re",
+    "1000",
+    "--dt",
+    "2e-3",
+    "--end-step",
+    "10",
+    "--end-time",
+    "1.0",
+    "--kstep-show",
+    "5",
+    "--kstep-save",
+    "5"
+  ],
+  "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case tg --N 64 --nz 4 --scheme WENO7 --vis-order CD8 --viscous --Re 1000 --dt 2e-3 --end-step 10 --end-time 1.0 --kstep-show 5 --kstep-save 5 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\tg_10step",
+  "wall_seconds": 3.9,
+  "returncode": 0,
+  "files": [
+    {
+      "name": "tg_step000005.npz",
+      "bytes": 656989,
+      "sha256": "72e32cb9f11db0ec56ff12cb6f98bd7399a7c8b4647633daeea52b672fd70ab9",
+      "fields": {
+        "cons_0": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 0.9999008227283824,
+          "max": 1.0001972458534514,
+          "mean": 0.9999999999999998,
+          "nan": 0
+        },
+        "cons_1": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": -0.998011841193383,
+          "max": 0.9980118411933829,
+          "mean": 2.6749300474290805e-18,
+          "nan": 0
+        },
+        "cons_2": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": -0.9980118411933837,
+          "max": 0.9980118411933837,
+          "mean": -5.421010862427522e-19,
+          "nan": 0
+        },
+        "cons_3": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_4": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 178.5490362551741,
+          "max": 179.06944992755922,
+          "mean": 178.82142857142858,
+          "nan": 0
+        }
+      },
+      "meta": {
+        "t": 0.01,
+        "step": 5,
+        "dt": 0.002,
+        "case": "tg",
+        "N": 64,
+        "scheme": "WENO7",
+        "gamma": 1.4,
+        "Re": 1000.0,
+        "Ama": 0.1,
+        "Ref_T": 288.15,
+        "Pr": 0.7
+      }
+    },
+    {
+      "name": "tg_step000010.npz",
+      "bytes": 657006,
+      "sha256": "0a7b0e2843dc75a3f76f4d0cbbf865b674ba992d5f9ccd852b29a850cfac1274",
+      "fields": {
+        "cons_0": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 0.999607376931147,
+          "max": 1.0005731589789366,
+          "mean": 0.9999999999999996,
+          "nan": 0
+        },
+        "cons_1": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": -0.9983196663263705,
+          "max": 0.9983196663263714,
+          "mean": 1.2171863452044296e-18,
+          "nan": 0
+        },
+        "cons_2": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": -0.9983196663263713,
+          "max": 0.9983196663263718,
+          "mean": -3.469446951953614e-18,
+          "nan": 0
+        },
+        "cons_3": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "nan": 0
+        },
+        "cons_4": {
+          "shape": [
+            4,
+            64,
+            64
+          ],
+          "dtype": "float64",
+          "min": 178.47568217424683,
+          "max": 179.06966655061248,
+          "mean": 178.82142857142856,
+          "nan": 0
+        }
+      },
+      "meta": {
+        "t": 0.020000000000000004,
+        "step": 10,
+        "dt": 0.002,
+        "case": "tg",
+        "N": 64,
+        "scheme": "WENO7",
+        "gamma": 1.4,
+        "Re": 1000.0,
+        "Ama": 0.1,
+        "Ref_T": 288.15,
+        "Pr": 0.7
+      }
+    }
+  ],
+  "log_tail": [
+    "case=tg grid=64x64x4 scheme=WENO7 viscous=True vis-order=CD8 precision=float64 Re=1000.0 Ama=0.1 Ref_T=288.15 Pr=0.7 metrics=off(Ajac=1) dt-mode=fixed(0.002)",
+    "WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；与原码对拍时必须用 --ref-t 给出 in 文件里的同值。",
+    "0.010000 of ( step 5 ), wall 1.17s, avg(rho*E) = 1.7882142857e+02, nan = False",
+    "0.020000 of ( step 10 ), wall 1.27s, avg(rho*E) = 1.7882142857e+02, nan = False",
+    "done: t=0.0200, steps=10, wall=1.35s"
+  ]
+}

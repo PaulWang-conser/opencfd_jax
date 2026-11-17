@@ -1,0 +1,41 @@
+##################################################################################################
+Welcome to use OpenCFD-SCU-V1.00!
+CopyRight by Li-Xinliang, LHD, Institute of Mechanics, CAS (lixl@imech.ac.cn)
+Coded by Liu-Shiwei, ICMSEC, Academy of Mathematics and Systems Science, CAS (liusw@lsec.cc.ac.cn)
+Coded by Dang-Guanlin, LHD, Institute of Mechanics, CAS (dangguanlin@imech.ac.cn) 2020-01
+Mesh(Nx,Ny,Nz): (96,97,64)
+3D Partation: 1*1*1   Total procs=1
+Re=190.700000 , Ma=0.095500 , Gamma=1.400000 , dt=0.000050
+Start Computing ......
+filter parameters readed
+opencfd_para_init finished
+opencfd_para_init_dev finished
+Channel BC (IBC=200) : TW_bottom = 1.000000 , TW_top = 1.000000 , F = 1.000000
+read 3D mesh data: OCFD3d-Mesh.dat ...
+read 3d data ...
+read 3d data ...
+read 3d data ...
+Comput Jacobian 3D data ...
+Comput Jacobian 3D data OK
+Opencfd.msg is not exist, read initial file : opencfd.dat ......
+read initial data file: opencfd.dat 
+
+Istep=0 , tt=0.000000
+read 3d data ...
+read 3d data ...
+read 3d data ...
+read 3d data ...
+read 3d data ...
+read data ok
+init ok
+
+[dump] cons step=0 inner rho : min=9.780000e-01 max=1.369200e+00 mean=1.143345e+00
+[dump] cons step=0 inner rhoE: min=2.680848e+02 max=5.460965e+02 mean=3.862933e+02
+[dump] cons step=0
+[dump] du krk=1 step=1
+[dump] du krk=2 step=1
+[dump] du krk=3 step=1
+[dump] cons step=1 inner rho : min=9.753159e-01 max=1.369639e+00 mean=1.143350e+00
+[dump] cons step=1 inner rhoE: min=2.680957e+02 max=5.456246e+02 mean=3.862941e+02
+[dump] cons step=1
+[dump] reached DUMP_STEPS=1, stop.

@@ -1,0 +1,1204 @@
+{
+  "baseline": "D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline",
+  "candidate": "D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\candidate",
+  "tol": 0.0,
+  "results": [
+    {
+      "id": "sod_1step",
+      "status": "PASS",
+      "worst": 0.0,
+      "files": 5,
+      "problems": [],
+      "rows": [
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        }
+      ],
+      "wall_seconds": 2.7,
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case sod --N 128 --ny 4 --nz 4 --scheme WENO7 --vis-order CD8 --dt 1e-3 --end-step 1 --end-time 0.5 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\sod_1step"
+    },
+    {
+      "id": "sod_cfl_5step",
+      "status": "PASS",
+      "worst": 0.0,
+      "files": 25,
+      "problems": [],
+      "rows": [
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000001.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000002.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000002.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000002.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000002.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000002.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000003.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000003.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000003.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000003.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000003.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000004.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000004.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000004.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000004.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000004.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000005.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000005.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000005.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000005.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "sod_step000005.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        }
+      ],
+      "wall_seconds": 2.68,
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case sod --N 128 --ny 4 --nz 4 --scheme WENO7 --vis-order CD8 --cfl 0.4 --end-step 5 --end-time 0.5 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\sod_cfl_5step"
+    },
+    {
+      "id": "tg_10step",
+      "status": "PASS",
+      "worst": 0.0,
+      "files": 10,
+      "problems": [],
+      "rows": [
+        {
+          "file": "tg_step000005.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "tg_step000005.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "tg_step000005.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "tg_step000005.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "tg_step000005.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "tg_step000010.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "tg_step000010.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "tg_step000010.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "tg_step000010.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "tg_step000010.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        }
+      ],
+      "wall_seconds": 3.9,
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case tg --N 64 --nz 4 --scheme WENO7 --vis-order CD8 --viscous --Re 1000 --dt 2e-3 --end-step 10 --end-time 1.0 --kstep-show 5 --kstep-save 5 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\tg_10step"
+    },
+    {
+      "id": "poiseuille_5step",
+      "status": "PASS",
+      "worst": 0.0,
+      "files": 5,
+      "problems": [],
+      "rows": [
+        {
+          "file": "poiseuille_step000005.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "poiseuille_step000005.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "poiseuille_step000005.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "poiseuille_step000005.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "poiseuille_step000005.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        }
+      ],
+      "wall_seconds": 4.05,
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case poiseuille --N 32 --ny 64 --nz 4 --scheme WENO7 --vis-order CD8 --viscous --Re 100 --Ama 0.05 --p-grad 0.1 --dt 1e-3 --end-step 5 --end-time 1.0 --kstep-show 5 --kstep-save 5 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\poiseuille_5step"
+    },
+    {
+      "id": "plate_1step",
+      "status": "PASS",
+      "worst": 0.0,
+      "files": 5,
+      "problems": [],
+      "rows": [
+        {
+          "file": "plate_step000001.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "plate_step000001.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "plate_step000001.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "plate_step000001.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "plate_step000001.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        }
+      ],
+      "wall_seconds": 5.1,
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case plate --N 64 --ny 64 --nz 4 --scheme WENO7 --vis-order CD8 --viscous --dt 1e-4 --end-step 1 --end-time 1.0 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\plate_1step"
+    },
+    {
+      "id": "channel_1step",
+      "status": "PASS",
+      "worst": 0.0,
+      "files": 5,
+      "problems": [],
+      "rows": [
+        {
+          "file": "channel_step000001.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000001.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000001.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000001.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000001.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        }
+      ],
+      "wall_seconds": 17.18,
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case channel --in D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd-scu.in --field D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\opencfd.dat --mesh D:\\Desktop\\ocfd2jax\\channel_case_iiA\\quick\\OCFD3d-Mesh.dat --scheme WENO7 --vis-order CD8 --viscous --forcing-work off --dt 5e-5 --end-step 1 --end-time 0.4 --kstep-show 1 --kstep-save 1 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\channel_1step"
+    },
+    {
+      "id": "channel_small_100step",
+      "status": "PASS",
+      "worst": 0.0,
+      "files": 25,
+      "problems": [],
+      "rows": [
+        {
+          "file": "channel_step000020.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000020.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000020.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000020.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000020.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000040.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000040.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000040.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000040.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000040.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000060.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000060.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000060.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000060.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000060.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000080.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000080.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000080.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000080.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000080.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000100.npz",
+          "var": "cons_0",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000100.npz",
+          "var": "cons_1",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000100.npz",
+          "var": "cons_2",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000100.npz",
+          "var": "cons_3",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        },
+        {
+          "file": "channel_step000100.npz",
+          "var": "cons_4",
+          "ok": true,
+          "max": 0.0,
+          "rms": 0.0,
+          "n_bad": 0,
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "nan": 0
+        }
+      ],
+      "wall_seconds": 8.71,
+      "command": "C:\\Users\\28210\\AppData\\Local\\DoubaoWork\\User Data\\sandbox_runtime\\bases\\fa694f517e5995233c80a9a8db5212c2\\python\\python.exe -m opencfd_jax.src.run --case channel --in D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\cases\\channel_small.in --scheme WENO7 --vis-order CD8 --viscous --forcing-work off --dt 5e-5 --end-step 100 --end-time 0.005 --kstep-show 20 --kstep-save 20 --out-dir D:\\Desktop\\ocfd2jax\\opencfd_jax\\experiment\\baseline\\channel_small_100step"
+    }
+  ]
+}

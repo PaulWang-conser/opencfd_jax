@@ -1,0 +1,8 @@
+ D "11-16 我建议先对齐的.txt"
+ M src/README.md
+ M src/schemes.py
+ M src/solver.py
+?? "11-16 我建议先对齐的.md"
+?? experiment/
+?? outputest/
+?? 边界与体积力核对_caseAii_2026-11-16.md
