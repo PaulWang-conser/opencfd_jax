@@ -16,8 +16,8 @@ du 的符号约定（OCFD_Schemes.cu:306 核实）：
 import jax
 import jax.numpy as jnp
 
-from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, WALL, fill_halos_x,
-                       fill_halos_y, fill_halos_z, fill_wall_y,
+from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, WALL, fill_halos_i,
+                       fill_halos_j, fill_halos_k, fill_wall_j,
                        zero_nonperiodic_ghosts)
 from .fields import spatial_array_axis
 from .schemes import (SOLVE_SCHEMES, steger_warming, up7_rhs_along_last_axis,
@@ -35,7 +35,7 @@ def sound_speed(cons, gamma):
 
 def _inner_slice_moved(axis, grid):
     """moved 视图（求解方向在末轴）下的内区 slice，含变量轴。"""
-    dims_inner = (grid.nz, grid.ny, grid.nx)
+    dims_inner = (grid.nk, grid.nj, grid.ni)
     # moved 计算轴序：axis=0 -> (k,j,i)；axis=1 -> (k,i,j)；axis=2 -> (j,i,k)
     if axis == 0:
         order = (0, 1, 2)
@@ -60,17 +60,17 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
     这不符合 OCFD 的通量分裂流程，平板对齐时应保持 False。
     """
     # 原码声速和分裂内核覆盖含鬼层区域，先准备状态，再逐点计算分裂通量。
-    cons = fill_halos_x(cons, bcs[0], grid.nx)
+    cons = fill_halos_i(cons, bcs[0], grid.ni)
     if bcs[1] == WALL:
-        cons = fill_wall_y(cons, grid.ny)
+        cons = fill_wall_j(cons, grid.nj)
     else:
-        cons = fill_halos_y(cons, bcs[1], grid.ny)
-    cons = fill_halos_z(cons, bcs[2], grid.nz)
+        cons = fill_halos_j(cons, bcs[1], grid.nj)
+    cons = fill_halos_k(cons, bcs[2], grid.nk)
     if zero_state_ghosts:
         # 当前单块平板口径：保留入口状态，清零其余非周期状态鬼层。
         cons = zero_nonperiodic_ghosts(cons, bcs, preserve_inflow=True)
     moved = jnp.moveaxis(cons, 1 + spatial_array_axis(axis), -1)
-    nxi = (grid.nx, grid.ny, grid.nz)[axis]
+    nxi = (grid.ni, grid.nj, grid.nk)[axis]
 
     moved_metric = None
     if metric is not None:

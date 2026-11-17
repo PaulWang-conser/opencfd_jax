@@ -55,7 +55,8 @@ output/sod_step000100.npz
 | 参数                        | 含义                                                      |
 | ------------------------- | ------------------------------------------------------- |
 | `--case`                  | 算例：`sod` / `tg` / `poiseuille` / `channel` / `plate`    |
-| `--N --ny --nz`           | x、y、z 方向内区网格数；`--N` 同时是多数算例的 x 向网格数                     |
+| `--ni --nj --nk`          | 计算 i/j/k 方向内区网格数，缺省 256/64/4                          |
+| `--N --ny --nz`           | 兼容旧名，分别等同 `--ni/--nj/--nk`；新旧同时给出且不同值会报错            |
 | `--scheme`                | 无粘重构格式，默认 `UP7`                                         |
 | `--dt`                    | 固定时间步长；不提供时按 `--cfl` 自适应计算                              |
 | `--cfl`                   | 自适应步长的 CFL 数，默认 0.4                                     |
@@ -143,22 +144,22 @@ JSON 只分六组，外加顶层 `precision`：
 
 
 ```
-(5, nz + 8, ny + 8, nx + 8)
+(5, nk + 8, nj + 8, ni + 8)
 ```
 
 
 
 * 计算坐标为 `(i, j, k) = (ξ, η, ζ)`，空间数组轴顺序是 `(k, j, i)`。
-  现有标识符 `nx/ny/nz` 和 `x/y/z` 轴标签依次对应计算 `i/j/k`；
-  物理笛卡尔坐标 `x/y/z` 与计算坐标通过网格度量联系。
+  规范尺寸名是 `ni/nj/nk`；`nx/ny/nz` 是兼容只读别名，旧位置参数仍按
+  计算 `i/j/k` 顺序解释。物理笛卡尔坐标 `x/y/z` 与计算坐标通过网格度量联系。
 * 原码度量键 `Akx/Aky/Akz`、`Aix/Aiy/Aiz`、`Asx/Asy/Asz` 分别属于
-  计算 `i/j/k` 方向；键末尾的 `x/y/z` 表示物理坐标分量。
+  计算 `i/j/k` 方向；键末尾的 `x/y/z` 表示物理坐标分量，不是计算轴名。
 
 * 每个方向有 `LAP = 4` 层鬼胞，为高阶模板和边界处理提供数据。
 
 * `Grid.inner()` 选出不含鬼胞的物理内区。
 
-* 诊断和无粘 / 粘性右端项可以操作完整数组，但最终存盘只保存 `(nz, ny, nx)` 内区。
+* 诊断和无粘 / 粘性右端项可以操作完整数组，但最终存盘只保存 `(nk, nj, ni)` 内区。
 
 `boundary.py` 负责周期环绕、零梯度出流、壁面镜像和 Ev 等通用填充；`fields.py`
 只保留数组布局、`Grid` 和旧导入入口的兼容层。平板的专用入口、壁面和顶部条件仍由
@@ -401,19 +402,19 @@ du = -(F_right - F_left) / h
 
 文件：`boundary.py`、`mesh_data.py`、`run.py`。
 
-通用边界（周期、出流、y 方向壁面镜像、非周期鬼层清零）只在 `boundary.py` 实现；
+通用边界（周期、出流、计算 j 方向壁面镜像、非周期鬼层清零）只在 `boundary.py` 实现；
 `fields.py` 只重导出旧名，`channel.py` / `plate.py` 保留壁面和回调的兼容入口，
 壁面及平板的已有状态赋值公式由 `boundary.py` 提供。`build_execution(case, desc=None)` 在 JIT 前完成：
 
 * 校验 `case["bcs"]`、六侧 `FaceBoundary` 与 `bc_apply` 是否同源；
 * 拒绝“有回调但无专属标记”“多个专属标记同时存在”“固定六侧与 bcs 矛盾”
-  “通用 WALL 不在 y 方向”等组合，未知组合直接报错，不静默改成出流；
+  “通用 WALL 不在计算 j 方向”等组合，未知组合直接报错，不静默改成出流；
 * 返回 `BoundaryExecution(mode, bcs, callback, faces, ...)`，`mode` 为
   `generic` / `channel` / `plate` / `custom`。
 
 **新增通用边界**：在 `boundary.py` 的 `_GENERIC_AXIS_FILLERS` 注册填充函数并加入
 `GENERIC_KINDS`，再让 `mesh_data._generic_faces` 能描述对应语义。通用 WALL 目前仅
-支持 y 方向；`filtering.py` 的滤波也仍只支持周期/出流。
+支持计算 j 方向；`filtering.py` 的滤波也仍只支持周期/出流。
 
 **新增 case 特殊边界**：case 侧显式提供一个对象，并同时把它的 `apply` 设为
 `case["bc_apply"]`：
@@ -423,7 +424,7 @@ from types import SimpleNamespace
 
 special = SimpleNamespace(
     name="my-boundary",
-    faces=(FaceBoundary(...), ...),  # 必须是 x-/x+/y-/y+/z-/z+ 六侧
+    faces=(FaceBoundary(...), ...),  # 必须是 i-/i+/j-/j+/k-/k+ 六侧
     apply=my_apply,                  # 纯 JAX 可追踪函数
 )
 case["special_boundary"] = special
@@ -434,7 +435,7 @@ case["bc_apply"] = special.apply
 可设为 `OUTFLOW` halo，回调后由执行配置填充该侧状态鬼层，并在粘性通量阶段
 填充对应出流侧的 Ev 鬼层；特殊侧的 Ev 暂时保留原值，其他物理条件需另行实现和验证。没有回调的轴只能是
 `PERIODIC`/`OUTFLOW`，其 halo 面的 `kind` 必须等于轴级 `bcs`；
-`WALL` 仍只允许 y 方向。`special_boundary` 不能与 `plate`/`channel_bc` 同时出现。
+`WALL` 仍只允许计算 j 方向。`special_boundary` 不能与 `plate`/`channel_bc` 同时出现。
 当前这是**显式导入**入口，不做动态注册；回调只允许数组运算，不得把 I/O 放进 JIT。
 槽道三点压力外推和平板两点外推在 `boundary.py` 中分别保留原有公式。
 
@@ -483,7 +484,7 @@ case["bc_apply"] = special.apply
 
 
 ```
-cons_0 ... cons_4：五个守恒变量的物理内区，形状均为 (nz, ny, nx)
+cons_0 ... cons_4：五个守恒变量的物理内区，形状均为 (nk, nj, ni)
 _meta            ：JSON 元信息，包括 t、step、dt、case、N、scheme、gamma、Re、Ama、Ref_T、Pr
 ```
 
@@ -515,7 +516,7 @@ with np.load("output/sod_step000100.npz") as data:
 | `sod`        | `make_initial_sod()` 生成左右常数态激波管       | x；x 出流，y/z 周期            | 默认无粘，可选滤波          | `exact_riemann.py` 提供 Riemann 精确解 |
 | `tg`         | `make_initial_tg()` 生成周期正余弦速度场        | x/y；周期边界                 | 可叠加粘性              | `tests/test_taylor_green.py`      |
 | `poiseuille` | `make_initial_poiseuille()` 生成抛物线速度剖面 | x/y；x/z 周期，y 双壁          | 始终计算粘性；x 向恒体积力     | 稳态层流剖面                            |
-| `channel`    | 从原码 in 读取维数和物性；可读取原码初场与网格             | x/y/z；x/z 周期，y 双壁        | 始终计算粘性；槽道源项；可选曲线度量 | `compare.py` 逐子步对拍                |
+| `channel`    | 从原码 in 读取维数和物性；可读取原码初场与网格             | i/j/k；i/k 周期，j 双壁        | 始终计算粘性；槽道源项；可选曲线度量 | `compare.py` 逐子步对拍                |
 | `plate`      | 均匀来流，边界层从入口向下游发展                      | x/y；入口 / 出口、下壁 / 顶部、z 周期 | 使用平板专用边界和鬼层口径      | `blasius.py` 提供相似解和 Cf 基准         |
 
 ### 9.1 channel 的外部文件链
@@ -589,6 +590,7 @@ python -m opencfd_jax.src.run --case plate `
 | `runtime_config.py`| `input.json` 读取 / 校验 / 合并 / 输出前缀（第 3 步） |
 | `cases.py`         | 五种算例的网格、物性、初值、边界与通用体积力            |
 | `fields.py`        | 守恒量数组布局、`Grid`、旧边界导入兼容层          |
+| `axes.py`          | 计算 i/j/k 与旧 x/y/z 的唯一词表和尺寸/面标签映射      |
 | `boundary.py`      | 通用鬼胞填充、壁面镜像、Ev 与统一边界执行配置       |
 | `solver.py`        | 单方向 / 多方向无粘 RHS、声速、CFL 步长、SSP-RK3 |
 | `schemes.py`       | Steger–Warming 分裂、各对流格式、边界面通量带    |
@@ -658,7 +660,7 @@ python -m opencfd_jax.src.compare diff dump-npz dump-jax
 
 3. **输出不含鬼胞**：内存数组每方向多 8 层，NPZ 只有物理内区。
 
-4. **空间数组的计算轴顺序是 `(k,j,i)`**：计算方向按 `(i,j,k)` 排列，代码通过 `spatial_array_axis()` 映射；命令行的 x/y/z 标签依次指向这三个计算方向。
+4. **空间数组的计算轴顺序是 `(k,j,i)`**：计算方向按 `(i,j,k)` 排列，代码通过 `spatial_array_axis()` 映射；命令行/接口的旧 `x/y/z` 标签依次对应计算 `i/j/k`。
 
 5. **无粘和粘性是两条独立空间离散链**：前者走 “通量分裂 → 界面重构 → 通量差分”，后者走 “梯度 → 应力 / 热流通量 → 再求导”。
 

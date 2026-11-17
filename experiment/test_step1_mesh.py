@@ -148,37 +148,41 @@ def test_channel_six_faces_and_executor_source(built):
     """U2：槽道双壁、周期 x/z，壁面由回调 + 鬼胞共同执行。"""
     desc = mesh_data.from_case(built["channel"])
     kinds = {f.side: f.kind for f in desc.faces}
-    assert kinds == {"x-": PERIODIC, "x+": PERIODIC, "y-": WALL, "y+": WALL,
-                     "z-": PERIODIC, "z+": PERIODIC}
-    for side in ("y-", "y+"):
+    assert kinds == {"i-": PERIODIC, "i+": PERIODIC, "j-": WALL, "j+": WALL,
+                     "k-": PERIODIC, "k+": PERIODIC}
+    for side in ("j-", "j+"):
         face = desc.face(side)
         assert face.executor == "callback+halo"
         assert face.dif_band is True  # in 文件 DIF_BOUND=0 0 1 1 0 0
-    for side in ("x-", "x+", "z-", "z+"):
+    for side in ("i-", "i+", "k-", "k+"):
         assert desc.face(side).executor == "halo"
+    # 旧面名仍可按同一对象查找，但返回的 side 已是规范名。
+    assert desc.face("x-").side == "i-"
+    assert desc.face("z+").side == "k+"
 
 
 def test_plate_faces_are_asymmetric(built):
     """U2：平板入口/出口、下壁/上来流四侧语义不同，且都由平板回调执行。"""
     desc = mesh_data.from_case(built["plate"])
-    assert desc.face("x-").kind == INFLOW
-    assert desc.face("x+").kind == OUTFLOW
-    assert desc.face("y-").kind == WALL
-    assert desc.face("y+").kind == mesh_data.FARFIELD
-    for side in ("x-", "x+", "y-", "y+"):
+    assert desc.face("i-").kind == INFLOW
+    assert desc.face("i+").kind == OUTFLOW
+    assert desc.face("j-").kind == WALL
+    assert desc.face("j+").kind == mesh_data.FARFIELD
+    for side in ("i-", "i+", "j-", "j+"):
         assert desc.face(side).executor == "callback"
-    for side in ("z-", "z+"):
+    for side in ("k-", "k+"):
         assert desc.face(side).kind == PERIODIC
         assert desc.face(side).executor == "halo"
+    assert desc.face("y-").side == "j-"  # 旧名查找仍可用
 
 
 def test_generic_sod_faces(built):
     """U2：普通算例按轴级 bc 展开；sod 的 x 出流、y/z 周期。"""
     desc = mesh_data.from_case(built["sod"])
     kinds = {f.side: f.kind for f in desc.faces}
-    assert kinds == {"x-": OUTFLOW, "x+": OUTFLOW,
-                     "y-": PERIODIC, "y+": PERIODIC,
-                     "z-": PERIODIC, "z+": PERIODIC}
+    assert kinds == {"i-": OUTFLOW, "i+": OUTFLOW,
+                     "j-": PERIODIC, "j+": PERIODIC,
+                     "k-": PERIODIC, "k+": PERIODIC}
     assert all(f.executor == "halo" for f in desc.faces)
 
 

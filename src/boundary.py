@@ -2,9 +2,9 @@
 
 本模块负责**所有通用边界**的数值实现：
 
-- 周期/出流沿 x/y/z 的鬼胞填充；
-- 无滑移壁面的守恒量镜像（``fill_wall_y``）；
-- 粘性通量 Ev 的壁面/平板镜像（``fill_ev_wall_y`` / ``fill_ev_plate_y``）；
+- 周期/出流沿计算 i/j/k 的鬼胞填充；
+- 无滑移壁面的守恒量镜像（``fill_wall_j``）；
+- 粘性通量 Ev 的壁面/平板镜像（``fill_ev_wall_j`` / ``fill_ev_plate_j``）；
 - 非周期鬼层清零（``zero_nonperiodic_ghosts``）。
 
 槽道三点压力外推、平板两点压力外推及入口/顶部 Dirichlet 也在此实现；
@@ -16,7 +16,7 @@
 
 扩展位置：
 
-- 新增**通用**边界：在 ``_GENERIC_AXIS_FILLERS`` 注册 x/y/z 三个填充函数，
+- 新增**通用**边界：在 ``_GENERIC_AXIS_FILLERS`` 注册计算 i/j/k 三个填充函数，
   并把类型加入 ``GENERIC_KINDS``；轴级 ``bcs`` 会自动展开到六侧。
 - 新增**case 特殊**边界：在 case 侧显式提供带 ``name``、``faces``、``apply``
   的 ``special_boundary`` 对象，并把 ``apply`` 同时设为 ``bc_apply``；
@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Tuple
 
 import jax.numpy as jnp
+
+from .axes import LEGACY_SIDES, SIDES, grid_extent
 
 LAP = 4
 NVARS = 5
@@ -43,7 +45,8 @@ WALL = "wall"
 FARFIELD = "farfield"
 
 GENERIC_KINDS = (PERIODIC, OUTFLOW, WALL)
-SIX_SIDES = ("x-", "x+", "y-", "y+", "z-", "z+")
+SIX_SIDES = SIDES
+LEGACY_SIX_SIDES = LEGACY_SIDES
 
 # 守恒量 var 轴符号：(rho, rho*u, rho*v, rho*w, rho*E)
 _WALL_SIGN = (1.0, -1.0, -1.0, -1.0, 1.0)
@@ -57,14 +60,14 @@ EV_WALL_SIGNS = {
 _EV_WALL_SIGNS = EV_WALL_SIGNS
 
 
-def fill_halos_x(f, bc, nx):
-    """沿计算 i（ξ，数组 axis=-1）填充四层鬼胞。f: (..., nx+2*LAP)。"""
+def fill_halos_i(f, bc, ni):
+    """沿计算 i（ξ，数组 axis=-1）填充四层鬼胞。f: (..., ni+2*LAP)。"""
     if bc == PERIODIC:
-        f = f.at[..., :LAP].set(f[..., nx:nx + LAP])
-        f = f.at[..., LAP + nx:].set(f[..., LAP:LAP + LAP])
+        f = f.at[..., :LAP].set(f[..., ni:ni + LAP])
+        f = f.at[..., LAP + ni:].set(f[..., LAP:LAP + LAP])
     elif bc == OUTFLOW:
         f = f.at[..., :LAP].set(f[..., LAP:LAP + 1])
-        f = f.at[..., LAP + nx:].set(f[..., LAP + nx - 1:LAP + nx])
+        f = f.at[..., LAP + ni:].set(f[..., LAP + ni - 1:LAP + ni])
     elif bc in (INFLOW, PLATE):
         pass   # 由 case 回调写入入口剖面/壁面；单轴填充只保留原值
     else:
@@ -72,14 +75,14 @@ def fill_halos_x(f, bc, nx):
     return f
 
 
-def fill_halos_y(f, bc, ny):
+def fill_halos_j(f, bc, nj):
     """沿计算 j（η，数组 axis=-2）填充四层鬼胞。"""
     if bc == PERIODIC:
-        f = f.at[..., :LAP, :].set(f[..., ny:ny + LAP, :])
-        f = f.at[..., LAP + ny:, :].set(f[..., LAP:LAP + LAP, :])
+        f = f.at[..., :LAP, :].set(f[..., nj:nj + LAP, :])
+        f = f.at[..., LAP + nj:, :].set(f[..., LAP:LAP + LAP, :])
     elif bc == OUTFLOW:
         f = f.at[..., :LAP, :].set(f[..., LAP:LAP + 1, :])
-        f = f.at[..., LAP + ny:, :].set(f[..., LAP + ny - 1:LAP + ny, :])
+        f = f.at[..., LAP + nj:, :].set(f[..., LAP + nj - 1:LAP + nj, :])
     elif bc in (INFLOW, PLATE):
         pass   # 由 case 回调写入入口/顶部/壁面；单轴填充只保留原值
     else:
@@ -87,14 +90,14 @@ def fill_halos_y(f, bc, ny):
     return f
 
 
-def fill_halos_z(f, bc, nz):
+def fill_halos_k(f, bc, nk):
     """沿计算 k（ζ，数组 axis=-3）填充四层鬼胞。"""
     if bc == PERIODIC:
-        f = f.at[:, :LAP, :, :].set(f[:, nz:nz + LAP, :, :])
-        f = f.at[:, LAP + nz:, :, :].set(f[:, LAP:LAP + LAP, :, :])
+        f = f.at[:, :LAP, :, :].set(f[:, nk:nk + LAP, :, :])
+        f = f.at[:, LAP + nk:, :, :].set(f[:, LAP:LAP + LAP, :, :])
     elif bc == OUTFLOW:
         f = f.at[:, :LAP, :, :].set(f[:, LAP:LAP + 1, :, :])
-        f = f.at[:, LAP + nz:, :, :].set(f[:, LAP + nz - 1:LAP + nz, :, :])
+        f = f.at[:, LAP + nk:, :, :].set(f[:, LAP + nk - 1:LAP + nk, :, :])
     elif bc in (INFLOW, PLATE):
         pass   # 由 case 回调写入；单轴填充只保留原值
     else:
@@ -102,10 +105,15 @@ def fill_halos_z(f, bc, nz):
     return f
 
 
+# 兼容旧名：旧函数名与 canonical 名指向同一函数对象，不复制实现。
+fill_halos_x = fill_halos_i
+fill_halos_y = fill_halos_j
+fill_halos_z = fill_halos_k
+
 _GENERIC_AXIS_FILLERS = {
-    0: fill_halos_x,
-    1: fill_halos_y,
-    2: fill_halos_z,
+    0: fill_halos_i,
+    1: fill_halos_j,
+    2: fill_halos_k,
 }
 
 
@@ -114,25 +122,28 @@ def fill_halos_axis(f, axis, bc, n):
     return _GENERIC_AXIS_FILLERS[axis](f, bc, n)
 
 
-def fill_wall_y(f, ny):
-    """沿 y 的无滑移壁面状态镜像：rho/rhoE 偶、三个动量奇。
+def fill_wall_j(f, nj):
+    """沿计算 j 的无滑移壁面状态镜像：rho/rhoE 偶、三个动量奇。
 
     下壁 ``ghost[p] = f[2*LAP-p] * sign``；上壁
-    ``ghost[ny+LAP+q] = f[ny+LAP-2-q] * sign``。
+    ``ghost[nj+LAP+q] = f[nj+LAP-2-q] * sign``。
     """
     sign = jnp.array(_WALL_SIGN).reshape(5, 1, 1, 1)
     mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
     f = f.at[:, :, :LAP, :].set(mir_lo * sign)
-    mir_hi = f[:, :, ny + LAP - 2:ny + LAP - 6:-1, :]
-    f = f.at[:, :, ny + LAP:ny + 2 * LAP, :].set(mir_hi * sign)
+    mir_hi = f[:, :, nj + LAP - 2:nj + LAP - 6:-1, :]
+    f = f.at[:, :, nj + LAP:nj + 2 * LAP, :].set(mir_hi * sign)
     return f
+
+
+fill_wall_y = fill_wall_j
 
 
 def primitive(cons, phys):
     """守恒量 → 原始变量 (rho, u(3), T)，对应原码 cons_to_pri_kernel。
 
     除法用 `rho>0` 保护：新 alloc 的场鬼胞是 0，直接除会出 NaN/inf。
-    真实计算里调用前 x/z 鬼胞已由周期填充（见 apply_wall_bc 说明）。
+    真实计算里调用前 i/k 鬼胞已由周期填充（见 apply_wall_bc 说明）。
     """
     rho = cons[0]
     rho_safe = jnp.where(rho > 0, rho, 1.0)
@@ -144,7 +155,7 @@ def primitive(cons, phys):
 def _wall_layer(rho, T, j, step, tw):
     """壁面那一层：返回 (rho_wall, T_wall)，均为 (nz, nx) 形状的场。
 
-    j: 壁面所在 y 索引；step=+1 表示向 +y（下壁），-1 表示向 −y（上壁）。
+    j: 壁面所在计算 j 索引；step=+1 表示向 +j（下壁），-1 表示向 −j（上壁）。
     """
     j1, j2, j3 = j + step, j + 2 * step, j + 3 * step
     pt1 = rho[:, j1, :] * T[:, j1, :]
@@ -156,8 +167,8 @@ def _wall_layer(rho, T, j, step, tw):
     else:
         Tw = (18.0 * T[:, j1, :] - 9.0 * T[:, j2, :]
               + 2.0 * T[:, j3, :]) / 11.0   # 绝热壁：T 也三点外推
-    # 角鬼胞（x/z 同时是鬼胞）上 ρT=0，绝热外推会给出 Tw=0；用保护分母避免 NaN，
-    # 这些位置随后会被 x/z 周期填充覆盖，不影响内区。
+    # 角鬼胞（i/k 同时是鬼胞）上 ρT=0，绝热外推会给出 Tw=0；用保护分母避免 NaN，
+    # 这些位置随后会被 i/k 周期填充覆盖，不影响内区。
     return pw / jnp.where(Tw > 0, Tw, 1.0), Tw
 
 
@@ -165,36 +176,37 @@ def apply_channel_wall_bc(cons, grid, phys, Tw_bottom=1.0, Tw_top=1.0):
     """把 IBC=200 的双壁条件写进 cons（壁面层 + 镜像鬼胞），返回新 cons。
 
     调用时机与原码一致：每个 RK 子步 `du_comput` **之前**（等价于原码
-    `get_duvwT()`+`OCFD_bc()` 在上一子步末尾做的事）。x/z 鬼胞应已由周期
-    填充（`fields.fill_halos_x/z`）；本函数只管 y 向壁面与镜像。
+    `get_duvwT()`+`OCFD_bc()` 在上一子步末尾做的事）。i/k 鬼胞应已由周期
+    填充（`fields.fill_halos_i/k`）；本函数只管计算 j 向壁面与镜像。
     """
-    ny = grid.ny
+    nj = grid_extent(grid, 1)
     rho, _, T = primitive(cons, phys)
     Cv = phys.Cv
 
-    for j, step, tw in ((LAP, +1, Tw_bottom), (LAP + ny - 1, -1, Tw_top)):
+    for j, step, tw in ((LAP, +1, Tw_bottom), (LAP + nj - 1, -1, Tw_top)):
         rho_w, Tw = _wall_layer(rho, T, j, step, tw)
         cons = cons.at[0, :, j, :].set(rho_w)                       # rho
         cons = cons.at[1:4, :, j, :].set(0.0)                      # 无滑移
         cons = cons.at[4, :, j, :].set(rho_w * Cv * Tw)            # ρE = ρ Cv T
 
     # 镜像鬼胞：ρ/ρE 偶、ρu/ρv/ρw 奇（与原码 for i in 0..LAP-1 / 1..LAP 同索引）
-    return fill_wall_y(cons, ny)
+    return fill_wall_j(cons, nj)
 
 
 def apply_plate_bc(cons, grid, phys, inflow, far, Tw=1.0):
     """写入平板的三类鬼胞/壁面层，返回新 cons。
 
-    cons: (5, nz+8, ny+8, nx+8)；入口、壁面和顶层均包含物理点。
-    inflow: (5, nz, ny) 入口守恒量剖面；far: (5,) 顶部来流常数。
+    cons: (5, nk+8, nj+8, ni+8)；入口、壁面和顶层均包含物理点。
+    inflow: (5, nk, nj) 入口守恒量剖面；far: (5,) 顶部来流常数。
     """
-    nx, ny = grid.nx, grid.ny
-    ny_in = LAP + ny
-    nz_in = LAP + grid.nz
+    ni, nj, nk = (grid_extent(grid, 0), grid_extent(grid, 1),
+                  grid_extent(grid, 2))
+    ny_in = LAP + nj
+    nz_in = LAP + nk
 
-    # 1) x 两侧：左 = 入口 Dirichlet（含首个物理点），右 = 零梯度鬼层
+    # 1) i 两侧：左 = 入口 Dirichlet（含首个物理点），右 = 零梯度鬼层
     cons = cons.at[:, LAP:nz_in, LAP:ny_in, :LAP + 1].set(inflow[:, :, :, None])
-    cons = cons.at[:, :, :, LAP + nx:].set(cons[:, :, :, LAP + nx - 1:LAP + nx])
+    cons = cons.at[:, :, :, LAP + ni:].set(cons[:, :, :, LAP + ni - 1:LAP + ni])
 
     # 2) 下壁：壁面层（rho 由 ρT 两点外推、无滑移、ρE = ρ Cv Tw）
     rho, _, T = primitive(cons, phys)
@@ -209,19 +221,19 @@ def apply_plate_bc(cons, grid, phys, inflow, far, Tw=1.0):
     sign = jnp.array(_WALL_SIGN).reshape(5, 1, 1, 1)
     cons = cons.at[:, :, :LAP, :].set(cons[:, :, 2 * LAP:LAP:-1, :] * sign)
 
-    # 4) 顶部：自由来流 Dirichlet（全 x，含角鬼胞）
+    # 4) 顶部：自由来流 Dirichlet（全 i，含角鬼胞）
     cons = cons.at[:, :, ny_in - 1:, :].set(far.reshape(5, 1, 1, 1))
     return cons
 
 
-def fill_halos(f, bcs, nx, ny, nz):
+def fill_halos(f, bcs, ni, nj, nk):
     """依次填充计算 i/j/k 鬼胞；j 的 WALL 走状态镜像。"""
-    f = fill_halos_x(f, bcs[0], nx)
+    f = fill_halos_i(f, bcs[0], ni)
     if bcs[1] == WALL:
-        f = fill_wall_y(f, ny)
+        f = fill_wall_j(f, nj)
     else:
-        f = fill_halos_y(f, bcs[1], ny)
-    f = fill_halos_z(f, bcs[2], nz)
+        f = fill_halos_j(f, bcs[1], nj)
+    f = fill_halos_k(f, bcs[2], nk)
     return f
 
 
@@ -230,7 +242,7 @@ def zero_nonperiodic_ghosts(f, bcs, preserve_inflow=False):
 
     ``preserve_inflow=True`` 时保留 INFLOW 低端鬼层（平板入口状态）。
     f 的最后三轴为计算 (k, j, i)，bcs 按计算 (i, j, k) 排列；
-    代码中的 x/y/z 边界标签依次对应 i/j/k。
+    代码中的 x/y/z 边界标签只作为兼容输入，依次对应 i/j/k。
     """
     for axis, bc in enumerate(bcs):
         if bc == PERIODIC:
@@ -244,47 +256,53 @@ def zero_nonperiodic_ghosts(f, bcs, preserve_inflow=False):
     return f
 
 
-def fill_ev_wall_y(f, ny, signs):
-    """粘性通量 Ev（4 分量堆叠，(4,z,y,x)）的 y 双壁镜像。"""
+def fill_ev_wall_j(f, nj, signs):
+    """粘性通量 Ev（4 分量堆叠，(4,k,j,i)）的计算 j 双壁镜像。"""
     sign = jnp.array(signs).reshape(4, 1, 1, 1)
     mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
     f = f.at[:, :, :LAP, :].set(mir_lo * sign)
-    mir_hi = f[:, :, ny + LAP - 2:ny + LAP - 6:-1, :]
-    f = f.at[:, :, ny + LAP:ny + 2 * LAP, :].set(mir_hi * sign)
+    mir_hi = f[:, :, nj + LAP - 2:nj + LAP - 6:-1, :]
+    f = f.at[:, :, nj + LAP:nj + 2 * LAP, :].set(mir_hi * sign)
     return f
 
 
-def fill_ev_plate_y(f, ny, signs):
+def fill_ev_plate_j(f, nj, signs):
     """平板 Ev：下壁镜像（同槽道下壁）+ 顶部零梯度（自由来流侧）。"""
     sign = jnp.array(signs).reshape(4, 1, 1, 1)
     mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
     f = f.at[:, :, :LAP, :].set(mir_lo * sign)
-    f = f.at[:, :, ny + LAP:, :].set(f[:, :, ny + LAP - 1:ny + LAP, :])
+    f = f.at[:, :, nj + LAP:, :].set(f[:, :, nj + LAP - 1:nj + LAP, :])
     return f
+
+
+fill_ev_wall_y = fill_ev_wall_j
+fill_ev_plate_y = fill_ev_plate_j
 
 
 def fill_ev_axis(f, axis, bc, nxi, is_ev=False):
     """Ev 场的单轴填充；壁面/平板规则与守恒量状态规则显式分开。
 
-    wall 目前只在 y 方向支持；x/z 的 WALL 走通用填充会按未知边界报错，
+    wall 目前只在计算 j 方向支持；i/k 的 WALL 走通用填充会按未知边界报错，
     避免把槽道镜像误用于其他方向。
     """
     if axis == 0:
-        return fill_halos_x(f, bc, nxi)
+        return fill_halos_i(f, bc, nxi)
     if axis == 1:
         if bc == WALL:
-            assert is_ev, "cons-level wall fill 应走 fill_wall_y（var 镜像）"
-            return fill_ev_wall_y(f, nxi, EV_WALL_SIGNS[axis])
+            assert is_ev, "cons-level wall fill 应走 fill_wall_j（var 镜像）"
+            return fill_ev_wall_j(f, nxi, EV_WALL_SIGNS[axis])
         if bc == PLATE:
             assert is_ev, "cons-level plate fill 由 plate.apply 写入"
-            return fill_ev_plate_y(f, nxi, EV_WALL_SIGNS[axis])
-        return fill_halos_y(f, bc, nxi)
-    return fill_halos_z(f, bc, nxi)
+            return fill_ev_plate_j(f, nxi, EV_WALL_SIGNS[axis])
+        return fill_halos_j(f, bc, nxi)
+    return fill_halos_k(f, bc, nxi)
 
 
 # 兼容旧 viscous 内部名；数值行为与 fill_ev_axis 完全相同。
-_fill_ev_wall_y = fill_ev_wall_y
-_fill_ev_plate_y = fill_ev_plate_y
+_fill_ev_wall_j = fill_ev_wall_j
+_fill_ev_plate_j = fill_ev_plate_j
+_fill_ev_wall_y = fill_ev_wall_j
+_fill_ev_plate_y = fill_ev_plate_j
 _fill_axis = fill_ev_axis
 
 
@@ -318,7 +336,8 @@ class BoundaryExecution:
             if axis is not None and face.axis != axis:
                 continue
             moved = jnp.moveaxis(q, 3 - face.axis, -1)
-            n = (self.grid.nx, self.grid.ny, self.grid.nz)[face.axis]
+            n = (grid_extent(self.grid, 0), grid_extent(self.grid, 1),
+                 grid_extent(self.grid, 2))[face.axis]
             if face.side.endswith("-"):
                 moved = moved.at[..., :LAP].set(moved[..., LAP:LAP + 1])
             else:
@@ -342,7 +361,7 @@ def _face_map(desc):
     """把描述里的六侧转成 side -> FaceBoundary 的映射。"""
     faces = tuple(getattr(desc, "faces", ()))
     if len(faces) != 6 or tuple(f.side for f in faces) != SIX_SIDES:
-        raise ValueError("边界描述必须按 x-/x+/y-/y+/z-/z+ 顺序包含六侧")
+        raise ValueError(f"边界描述必须按 {SIX_SIDES} 顺序包含六侧")
     return {f.side: f for f in faces}
 
 
@@ -360,7 +379,7 @@ def validate_special_sides(faces, bcs):
     """校验 case 特殊边界的六侧与轴级 bcs 是否一致，并返回原元组。"""
     if len(faces) != 6 or tuple(f.side for f in faces) != SIX_SIDES:
         raise ValueError(
-            "special_boundary.faces 必须按 x-/x+/y-/y+/z-/z+ 顺序给出六侧")
+            f"special_boundary.faces 必须按 {SIX_SIDES} 顺序给出六侧")
     for axis, bc in enumerate(bcs):
         axis_faces = [f for f in faces if f.axis == axis]
         callback_faces = [f for f in axis_faces
@@ -382,23 +401,23 @@ def validate_special_sides(faces, bcs):
                     f"special_boundary {face.side} 的 halo 描述 {face.kind!r} "
                     f"与轴级 bcs {bc!r} 不一致")
         if bc == WALL and axis != 1:
-            raise ValueError("special_boundary 的 WALL 只支持 y 方向")
+            raise ValueError("special_boundary 的 WALL 只支持计算 j 方向")
     return faces
 
 
 def _check_faces(faces, kinds, executors, label):
     """逐侧核对语义与执行来源；不匹配时在 JIT 前失败。"""
     expected = {
-        "x-": kinds[0], "x+": kinds[1],
-        "y-": kinds[2], "y+": kinds[3],
-        "z-": kinds[4], "z+": kinds[5],
+        "i-": kinds[0], "i+": kinds[1],
+        "j-": kinds[2], "j+": kinds[3],
+        "k-": kinds[4], "k+": kinds[5],
     }
     exec_expected = {
-        "x-": executors[0], "x+": executors[1],
-        "y-": executors[2], "y+": executors[3],
-        "z-": executors[4], "z+": executors[5],
+        "i-": executors[0], "i+": executors[1],
+        "j-": executors[2], "j+": executors[3],
+        "k-": executors[4], "k+": executors[5],
     }
-    for side in ("x-", "x+", "y-", "y+", "z-", "z+"):
+    for side in SIX_SIDES:
         face = faces[side]
         if face.kind != expected[side]:
             raise ValueError(
@@ -456,13 +475,13 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
             if not hasattr(channel_bc, attr):
                 raise ValueError(f"channel_bc 缺少 {attr}")
             _as_float(getattr(channel_bc, attr), f"channel_bc.{attr}")
-        for side in ("y-", "y+"):
+        for side in ("j-", "j+"):
             face = faces[side]
             if face.thermal not in ("isothermal", "adiabatic"):
                 raise ValueError(f"channel {side} 缺少热条件描述")
             if "Tw" not in face.params:
                 raise ValueError(f"channel {side} 缺少 Tw 参数")
-            tw = _as_float(getattr(channel_bc, "Tw_bottom" if side == "y-" else "Tw_top"),
+            tw = _as_float(getattr(channel_bc, "Tw_bottom" if side == "j-" else "Tw_top"),
                            f"channel_bc.{side}.Tw")
             if face.params["Tw"] != tw or face.thermal != ("isothermal" if tw > 0 else "adiabatic"):
                 raise ValueError(f"channel {side} 的 Tw 壁温与描述不一致；请重新构造描述")
@@ -483,10 +502,10 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
         plate_marker = case["plate"]
         if not isinstance(plate_marker, MappingABC):
             raise ValueError("case['plate'] 必须是映射")
-        for side in ("y-", "y+"):
+        for side in ("j-", "j+"):
             face = faces[side]
-            if side == "y-" and face.thermal != "isothermal":
-                raise ValueError("plate y- 必须描述为等温壁")
+            if side == "j-" and face.thermal != "isothermal":
+                raise ValueError("plate j- 必须描述为等温壁")
         return BoundaryExecution("plate", bcs, callback, tuple(faces.values()),
                                  plate=plate_marker)
 
@@ -520,11 +539,11 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
                 f"通用边界不支持轴级 {bc!r}；INFLOW/PLATE 只能用于专属算例")
         if bc == WALL and axis != 1:
             raise ValueError(
-                f"通用 WALL 只支持 y 方向（axis=1），得到 axis={axis}")
+                f"通用 WALL 只支持计算 j 方向（axis=1），得到 axis={axis}")
     _check_faces(faces, kinds_for(bcs), ("halo",) * 6, "generic")
     return BoundaryExecution("generic", bcs, None, tuple(faces.values()))
 
 
 def kinds_for(bcs):
-    """把轴级 bcs 展开成六侧语义序列（x-,x+,y-,y+,z-,z+）。"""
+    """把轴级 bcs 展开成六侧语义序列（i-,i+,j-,j+,k-,k+）。"""
     return (bcs[0], bcs[0], bcs[1], bcs[1], bcs[2], bcs[2])

@@ -1,10 +1,11 @@
 """正式运行入口（对应 OCFD_NS_Solver.cu 的 NS_solver_real 主循环）。
 
 用法（从工作区根目录运行，当前源码包路径为 opencfd_jax.src）：
-    python -m opencfd_jax.src.run --case sod --N 256 --scheme UP7 --end-time 0.2
-    python -m opencfd_jax.src.run --case tg  --N 64  --scheme UP7 --end-time 0.5 --Re 50
-    python -m opencfd_jax.src.run --case poiseuille --N 32 --ny 64 --p-grad 0.1 \
+    python -m opencfd_jax.src.run --case sod --ni 256 --scheme UP7 --end-time 0.2
+    python -m opencfd_jax.src.run --case tg  --ni 64  --scheme UP7 --end-time 0.5 --Re 50
+    python -m opencfd_jax.src.run --case poiseuille --ni 32 --nj 64 --p-grad 0.1 \
         --Re 100 --end-time 2.0 --viscous
+旧名 --N/--ny/--nz 仍可用，分别等同 --ni/--nj/--nk。
 
 主循环对齐原码：每步 dt_fn → RK3（+forcing）→ 每 Kstep_show 同步打印诊断
 （ana_residual/NAN）→ 每 Kstep_save 存 npz。滤波按原码节奏每 nstep_filter
@@ -76,100 +77,6 @@ def build_rhs(case, args, execution=None):
     return jax.jit(rhs)
 
 
-def run(args):
-    """执行一次完整计算：设置精度、装配初值与 RHS，然后推进、滤波、诊断并存盘。
-
-    ``args`` 通常由 :func:`main` 的命令行解析器生成；计算到 ``end_time`` 或
-    ``end_step`` 中任一条件满足时停止。输出只写物理内区，不包含鬼胞。
-    """
-    if getattr(args, "fp32", False):
-        config.disable_x64()
-    else:
-        config.enable_x64()   # 缺省 FP64
-
-    gamma = 1.4
-    case = build_case(args)
-    desc = from_case(case)
-    execution = boundary.build_execution(case, desc)
-    grid = desc.grid
-    dxs = desc.dxs
-    params = case["params"]
-
-    rhs = build_rhs(case, args, execution=execution)
-    cons = case["cons0"]
-    bcs = execution.bcs
-    bc_apply = execution.callback
-
-    dt_mode = f"fixed({args.dt})" if args.dt is not None else \
-        f"adaptive(cfl={args.cfl})"
-    if args.dt is None:
-        def dt_fn_(q):
-            """按当前流场和 CFL 数计算自适应时间步长。"""
-            return compute_dt(q, grid, gamma, args.cfl, dxs)
-
-        dt_fn = jax.jit(dt_fn_)
-    else:
-        dt_fn = None
-    rhs(cons)
-    if dt_fn is not None:
-        dt_fn(cons)   # 预热编译
-
-    print(f"case={args.case} grid={grid.nx}x{grid.ny}x{grid.nz} "
-          f"scheme={args.scheme} "
-          f"viscous={args.viscous} vis-order={args.vis_order} "
-          f"precision={config.precision_name()} "
-          f"Re={params.Re} Ama={params.Ama} Ref_T={params.Ref_T} Pr={params.Pr} "
-          f"metrics={'on' if desc.has_metrics else 'off(Ajac=1)'} "
-          f"dt-mode={dt_mode}")
-    if (args.viscous or args.case == "poiseuille") and args.ref_t is None:
-        print("WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度"
-              "（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；"
-              "与原码对拍时必须用 --ref-t 给出 in 文件里的同值。")
-    if args.case == "sod" and args.viscous:
-        print("WARNING: sod 初值用 E=p/(gamma-1) 标准约定，与 viscous 的 "
-              "OCFD Ama 缩放约定不匹配——粘性系数无物理意义（不 raise，"
-              "保留灵活性）")
-
-    from .filtering import shock_filter
-    t0 = time.time()
-    t = 0.0
-    step = 0
-    # 定 dt 时可以 jit 整步 + donate 输入缓冲（省一次全场分配，也把 3 次 RHS
-    # dispatch 合成 1 次）。变 dt 时 dt 是参数，仍走同一编译体（不重新编译）。
-    step_jit = jax.jit(lambda q, dt_: rk3_step(q, dt_, rhs, bc_apply=bc_apply),
-                       donate_argnums=(0,))
-    while t < args.end_time and step < args.end_step:
-        if args.dt is not None:
-            dt = min(args.dt, args.end_time - t)
-        else:
-            dt = float(dt_fn(cons))
-            if not (np.isfinite(dt) and dt > 0.0):
-                print(f"bad dt={dt} at step {step}, t={t}")
-                break
-            dt = min(dt, args.end_time - t)
-        cons = step_jit(cons, dt)
-        t += dt
-        step += 1
-        if args.filter and step % args.nstep_filter == 0:
-            d_ = cons[0]
-            kin = 0.5 * (cons[1] ** 2 + cons[2] ** 2 + cons[3] ** 2) / d_
-            p_ = (gamma - 1.0) * (cons[4] - kin)          # 压力标量场（3 维）
-            cons = shock_filter(cons, p_, grid, s0=args.filter_s0,
-                                rth=args.filter_rth, bcs=bcs,
-                                axes=desc.axes)
-        if step % args.kstep_show == 0:
-            print(diagnostic_line(cons, grid, t, step, time.time() - t0))
-        if step % args.kstep_save == 0 or t >= args.end_time:
-            io.save_npz(
-                f"{args.out_dir}/{args.case}_step{step:06d}.npz",
-                {f"cons_{i}": np.asarray(cons[grid.inner()][i]) for i in range(5)},
-                meta={"t": t, "step": step, "dt": dt, "case": args.case,
-                      "N": args.N, "scheme": args.scheme, "gamma": gamma,
-                      "Re": args.Re, "Ama": args.Ama,
-                      "Ref_T": params.Ref_T, "Pr": params.Pr})
-    print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")
-
-
 def build_parser(explicit_only=False):
     """构造命令行解析器。
 
@@ -199,10 +106,13 @@ def build_parser(explicit_only=False):
     add("--mesh", default=None,
         help="原码 OCFD3d-Mesh.dat；给出则按 JAC_BOUND=1 算度量并接进差分主链，"
              "不给等于 JAC_BOUND=0（Ajac=1）")
-    add("--N", type=int, default=256, help="x 方向网格")
-    add("--ny", type=int, default=64, help="poiseuille 的 y 网格")
+    add("--ni", type=int, default=256, help="计算 i 方向网格（旧名 --N）")
+    add("--nj", type=int, default=64, help="计算 j 方向网格（旧名 --ny）")
+    add("--nk", type=int, default=4, help="计算 k 方向网格（旧名 --nz）")
+    add("--N", type=int, default=256, help="兼容旧名，等同 --ni（计算 i 方向）")
+    add("--ny", type=int, default=64, help="兼容旧名，等同 --nj（计算 j 方向）")
     add("--nz", type=int, default=4,
-        help="z 向网格数（原码 in 文件 GRID_3D 的第三个数）")
+        help="兼容旧名，等同 --nk（计算 k 方向；原码 in 文件 GRID_3D 的第三个数）")
     add("--scheme", default="UP7",
         choices=runtime_config.SCHEMES)
     add("--cfl", type=float, default=0.4)
@@ -339,7 +249,8 @@ def run(args):
         dt_fn(cons)   # 预热编译
 
     prefix = getattr(args, "out_prefix", None) or args.case
-    print(f"case={args.case} grid={grid.nx}x{grid.ny}x{grid.nz} "
+    print(f"case={args.case} grid={grid.ni}x{grid.nj}x{grid.nk} "
+          f"(ni/nj/nk) "
           f"scheme={args.scheme} "
           f"viscous={args.viscous} vis-order={args.vis_order} "
           f"precision={config.precision_name()} "

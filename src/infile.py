@@ -71,6 +71,12 @@ def grid_dims(inp):
     return nx, ny, nz, (npx, npy, npz)
 
 
+def grid_dims_ijk(inp):
+    """与 grid_dims 读取同一组值，但以计算 i/j/k 名称返回。"""
+    ni, nj, nk, parts = grid_dims(inp)
+    return ni, nj, nk, parts
+
+
 def summarize(inp):
     """取出对拍真正需要对齐的那些键（别的键不参与 JAX 侧计算）。"""
     keys_int = ("GRID_3D", "PARALLEL_3D")

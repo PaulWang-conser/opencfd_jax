@@ -24,6 +24,7 @@ import numpy as np
 
 import jax.numpy as jnp
 
+from .axes import MISSING, resolve_dimensions
 from .fields import LAP
 from .viscous import cd_along_axis
 
@@ -42,7 +43,7 @@ def compute_metrics_from_coords(coords: dict, dxs, order=6,
     """由坐标场（含鬼胞）计算度量。coords: {"Axx","Ayy","Azz"}，计算轴序 (k,j,i)。
 
     dxs: 三轴参考步长 (hx, hy, hz)——注意是计算空间步长（均匀网格索引间距），
-    非 x 方向物理步长。返回 METRIC_KEYS 的度量场 dict（含鬼胞）。
+    不是物理 x 方向步长。返回 METRIC_KEYS 的度量场 dict（含鬼胞）。
 
     jac_bound: 原码 `JAC_BOUND`（计算 i/j/k 三标志）。为 1 的轴，每侧 LAP 层
     坐标导数覆盖成单侧公式（`OCFD_Dx0_bound/Dy0_bound/Dz0_bound`，
@@ -136,7 +137,7 @@ def pad_coords(arr, periodic=(True, False, True)):
 
 def make_metrics_cartesian(grid, dxs=(1.0, 1.0, 1.0)):
     """均匀笛卡尔度量：Ajac=1、Akx=Aiy=Asz=1、其余 0（与原码初始化一致）。"""
-    shape = (grid.nz + 2 * LAP, grid.ny + 2 * LAP, grid.nx + 2 * LAP)
+    shape = (grid.nk + 2 * LAP, grid.nj + 2 * LAP, grid.ni + 2 * LAP)
     one = np.ones(shape)
     zero = np.zeros(shape)
     return {
@@ -147,20 +148,24 @@ def make_metrics_cartesian(grid, dxs=(1.0, 1.0, 1.0)):
     }
 
 
-def read_ocfd_mesh(path, nx, ny, nz):
-    """读原码的 `OCFD3d-Mesh.dat`（X/Y/Z 三个坐标场，内区 (nz, ny, nx)）。
+def read_ocfd_mesh(path, nx=MISSING, ny=MISSING, nz=MISSING, *,
+                   ni=MISSING, nj=MISSING, nk=MISSING):
+    """读原码的 `OCFD3d-Mesh.dat`（X/Y/Z 三个坐标场，内区 (nk, nj, ni)）。
 
-    格式（由 channel_case_iiA/gen_case.py 写、原码 OCFD_Comput_Jacobian3d.cu:126-130
-    + read_3d1 读，两边一致）：
+    `nx/ny/nz` 与 `ni/nj/nk` 是同一组尺寸的新旧关键字；位置参数仍按计算
+    i/j/k 顺序解释。格式（由 channel_case_iiA/gen_case.py 写、原码
+    OCFD_Comput_Jacobian3d.cu:126-130 + read_3d1 读，两边一致）：
       - 无文件头；三个场依次是 X、Y、Z；
       - 每个场按 k 面一条记录：`int32 长度标记 + nx*ny 个 float64 + int32 长度标记`
         （长度标记 = nx*ny*8 字节），数组内 i 最快、j 次之（C 序）；
       - 长度标记只用作完整性校验（原码的 offset 步长
         `(2*sizeof(int) + NX*NY*sizeof(REAL)) * NZ` 就来自它）。
 
-    nx/ny/nz 由 in 文件的 GRID_3D 给出（原码也是从 in 文件读，网格文件里没有维数）。
-    返回 {"Axx": x, "Ayy": y, "Azz": z}，均为 (nz, ny, nx)，**不含鬼胞**。
+    尺寸由 in 文件的 GRID_3D 给出（原码也是从 in 文件读，网格文件里没有维数）。
+    返回 {"Axx": x, "Ayy": y, "Azz": z}，均为 (nk, nj, ni)，**不含鬼胞**。
     """
+    nx, ny, nz = resolve_dimensions(ni=ni, nj=nj, nk=nk,
+                                    nx=nx, ny=ny, nz=nz)
     n = nx * ny
     payload = 8 * n
     rec = 8 + payload
@@ -186,19 +191,23 @@ def read_ocfd_mesh(path, nx, ny, nz):
 
 
 def pad_to_lap(arr):
-    """把内区 (nz, ny, nx) 场按 LAP 鬼胞扩展，鬼胞复制最近内点（原码做法）。"""
+    """把内区 (nk, nj, ni) 场按 LAP 鬼胞扩展，鬼胞复制最近内点（原码做法）。"""
     return np.pad(arr, ((LAP, LAP), (LAP, LAP), (LAP, LAP)), mode="edge")
 
 
-def read_ocfd_field(path, nx, ny, nz, nvars=5):
+def read_ocfd_field(path, nx=MISSING, ny=MISSING, nz=MISSING, nvars=5, *,
+                    ni=MISSING, nj=MISSING, nk=MISSING):
     """读原码的场文件（`opencfd.dat` / `OCFD00056000.dat`），返回内区数组列表。
 
-    格式（OCFD_IO.c read_file + gen_case.py write）：
+    新旧尺寸关键字与 `read_ocfd_mesh` 相同。格式（OCFD_IO.c read_file +
+    gen_case.py write）：
       - 文件头 20 字节：`int32(12) + int32(Istep) + float64(tt) + int32(12)`；
       - 之后 nvars 个场依次排列，每个场按 k 面一条记录
         `int32 长度标记 + nx*ny float64 + int32 长度标记`；
       - 场顺序 **rho, U, V, W, T**（原始变量）。
     """
+    nx, ny, nz = resolve_dimensions(ni=ni, nj=nj, nk=nk,
+                                    nx=nx, ny=ny, nz=nz)
     import os
     payload = 8 * nx * ny
     rec = 8 + payload

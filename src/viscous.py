@@ -28,10 +28,14 @@
 import jax.numpy as jnp
 
 from .boundary import (LAP, PLATE, WALL, _EV_WALL_SIGNS,
-                       _fill_axis, _fill_ev_plate_y, _fill_ev_wall_y,
-                       fill_halos_x, fill_halos_y, fill_halos_z,
-                       fill_wall_y, zero_nonperiodic_ghosts)
+                       _fill_axis, _fill_ev_plate_j, _fill_ev_wall_j,
+                       fill_halos_i, fill_halos_j, fill_halos_k,
+                       fill_wall_j, zero_nonperiodic_ghosts)
 from .fields import spatial_array_axis
+
+# 历史测试和旧调用方仍用旧内部名；与 canonical 函数同一对象。
+_fill_ev_wall_y = _fill_ev_wall_j
+_fill_ev_plate_y = _fill_ev_plate_j
 
 _CD6_A = (45.0, -9.0, 1.0)
 _CD6_DEN = 60.0
@@ -159,12 +163,12 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     # 计算方向统一为 (i,j,k)；标量数组的空间轴为 (k,j,i)。
 
     # 0. cons 填计算 i/j/k 三轴鬼胞；当前计算 j 方向支持 wall
-    f = fill_halos_x(cons, bcs[0], grid.nx)
+    f = fill_halos_i(cons, bcs[0], grid.ni)
     if bcs[1] == WALL:
-        f = fill_wall_y(f, grid.ny)
+        f = fill_wall_j(f, grid.nj)
     else:
-        f = fill_halos_y(f, bcs[1], grid.ny)
-    f = fill_halos_z(f, bcs[2], grid.nz)
+        f = fill_halos_j(f, bcs[1], grid.nj)
+    f = fill_halos_k(f, bcs[2], grid.nk)
     if zero_state_ghosts:
         # 原码语义：非周期物理边界的鬼层是 0（没人给它赋值）
         f = zero_nonperiodic_ghosts(f, bcs, preserve_inflow=True)
@@ -268,7 +272,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
                     ax * s13 + ay * s23 + az * s33,
                     ax * E1 + ay * E2 + az * E3)
         ev_by_axis = {0: evv(0), 1: evv(1), 2: evv(2)}
-    nxi_by_axis = {0: grid.nx, 1: grid.ny, 2: grid.nz}
+    nxi_by_axis = {0: grid.ni, 1: grid.nj, 2: grid.nk}
     du = jnp.zeros(grid.shape, dtype=cons.dtype)
     sl_inner = grid.inner()
     for axis in axes:

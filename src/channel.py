@@ -16,7 +16,7 @@
   （外推在 ρT 上做，1/(γMa²) 是公因子，等价于外推 p）
 - 等温壁（Tw>0）：T_wall = Tw、ρ_wall = pw/Tw；绝热壁（Tw≤0）：T 也三点外推。
 - 镜像鬼胞：ρ、T 偶对称；u、v、w 奇对称（等价于守恒量里
-  ρ/ρE 同号、ρu/ρv/ρw 反号，正是 `fields.fill_wall_y` 的 `_WALL_SIGN`）。
+  ρ/ρE 同号、ρu/ρv/ρw 反号，正是 `boundary.fill_wall_j` 的 `_WALL_SIGN`）。
 
 守恒量 ↔ 原始变量用与原码同一条链：`T=(ρE−½ρV²)/(ρ Cv)`、`p=ρT/(γMa²)`。
 

@@ -19,8 +19,7 @@ False 处不滤波）。周期/出流鬼胞由调用方填充 p 与 f 的鬼胞�
 
 import jax.numpy as jnp
 
-from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, fill_halos_x,
-                       fill_halos_y, fill_halos_z)
+from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, fill_halos_i)
 
 _C1 = -0.2103830
 _C2 = 0.0396170
@@ -79,14 +78,14 @@ def shock_filter(f, p, grid, s0=0.01, rth=0.3, bcs=None, axes=(0, 1, 2),
         bcs = (PERIODIC,) * 3
     from .solver import _inner_slice_moved
     out = f
-    nxi = {0: grid.nx, 1: grid.ny, 2: grid.nz}
+    nxi = {0: grid.ni, 1: grid.nj, 2: grid.nk}
     if p.ndim == 3:
         p = p[None]                                # 标量场升 4 维（var 轴）
     for axis in axes:
         moved_f = jnp.moveaxis(f, 3 - axis, -1)
         moved_p = jnp.moveaxis(p, 3 - axis, -1)
-        fm = fill_halos_x(moved_f, bcs[axis], nxi[axis])
-        pm = fill_halos_x(moved_p, bcs[axis], nxi[axis])
+        fm = fill_halos_i(moved_f, bcs[axis], nxi[axis])
+        pm = fill_halos_i(moved_p, bcs[axis], nxi[axis])
         filt = _shock_filter_axis(fm, pm, axis, s0, rth,
                                   periodic=(bcs[axis] == PERIODIC))
         # 切掉非末轴鬼胞（末轴 filt 已是内区长度）

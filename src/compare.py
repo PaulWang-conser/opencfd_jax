@@ -50,7 +50,7 @@ LINE_ME2 = re.compile(
 
 
 def parse_me1(path):
-    """单场文本 → (nz, ny, nx) 数组（内区）。索引为物理 1-based。"""
+    """单场文本 → (nk, nj, ni) 数组（内区）。索引为物理 1-based。"""
     vals = {}
     i_max = j_max = k_max = -10 ** 9
     with open(path) as fh:
@@ -69,7 +69,7 @@ def parse_me1(path):
 
 
 def parse_me2(path, n_var=5):
-    """5 分量文本 → (n_var, nz, ny, nx) 数组（内区）。"""
+    """5 分量文本 → (n_var, nk, nj, ni) 数组（内区）。"""
     vals = {}
     i_max = j_max = k_max = -10 ** 9
     with open(path) as fh:
@@ -169,10 +169,10 @@ def cmd_jax_run(args):
             raise FileNotFoundError(
                 f"missing reference init: {path}（先跑 compare.py dat2npz）")
         arr = np.load(path)["field"]
-        if arr.shape != (grid.nz, grid.ny, grid.nx):
+        if arr.shape != (grid.nk, grid.nj, grid.ni):
             raise ValueError(
-                f"ref {tag} shape {arr.shape} != grid (nz,ny,nx)="
-                f"{(grid.nz, grid.ny, grid.nx)}——原版 in 文件 GRID_3D 与 JAX 侧"
+                f"ref {tag} shape {arr.shape} != grid (nk,nj,ni)="
+                f"{(grid.nk, grid.nj, grid.ni)}——原版 in 文件 GRID_3D 与 JAX 侧"
                 f"网格不一致（用 --N/--ny/--nz 对齐 in 文件的三维）")
         cons = cons.at[(v,) + grid.inner()[1:]].set(jnp.asarray(arr))
 

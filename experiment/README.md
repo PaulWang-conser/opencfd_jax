@@ -150,9 +150,9 @@ collection error；本文件自带仓库根路径插入，可单独运行。全�
 `test_step2_boundary.py` 先冻结旧行为，再验收 `src/boundary.py` 的统一实现和
 `BoundaryExecution`：
 
-- x/y/z 周期与出流、四层鬼胞、角点覆盖次序；
+- 计算 i/j/k 周期与出流、四层鬼胞、角点覆盖次序；
 - 槽道三点壁面外推、不同壁温、单侧绝热；平板入口/出口/下壁/顶部及平板两点外推；
-- 状态壁面镜像、派生温度、Ev 的 x/y 符号与平板顶部复制；
+- 状态壁面镜像、派生温度、Ev 的计算 j 符号与平板顶部复制；
 - 滤波启用时的周期/出流前后值，以及现有不支持的滤波边界报错；
 - 正式路径初态、三个 RHS 和末态的回调次数；`build_execution` 的冲突拒绝；
 - case 显式 `special_boundary` 对象 + `bc_apply` 的注入、六侧校验和阶段衔接。
@@ -199,6 +199,38 @@ python opencfd_jax\experiment\check_step0.py --candidate opencfd_jax\experiment\
 `channel_step000001.npz` 变为 `OCFD3d-Mesh_step000001.npz`，`check_step0.py` 按
 `_stepNNNNNN` 步号与基准一对一映射，基准文件未改名、未重写。
 
+## 第 3.5 步验收：计算方向命名与兼容迁移
+
+`test_step3_5_axes.py` 覆盖：
+
+- `i/j/k`、`x/y/z`、`0/1/2` 与六侧 `i±/j±/k±`、`x±/y±/z±` 的唯一映射；
+- `Grid` 的新关键字、旧关键字、旧位置参数、同值共存和冲突/缺失报错；
+- `FaceBoundary` 构造时把旧面名规范为 `i±...`，`BlockMesh.face("x-")`
+  与 `face("i-")` 返回同一对象；
+- `fill_halos_i/j/k`、`fill_wall_j`、`fill_ev_wall_j`/`fill_ev_plate_j`
+  与旧名为同一函数对象，旧导入身份断言仍成立；
+- `infile.grid_dims_ijk` 与 `grid_dims` 对同一 `.in` 返回相同值；
+- CLI `--ni/--nj/--nk` 与旧 `--N/--ny/--nz` 的互相补齐及显式冲突。
+
+```powershell
+cd D:\Desktop\ocfd2jax\opencfd_jax
+python -m pytest experiment/test_step3_5_axes.py -q
+```
+
+尺寸新旧入口的完整对照：
+
+```powershell
+cd D:\Desktop\ocfd2jax
+python -m opencfd_jax.src.run --case sod --ni 16 --nj 4 --nk 4 --scheme UP7 `
+  --dt 5e-4 --end-step 3 --end-time 0.01 --kstep-show 1 --kstep-save 1 --out-dir tmp_new
+python -m opencfd_jax.src.run --case sod --N 16 --ny 4 --nz 4 --scheme UP7 `
+  --dt 5e-4 --end-step 3 --end-time 0.01 --kstep-show 1 --kstep-save 1 --out-dir tmp_old
+```
+
+`Ak/Ai/As`、`Axx/Ayy/Azz` 仍是原码/物理度量键，不随计算轴改名；`dif_axis_map`
+（平板 `(0,2,1)`）和 `DIF_BOUND` 六标志顺序未改。输出八位步号属于第 3 步，
+不并入本步结论。
+
 ## 目录结构
 
 ```text
@@ -209,6 +241,7 @@ experiment/
   test_step1_mesh.py      第 1 步单块网格/边界描述验收测试
   test_step2_boundary.py  第 2 步统一边界/执行配置验收测试
   test_step3_config.py    第 3 步 input.json 合并/前缀/等价验收测试
+  test_step3_5_axes.py    第 3.5 步计算方向命名/兼容迁移验收测试
   compare_ocfd_jax.py     原码 dump vs JAX 的单步对拍（--dir/--scheme 可换口径）
   cases/channel_small.in  小网格槽道 in 文件（同 IBC=200 口径）
   cases/*.json            七条 Step 0 用例的 input.json（第 3 步）

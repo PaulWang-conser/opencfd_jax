@@ -331,6 +331,30 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
     if config is not None:
         _validate_applicability(config.values, merged.get("case", "sod"))
 
+    # 网格尺寸新旧 CLI 名指向同一组值：显式一侧驱动另一侧；两侧都显式
+    # 且不同则拒绝，而不是静默选一个。JSON 不提供维数（Step 3 口径）。
+    for canonical, legacy in (("ni", "N"), ("nj", "ny"),
+                              ("nk", "nz")):
+        new_cli = canonical in explicit
+        old_cli = legacy in explicit
+        if new_cli and old_cli and merged[canonical] != merged[legacy]:
+            raise ConfigError(
+                f"--{canonical} 与 --{legacy} 同时给出且不一致："
+                f"{merged[canonical]!r} != {merged[legacy]!r}")
+        if new_cli and not old_cli:
+            merged[legacy] = merged[canonical]
+            sources[legacy] = f"cli(--{canonical})"
+        elif old_cli and not new_cli:
+            merged[canonical] = merged[legacy]
+            sources[canonical] = f"cli(--{legacy})"
+        elif merged[canonical] != merged[legacy]:
+            raise ConfigError(
+                f"网格尺寸 {canonical}/{legacy} 不一致："
+                f"{merged[canonical]!r} != {merged[legacy]!r}")
+        if merged[canonical] < 1:
+            raise ConfigError(
+                f"网格尺寸 {canonical} 必须为正整数，得到 {merged[canonical]!r}")
+
     if merged.get("case") == "plate":
         if merged["plate_x0"] >= merged["plate_x1"]:
             raise ConfigError(
