@@ -67,7 +67,7 @@ def build_rhs(case, args, execution=None):
             du = du + viscous_rhs(q, grid, params, bcs, axes=axes, dx=dxs,
                                   order=vis_order, metrics=metrics,
                                   dif_bound=dif_bound, zero_state_ghosts=plate_ghosts,
-                                  dif_axis_map=dif_axis_map)
+                                  dif_axis_map=dif_axis_map, boundary_execution=execution)
         du = du + apply_forcing(case, q)
         if src is not None:
             du = du + src(q)         # IBC=200 体积力（channel_body_force_kernel）

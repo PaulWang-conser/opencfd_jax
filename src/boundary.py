@@ -7,9 +7,8 @@
 - 粘性通量 Ev 的壁面/平板镜像（``fill_ev_wall_y`` / ``fill_ev_plate_y``）；
 - 非周期鬼层清零（``zero_nonperiodic_ghosts``）。
 
-槽道三点压力外推、平板两点压力外推和入口/顶部 Dirichlet 仍是 case 专属
-物理公式，分别保留在 ``channel.py`` 与 ``plate.py``；它们通过
-``build_execution`` 返回的同一份 :class:`BoundaryExecution` 接入主循环。
+槽道三点压力外推、平板两点压力外推及入口/顶部 Dirichlet 也在此实现；
+算例模块保留兼容入口，并通过 :class:`BoundaryExecution` 接入主循环。
 这样通用填充只有一份实现，特殊边界也只有一个明确的 case 侧入口。
 
 边界带（DIF_BOUND 面通量、粘性单侧导数）的设计与核对笔记已移到
@@ -59,7 +58,7 @@ _EV_WALL_SIGNS = EV_WALL_SIGNS
 
 
 def fill_halos_x(f, bc, nx):
-    """沿 x（axis=-1）填充四层鬼胞。f: (..., nx+2*LAP)。"""
+    """沿计算 i（ξ，数组 axis=-1）填充四层鬼胞。f: (..., nx+2*LAP)。"""
     if bc == PERIODIC:
         f = f.at[..., :LAP].set(f[..., nx:nx + LAP])
         f = f.at[..., LAP + nx:].set(f[..., LAP:LAP + LAP])
@@ -74,7 +73,7 @@ def fill_halos_x(f, bc, nx):
 
 
 def fill_halos_y(f, bc, ny):
-    """沿 y（axis=-2）填充四层鬼胞。"""
+    """沿计算 j（η，数组 axis=-2）填充四层鬼胞。"""
     if bc == PERIODIC:
         f = f.at[..., :LAP, :].set(f[..., ny:ny + LAP, :])
         f = f.at[..., LAP + ny:, :].set(f[..., LAP:LAP + LAP, :])
@@ -89,7 +88,7 @@ def fill_halos_y(f, bc, ny):
 
 
 def fill_halos_z(f, bc, nz):
-    """沿 z（axis=-3）填充四层鬼胞。"""
+    """沿计算 k（ζ，数组 axis=-3）填充四层鬼胞。"""
     if bc == PERIODIC:
         f = f.at[:, :LAP, :, :].set(f[:, nz:nz + LAP, :, :])
         f = f.at[:, LAP + nz:, :, :].set(f[:, LAP:LAP + LAP, :, :])
@@ -111,7 +110,7 @@ _GENERIC_AXIS_FILLERS = {
 
 
 def fill_halos_axis(f, axis, bc, n):
-    """按方向调用单轴通用填充（f 的最后三轴为 (z,y,x)）。"""
+    """按计算方向调用单轴通用填充（f 的最后三轴为 (k,j,i)）。"""
     return _GENERIC_AXIS_FILLERS[axis](f, bc, n)
 
 
@@ -129,8 +128,94 @@ def fill_wall_y(f, ny):
     return f
 
 
+def primitive(cons, phys):
+    """守恒量 → 原始变量 (rho, u(3), T)，对应原码 cons_to_pri_kernel。
+
+    除法用 `rho>0` 保护：新 alloc 的场鬼胞是 0，直接除会出 NaN/inf。
+    真实计算里调用前 x/z 鬼胞已由周期填充（见 apply_wall_bc 说明）。
+    """
+    rho = cons[0]
+    rho_safe = jnp.where(rho > 0, rho, 1.0)
+    u = cons[1:4] / rho_safe
+    T = (cons[4] - 0.5 * rho_safe * jnp.sum(u * u, axis=0)) / (rho_safe * phys.Cv)
+    return rho, u, T
+
+
+def _wall_layer(rho, T, j, step, tw):
+    """壁面那一层：返回 (rho_wall, T_wall)，均为 (nz, nx) 形状的场。
+
+    j: 壁面所在 y 索引；step=+1 表示向 +y（下壁），-1 表示向 −y（上壁）。
+    """
+    j1, j2, j3 = j + step, j + 2 * step, j + 3 * step
+    pt1 = rho[:, j1, :] * T[:, j1, :]
+    pt2 = rho[:, j2, :] * T[:, j2, :]
+    pt3 = rho[:, j3, :] * T[:, j3, :]
+    pw = (18.0 * pt1 - 9.0 * pt2 + 2.0 * pt3) / 11.0
+    if tw > 0.0:
+        Tw = jnp.full_like(pw, tw)          # 等温（冷）壁
+    else:
+        Tw = (18.0 * T[:, j1, :] - 9.0 * T[:, j2, :]
+              + 2.0 * T[:, j3, :]) / 11.0   # 绝热壁：T 也三点外推
+    # 角鬼胞（x/z 同时是鬼胞）上 ρT=0，绝热外推会给出 Tw=0；用保护分母避免 NaN，
+    # 这些位置随后会被 x/z 周期填充覆盖，不影响内区。
+    return pw / jnp.where(Tw > 0, Tw, 1.0), Tw
+
+
+def apply_channel_wall_bc(cons, grid, phys, Tw_bottom=1.0, Tw_top=1.0):
+    """把 IBC=200 的双壁条件写进 cons（壁面层 + 镜像鬼胞），返回新 cons。
+
+    调用时机与原码一致：每个 RK 子步 `du_comput` **之前**（等价于原码
+    `get_duvwT()`+`OCFD_bc()` 在上一子步末尾做的事）。x/z 鬼胞应已由周期
+    填充（`fields.fill_halos_x/z`）；本函数只管 y 向壁面与镜像。
+    """
+    ny = grid.ny
+    rho, _, T = primitive(cons, phys)
+    Cv = phys.Cv
+
+    for j, step, tw in ((LAP, +1, Tw_bottom), (LAP + ny - 1, -1, Tw_top)):
+        rho_w, Tw = _wall_layer(rho, T, j, step, tw)
+        cons = cons.at[0, :, j, :].set(rho_w)                       # rho
+        cons = cons.at[1:4, :, j, :].set(0.0)                      # 无滑移
+        cons = cons.at[4, :, j, :].set(rho_w * Cv * Tw)            # ρE = ρ Cv T
+
+    # 镜像鬼胞：ρ/ρE 偶、ρu/ρv/ρw 奇（与原码 for i in 0..LAP-1 / 1..LAP 同索引）
+    return fill_wall_y(cons, ny)
+
+
+def apply_plate_bc(cons, grid, phys, inflow, far, Tw=1.0):
+    """写入平板的三类鬼胞/壁面层，返回新 cons。
+
+    cons: (5, nz+8, ny+8, nx+8)；入口、壁面和顶层均包含物理点。
+    inflow: (5, nz, ny) 入口守恒量剖面；far: (5,) 顶部来流常数。
+    """
+    nx, ny = grid.nx, grid.ny
+    ny_in = LAP + ny
+    nz_in = LAP + grid.nz
+
+    # 1) x 两侧：左 = 入口 Dirichlet（含首个物理点），右 = 零梯度鬼层
+    cons = cons.at[:, LAP:nz_in, LAP:ny_in, :LAP + 1].set(inflow[:, :, :, None])
+    cons = cons.at[:, :, :, LAP + nx:].set(cons[:, :, :, LAP + nx - 1:LAP + nx])
+
+    # 2) 下壁：壁面层（rho 由 ρT 两点外推、无滑移、ρE = ρ Cv Tw）
+    rho, _, T = primitive(cons, phys)
+    # IBC=124 的等温壁使用两点压力外推，系数与槽道边界不同。
+    rho_w = (4.0 * rho[:, LAP + 1, :] * T[:, LAP + 1, :]
+             - rho[:, LAP + 2, :] * T[:, LAP + 2, :]) / (3.0 * Tw)
+    cons = cons.at[0, :, LAP, :].set(rho_w)
+    cons = cons.at[1:4, :, LAP, :].set(0.0)
+    cons = cons.at[4, :, LAP, :].set(rho_w * phys.Cv * Tw)
+
+    # 3) 下壁镜像鬼胞：ghost[p] = f[2LAP-p] * sign（速度反号、rho/ρE 同号）
+    sign = jnp.array(_WALL_SIGN).reshape(5, 1, 1, 1)
+    cons = cons.at[:, :, :LAP, :].set(cons[:, :, 2 * LAP:LAP:-1, :] * sign)
+
+    # 4) 顶部：自由来流 Dirichlet（全 x，含角鬼胞）
+    cons = cons.at[:, :, ny_in - 1:, :].set(far.reshape(5, 1, 1, 1))
+    return cons
+
+
 def fill_halos(f, bcs, nx, ny, nz):
-    """依次填充 x/y/z 鬼胞；y 的 WALL 走状态镜像而不是单轴通用表。"""
+    """依次填充计算 i/j/k 鬼胞；j 的 WALL 走状态镜像。"""
     f = fill_halos_x(f, bcs[0], nx)
     if bcs[1] == WALL:
         f = fill_wall_y(f, ny)
@@ -144,7 +229,8 @@ def zero_nonperiodic_ghosts(f, bcs, preserve_inflow=False):
     """清除非周期方向的鬼层，周期方向保留交换值。
 
     ``preserve_inflow=True`` 时保留 INFLOW 低端鬼层（平板入口状态）。
-    f 的最后三轴为 (z, y, x)，bcs 顺序为 (x, y, z)。
+    f 的最后三轴为计算 (k, j, i)，bcs 按计算 (i, j, k) 排列；
+    代码中的 x/y/z 边界标签依次对应 i/j/k。
     """
     for axis, bc in enumerate(bcs):
         if bc == PERIODIC:
@@ -219,10 +305,26 @@ class BoundaryExecution:
     faces: Tuple[Any, ...] = ()
     channel_bc: Any = None
     plate: Any = None
+    mixed_outflow: Tuple[Any, ...] = ()
+    grid: Any = None
 
     def apply(self, q):
         """调用 case 特殊边界；generic 保持原状态。"""
         return q if self.callback is None else self.callback(q)
+
+    def fill_mixed_outflow(self, q, axis=None):
+        """对含特殊回调的轴，仅填充其普通出流侧的鬼层。"""
+        for face in self.mixed_outflow:
+            if axis is not None and face.axis != axis:
+                continue
+            moved = jnp.moveaxis(q, 3 - face.axis, -1)
+            n = (self.grid.nx, self.grid.ny, self.grid.nz)[face.axis]
+            if face.side.endswith("-"):
+                moved = moved.at[..., :LAP].set(moved[..., LAP:LAP + 1])
+            else:
+                moved = moved.at[..., LAP + n:].set(moved[..., LAP + n - 1:LAP + n])
+            q = jnp.moveaxis(moved, -1, 3 - face.axis)
+        return q
 
 
 def _as_float(value, name):
@@ -273,6 +375,8 @@ def validate_special_sides(faces, bcs):
                 f"special_boundary axis={axis} 没有回调面，轴级 bcs 只能是 "
                 f"PERIODIC/OUTFLOW，得到 {bc!r}")
         for face in halo_faces:
+            if callback_faces and face.kind == OUTFLOW:
+                continue
             if face.kind != bc:
                 raise ValueError(
                     f"special_boundary {face.side} 的 halo 描述 {face.kind!r} "
@@ -358,6 +462,10 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
                 raise ValueError(f"channel {side} 缺少热条件描述")
             if "Tw" not in face.params:
                 raise ValueError(f"channel {side} 缺少 Tw 参数")
+            tw = _as_float(getattr(channel_bc, "Tw_bottom" if side == "y-" else "Tw_top"),
+                           f"channel_bc.{side}.Tw")
+            if face.params["Tw"] != tw or face.thermal != ("isothermal" if tw > 0 else "adiabatic"):
+                raise ValueError(f"channel {side} 的 Tw 壁温与描述不一致；请重新构造描述")
         return BoundaryExecution("channel", bcs, callback, tuple(faces.values()),
                                  channel_bc=channel_bc)
 
@@ -391,7 +499,16 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
         validate_special_sides(marker_faces, bcs)
         if marker_faces != tuple(faces.values()):
             raise ValueError("special_boundary.faces 与已构造的六侧描述不一致")
-        return BoundaryExecution("custom", bcs, callback, marker_faces)
+        mixed_outflow = tuple(f for f in marker_faces if f.executor == "halo" and
+                              bcs[f.axis] in (INFLOW, PLATE) and f.kind == OUTFLOW)
+        execution = BoundaryExecution("custom", bcs, callback, marker_faces,
+                                      mixed_outflow=mixed_outflow, grid=desc.grid)
+        if mixed_outflow:
+            def composed_callback(q):
+                return execution.fill_mixed_outflow(callback(q))
+            return BoundaryExecution("custom", bcs, composed_callback, marker_faces,
+                                     mixed_outflow=mixed_outflow, grid=desc.grid)
+        return execution
 
     if callback is not None:
         raise ValueError(

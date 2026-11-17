@@ -140,10 +140,11 @@ def dif_bound_for_axis(dif_bound, axis, dif_axis_map=(0, 1, 2)):
 
 
 def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=None,
-                dif_bound=None, zero_state_ghosts=False, dif_axis_map=(0, 1, 2)):
+                dif_bound=None, zero_state_ghosts=False, dif_axis_map=(0, 1, 2),
+                boundary_execution=None):
     """粘性 RHS。cons 为含鬼胞尺寸但鬼胞未填的守恒量；内部先填鬼胞。
 
-    dx: 三元组 (dx, dy, dz)。返回与 cons 同 shape 的 du（鬼胞区为 0）。
+    dx: 按计算 i/j/k 排列的三元组（代码名为 dx/dy/dz）。返回与 cons 同 shape 的 du（鬼胞区为 0）。
     metrics: 可选，`mesh.compute_metrics_from_coords` 的输出。给出时
     导数换成协变形式 ∂f/∂x_l = f_ξ·Ak_l + f_η·Ai_l + f_ζ·As_l，散度
     乘 Ajac（原码 OCFD_NS_Jacobian3d.cu:33-52 的口径）。直角度量时与
@@ -157,7 +158,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     dxs = (dx, dx, dx) if isinstance(dx, (int, float)) else dx
     # 计算方向统一为 (i,j,k)；标量数组的空间轴为 (k,j,i)。
 
-    # 0. cons 填三轴鬼胞（粘性导数沿三方向都需要）；y 方向支持 wall
+    # 0. cons 填计算 i/j/k 三轴鬼胞；当前计算 j 方向支持 wall
     f = fill_halos_x(cons, bcs[0], grid.nx)
     if bcs[1] == WALL:
         f = fill_wall_y(f, grid.ny)
@@ -211,7 +212,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
         # 协变导数（原码 vis_flux_s_ker，OCFD_NS_Jacobian3d.cu:126-128 / :190）：
         #   ∂f/∂x_l = f_ξ * Ak_l + f_η * Ai_l + f_ζ * As_l
         # f_ξ/f_η/f_ζ 是参考空间（ξ∈[0,1]，步长 dxs）上的导数；
-        # A*k/A*i/A*s 分别是 ξ/η/ζ 面的面积向量（compute_metrics_from_coords）。
+        # 原码键 Ak/Ai/As 分别对应计算 i/j/k（ξ/η/ζ）方向的余子式向量。
         # 直角度量（A*k=1, A*i=A*s=0）时逐位退化为上面的物理导数。
         def cov(f):
             """由三个参考方向导数和网格度量合成物理坐标导数 ``(f_x,f_y,f_z)``。"""
@@ -273,8 +274,13 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     for axis in axes:
         Evs = ev_by_axis[axis]
         Ev_stack = jnp.stack(Evs)                  # (4, z, y, x)
-        Ev_stack = _fill_axis(Ev_stack, axis, bcs[axis], nxi_by_axis[axis],
-                              is_ev=True)
+        mixed_axis = (boundary_execution is not None and
+                      any(f.axis == axis for f in boundary_execution.mixed_outflow))
+        if mixed_axis:
+            Ev_stack = boundary_execution.fill_mixed_outflow(Ev_stack, axis)
+        else:
+            Ev_stack = _fill_axis(Ev_stack, axis, bcs[axis], nxi_by_axis[axis],
+                                  is_ev=True)
         if zero_state_ghosts:
             # 原码粘性通量 kernel 同样只跑内区，Ev 鬼层没被算过（是 0）；
             # 顶部（z+ 未打开 DIF_BOUND）那个中心差分会读到它 —— 这正是原码

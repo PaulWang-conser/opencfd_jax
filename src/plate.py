@@ -18,46 +18,13 @@ x/z 由周期填充」不同，不能混用。
 import jax.numpy as jnp
 import numpy as np
 
-from .channel import primitive
-from .boundary import LAP, _WALL_SIGN
+from .boundary import apply_plate_bc as apply
 
 
 def far_state(rho=1.0, u=1.0, v=0.0, w=0.0, T=1.0, Cv=1.0):
     """自由来流的守恒量常数向量 (rho, rho*u, rho*v, rho*w, rho*E)。"""
     E = Cv * T + 0.5 * (u * u + v * v + w * w)
     return jnp.asarray([rho, rho * u, rho * v, rho * w, rho * E], dtype=jnp.float64)
-
-
-def apply(cons, grid, phys, inflow, far, Tw=1.0):
-    """写入平板的三类鬼胞/壁面层，返回新 cons。
-
-    cons: (5, nz+8, ny+8, nx+8)；入口、壁面和顶层均包含物理点。
-    inflow: (5, nz, ny) 入口守恒量剖面；far: (5,) 顶部来流常数。
-    """
-    nx, ny = grid.nx, grid.ny
-    ny_in = LAP + ny
-    nz_in = LAP + grid.nz
-
-    # 1) x 两侧：左 = 入口 Dirichlet（含首个物理点），右 = 零梯度鬼层
-    cons = cons.at[:, LAP:nz_in, LAP:ny_in, :LAP + 1].set(inflow[:, :, :, None])
-    cons = cons.at[:, :, :, LAP + nx:].set(cons[:, :, :, LAP + nx - 1:LAP + nx])
-
-    # 2) 下壁：壁面层（rho 由 ρT 两点外推、无滑移、ρE = ρ Cv Tw）
-    rho, _, T = primitive(cons, phys)
-    # IBC=124 的等温壁使用两点压力外推，系数与槽道边界不同。
-    rho_w = (4.0 * rho[:, LAP + 1, :] * T[:, LAP + 1, :]
-             - rho[:, LAP + 2, :] * T[:, LAP + 2, :]) / (3.0 * Tw)
-    cons = cons.at[0, :, LAP, :].set(rho_w)
-    cons = cons.at[1:4, :, LAP, :].set(0.0)
-    cons = cons.at[4, :, LAP, :].set(rho_w * phys.Cv * Tw)
-
-    # 3) 下壁镜像鬼胞：ghost[p] = f[2LAP-p] * sign（速度反号、rho/ρE 同号）
-    sign = jnp.array(_WALL_SIGN).reshape(5, 1, 1, 1)
-    cons = cons.at[:, :, :LAP, :].set(cons[:, :, 2 * LAP:LAP:-1, :] * sign)
-
-    # 4) 顶部：自由来流 Dirichlet（全 x，含角鬼胞）
-    cons = cons.at[:, :, ny_in - 1:, :].set(far.reshape(5, 1, 1, 1))
-    return cons
 
 
 def inflow_from_profile(rho, u, v, w, T, Cv):

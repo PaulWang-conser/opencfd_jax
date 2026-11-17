@@ -360,6 +360,14 @@ def test_channel_thermal_description_tracks_each_side():
     assert desc.face("y+").params["Tw"] == -1.0
 
 
+def test_channel_execution_rejects_stale_wall_temperature():
+    case = _channel_case()
+    desc = mesh_data.from_case(case)
+    case["channel_bc"].Tw_bottom = -1.0
+    with pytest.raises(ValueError, match="Tw|壁温"):
+        boundary.build_execution(case, desc)
+
+
 def test_channel_axis_bcs_conflict_with_fixed_faces_is_rejected():
     """U2：把槽道 x 轴改成出流，不能仍报告/执行周期。"""
     from opencfd_jax.src import mesh_data
@@ -524,3 +532,36 @@ def test_invalid_special_boundary_is_rejected_before_jit():
     case["bcs"] = (OUTFLOW, PERIODIC, PERIODIC)
     with pytest.raises(ValueError, match="INFLOW/PLATE"):
         mesh_data.from_case(case)
+
+
+def test_special_inlet_and_outflow_share_axis():
+    """特殊入口与普通出流组合时，右侧鬼层由内区末点复制。"""
+    case, special = _special_case()
+    faces = list(special.faces)
+    faces[1] = mesh_data.FaceBoundary("x+", 0, OUTFLOW, "halo", False)
+    special.faces = tuple(faces)
+    inlet = jnp.asarray([0.25, 0.0, 0.0, 0.0, 1.0]).reshape(5, 1, 1, 1)
+    special.apply = lambda q: q.at[..., :LAP].set(inlet)
+    case["bc_apply"] = special.apply
+    execution = boundary.build_execution(case)
+    q = case["cons0"].at[..., LAP + case["grid"].nx - 1].set(0.75)
+    actual = execution.apply(q)
+    np.testing.assert_array_equal(np.asarray(actual[0, ..., :LAP]), 0.25)
+    np.testing.assert_array_equal(np.asarray(actual[..., LAP + case["grid"].nx:]), 0.75)
+    args = argparse.Namespace(case="sod", scheme="UP7", vis_order="CD6",
+                              viscous=False, weno_tv=False)
+    got = run.build_rhs(case, args)(case["cons0"])
+    assert np.all(np.isfinite(np.asarray(got)))
+    ev = jnp.arange(4 * np.prod(case["grid"].shape[1:]), dtype=jnp.float64).reshape(
+        (4,) + case["grid"].shape[1:])
+    filled_ev = execution.fill_mixed_outflow(ev, axis=0)
+    expected_ev = np.repeat(np.asarray(ev[..., LAP + case["grid"].nx - 1:LAP + case["grid"].nx]), LAP, axis=-1)
+    np.testing.assert_array_equal(np.asarray(filled_ev[..., LAP + case["grid"].nx:]), expected_ev)
+    args.viscous = True
+    got_viscous = run.build_rhs(case, args)(case["cons0"])
+    assert np.all(np.isfinite(np.asarray(got_viscous)))
+
+
+def test_physical_wall_implementations_belong_to_boundary():
+    assert channel.apply_wall_bc is boundary.apply_channel_wall_bc
+    assert plate.apply is boundary.apply_plate_bc
