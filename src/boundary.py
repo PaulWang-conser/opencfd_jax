@@ -7,6 +7,15 @@
 - 粘性通量 Ev 的壁面/平板镜像（``fill_ev_wall_j`` / ``fill_ev_plate_j``）；
 - 非周期鬼层清零（``zero_nonperiodic_ghosts``）。
 
+本模块只使用计算方向 i/j/k 的数组索引和 ``ni/nj/nk``，不设置、也不读取
+物理坐标 ``(x, y, z)``。物理几何（平板前缘/尾缘、通道高度、壁面位置）在
+``cases.py`` 生成网格和初值时确定；曲线坐标场来自
+``mesh.read_ocfd_mesh`` 的 ``Axx/Ayy/Azz``，并由
+``mesh.compute_metrics_from_coords`` 换算成度量键，边界模块不直接接触这些
+坐标值。原码的 ``Axx``/``Ayy``/``Azz`` 分别表示物理 ``x``/``y``/``z``
+坐标场，形状为计算轴序 ``(nk, nj, ni)``；``Axx`` 里的 ``xx`` 是原码字段
+名，不是度量键 ``Akx/Aix/Asx``。
+
 槽道三点压力外推、平板两点压力外推及入口/顶部 Dirichlet 也在此实现；
 算例模块保留兼容入口，并通过 :class:`BoundaryExecution` 接入主循环。
 这样通用填充只有一份实现，特殊边界也只有一个明确的 case 侧入口。
@@ -189,6 +198,9 @@ def apply_plate_bc(cons, grid, phys, inflow, far, Tw=1.0):
 
     cons: (5, nk+8, nj+8, ni+8)；入口、壁面和顶层均包含物理点。
     inflow: (5, nk, nj) 入口守恒量剖面；far: (5,) 顶部来流常数。
+
+    物理平板的 x 前缘/尾缘和高度 H 已在 ``cases.py`` 建网格时确定；本函数
+    只按计算 i/j 索引写入口、下壁和顶部，不读取物理坐标 ``Axx``。
     """
     ni, nj, nk = (grid_extent(grid, 0), grid_extent(grid, 1),
                   grid_extent(grid, 2))
