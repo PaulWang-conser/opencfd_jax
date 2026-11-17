@@ -54,8 +54,8 @@ python opencfd_jax\experiment\run_step0.py --phase candidate --only sod_1step tg
 python opencfd_jax\experiment\run_step0.py --list
 ```
 
-`run_step0.py` **不复制 `run.py` 的参数解析**，一律子进程调用
-`python -m opencfd_jax.src.run <argv>`，所以基准与真实入口永远同源；`run.py` 一旦
+`run_step0.py` **不复制 `main.py` 的参数解析**，一律子进程调用
+`python -m opencfd_jax.src.main <argv>`，所以基准与真实入口永远同源；`main.py` 一旦
 把参数名或调用顺序改坏，这一步会直接以非零退出码暴露。
 
 ## 判定
@@ -226,7 +226,7 @@ python -m pytest experiment/test_step3_5_axes.py -q
 
 ```powershell
 cd D:\Desktop\ocfd2jax
-python -m opencfd_jax.src.run --case sod --ni 16 --nj 4 --nk 4 --scheme UP7 `
+python -m opencfd_jax.src.main --case sod --ni 16 --nj 4 --nk 4 --scheme UP7 `
   --dt 5e-4 --end-step 3 --end-time 0.01 --kstep-show 1 --kstep-save 1 --out-dir tmp_new
 ```
 

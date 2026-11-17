@@ -3,7 +3,7 @@
 过渡期约定（见 ``docs/plans/2026-11-17-step1-mesh-boundary-requirements.md``）：
 现有算例字典仍是唯一可变来源；本模块只在消费者入口由 ``from_case()`` 即时
 构造一个只读快照，不与旧键并列保存。第 2 步起，``boundary.build_execution``
-会把这份描述与 case 回调收敛成唯一一份执行配置，``run.py`` / ``compare.py``
+会把这份描述与 case 回调收敛成唯一一份执行配置，``main.py`` / ``compare.py``
 都从该配置取轴级 bcs 和回调。
 
 描述表达的是**现状**：

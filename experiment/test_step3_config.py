@@ -21,15 +21,15 @@ for path in (PROJECT, EXPERIMENT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from opencfd_jax.src import runtime_config, run     # noqa: E402
+from opencfd_jax.src import runtime_config, main     # noqa: E402
 from step0_cases import CASES, config_path        # noqa: E402
 
 
 def parse(argv):
-    """按 run.main 的顺序解析：默认值、显式 CLI、可选 JSON。"""
-    defaults = run.build_parser().parse_args([])
-    parser = run.build_parser(explicit_only=True)
-    config_path, explicit = run.resolve_cli(
+    """按 main.main 的顺序解析：默认值、显式 CLI、可选 JSON。"""
+    defaults = main.build_parser().parse_args([])
+    parser = main.build_parser(explicit_only=True)
+    config_path, explicit = main.resolve_cli(
         vars(parser.parse_args(argv)), parser)
     cfg = runtime_config.load_config(
         config_path, case=explicit.get("case")) if config_path else None
@@ -230,7 +230,7 @@ def test_json_matches_cli_arguments(case):
 
 def test_channel_without_infile_cli_fails():
     proc = subprocess.run(
-        [sys.executable, "-m", "opencfd_jax.src.run", "--case", "channel",
+        [sys.executable, "-m", "opencfd_jax.src.main", "--case", "channel",
          "--end-step", "0"],
         cwd=str(PROJECT), capture_output=True, text=True)
     assert proc.returncode != 0
@@ -239,7 +239,7 @@ def test_channel_without_infile_cli_fails():
 
 def test_missing_cli_input_file_fails():
     proc = subprocess.run(
-        [sys.executable, "-m", "opencfd_jax.src.run", "--case", "sod",
+        [sys.executable, "-m", "opencfd_jax.src.main", "--case", "sod",
          "--mesh", "Z:/definitely-missing.dat", "--end-step", "0"],
         cwd=str(PROJECT), capture_output=True, text=True)
     assert proc.returncode != 0
@@ -253,7 +253,7 @@ def test_cli_and_json_bitwise(tmp_path):
             "--scheme", "UP7", "--dt", "5e-4", "--end-step", "3",
             "--end-time", "0.01", "--kstep-show", "1", "--kstep-save", "1"]
     subprocess.run(
-        [sys.executable, "-m", "opencfd_jax.src.run", *base,
+        [sys.executable, "-m", "opencfd_jax.src.main", *base,
          "--out-dir", str(cli_out)],
         cwd=str(PROJECT), check=True, capture_output=True, text=True)
     cfg = write_json(tmp_path, {
@@ -263,7 +263,7 @@ def test_cli_and_json_bitwise(tmp_path):
         "output": {"dir": str(json_out), "kstep_show": 1, "kstep_save": 1},
     })
     subprocess.run(
-        [sys.executable, "-m", "opencfd_jax.src.run", "--config", cfg,
+        [sys.executable, "-m", "opencfd_jax.src.main", "--config", cfg,
          "--ni", "16", "--nj", "4", "--nk", "4"],
         cwd=str(PROJECT), check=True, capture_output=True, text=True)
 

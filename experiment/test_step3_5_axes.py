@@ -15,7 +15,7 @@ _REPO = Path(__file__).resolve().parents[2]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from opencfd_jax.src import axes, boundary, fields, infile, mesh_data, runtime_config, run
+from opencfd_jax.src import axes, boundary, fields, infile, mesh_data, runtime_config, main
 from opencfd_jax.src.fields import Grid
 
 
@@ -30,10 +30,10 @@ def _base_case(**overrides):
 
 
 def _resolve(argv):
-    """按 run.main 的顺序执行默认值 + 显式 CLI 合并。"""
-    defaults = run.build_parser().parse_args([])
-    parser = run.build_parser(explicit_only=True)
-    config_path, explicit = run.resolve_cli(
+    """按 main.main 的顺序执行默认值 + 显式 CLI 合并。"""
+    defaults = main.build_parser().parse_args([])
+    parser = main.build_parser(explicit_only=True)
+    config_path, explicit = main.resolve_cli(
         vars(parser.parse_args(argv)), parser)
     assert config_path is None
     return runtime_config.resolve_args(explicit, None, defaults)
@@ -187,8 +187,8 @@ def test_cli_new_dimension_names_fill_canonical_values():
 
 def test_cli_old_dimension_flags_are_gone():
     with pytest.raises(SystemExit):
-        run.build_parser().parse_args(["--N", "8"])
+        main.build_parser().parse_args(["--N", "8"])
     with pytest.raises(SystemExit):
-        run.build_parser().parse_args(["--ny", "7"])
+        main.build_parser().parse_args(["--ny", "7"])
     with pytest.raises(SystemExit):
-        run.build_parser().parse_args(["--nz", "6"])
+        main.build_parser().parse_args(["--nz", "6"])

@@ -11,7 +11,7 @@
    ↓
 cases.py：建立网格、物性、初值、边界和源项
    ↓
-run.py：组装右端项 L(Q) = 无粘项 + 粘性项 + 源项
+main.py：组装右端项 L(Q) = 无粘项 + 粘性项 + 源项
    ↓
 solver.py：CFL 定步长 + SSP-RK3 时间推进
    ↓
@@ -33,7 +33,7 @@ io.py：只保存物理内区的守恒量 NPZ
 
 
 ```
-python -m opencfd_jax.src.run --case sod --ni 256 --scheme UP7 --end-time 0.2
+python -m opencfd_jax.src.main --case sod --ni 256 --scheme UP7 --end-time 0.2
 ```
 
 当前目录结构中，源码包名是 `opencfd_jax.src`，所以不要写成 `python -m opencfd_jax.run`。
@@ -78,7 +78,7 @@ output/sod-istep-00000100.npz
 
 
 ```
-python -m opencfd_jax.src.run --help
+python -m opencfd_jax.src.main --help
 ```
 
 ### 1.1 用 `input.json` 统一配置（第 3 步）
@@ -87,7 +87,7 @@ python -m opencfd_jax.src.run --help
 JSON 的字段保持程序默认值：
 
 ```powershell
-python -m opencfd_jax.src.run --config experiment\cases\sod_1step.json
+python -m opencfd_jax.src.main --config experiment\cases\sod_1step.json
 ```
 
 JSON 只分六组，外加顶层 `precision`：
@@ -173,22 +173,22 @@ JSON 只分六组，外加顶层 `precision`：
 
 ## 3. 完整计算流程：每一步在哪个文件
 
-主入口是 `run.py` 的 `main()` 和 `run()`。实际执行顺序如下。
+主入口是 `main.py` 的 `main()`，初始化集中在 `init.py` 的 `prepare()`，时间推进由 `main.py::run()` 负责。实际执行顺序如下。
 
 
 
 | 步骤 | 做什么             | 文件和关键函数                            | 处理方式                                            |
 | -- | --------------- | ---------------------------------- | ----------------------------------------------- |
-| 1  | 读取命令行并设置精度      | `run.py::main`、`config.py`         | 默认开启 JAX x64；`--fp32` 时关闭                       |
-| 2  | 装配算例            | `cases.py::build_case`             | 创建 `Grid`、`PhysParams`、初始守恒量、边界类型、求解方向、步长和源项    |
+| 1  | 读取命令行并设置精度      | `main.py::main`、`init.py::prepare`、`config.py` | 默认开启 JAX x64；`--fp32` 时关闭；精度在数组创建前设置 |
+| 2  | 装配算例            | `init.py::prepare`、`cases.py::build_case` | 创建 `Grid`、`PhysParams`、初始守恒量、边界类型、求解方向、步长和源项    |
 | 3  | 读取外部输入（仅需要时）    | `infile.py`、`mesh.py`、`channel.py` | channel 可读取原码 in、场和网格文件；把原始变量转换为守恒量，必要时计算曲线网格度量 |
-| 4  | 组装单个 RK 子步的右端项  | `run.py::build_rhs`                | 形成 JIT 函数 `rhs(q)`，组合边界、无粘、粘性和源项；滤波不放入其中        |
+| 4  | 组装单个 RK 子步的右端项  | `main.py::build_rhs`                | 形成 JIT 函数 `rhs(q)`，组合边界、无粘、粘性和源项；滤波不放入其中        |
 | 5  | 确定时间步长          | `solver.py::compute_dt`            | 固定 `dt` 或按各求解方向的 \`(                            |
 | 6  | 执行一个 SSP-RK3 整步 | `solver.py::rk3_step_stages`       | 三次计算右端项，三次组合状态；每个子步都重新施加专用物理边界                  |
 | 7  | 可选激波滤波          | `filtering.py::shock_filter`       | 每个 `nstep_filter` 整步执行一次，不在 RK 子步内执行            |
 | 8  | 打印诊断            | `ana.py::diagnostic_line`          | 输出时间、步数、耗时、内区平均 `rho*E` 和全场 NaN 标志              |
 | 9  | 保存结果            | `io.py::save_npz`                  | 将五个内区分量及时间、步数、格式和物性元信息写入 NPZ                    |
-| 10 | 重复推进            | `run.py::run`                      | 回到步骤 5，直到达到终止时间或最大步数                            |
+| 10 | 重复推进            | `main.py::run`                     | 回到步骤 5，直到达到终止时间或最大步数                            |
 
 下面展开最耗计算量的第 5～7 步。
 
@@ -234,7 +234,7 @@ Q(n+1) = 1/3 Qn + 2/3 [Q** + dt L(Q**)]
 
 ### 4.3 每个 RK 子步的右端项组装顺序
 
-文件：`run.py`；内部函数：`rhs(q)`。
+文件：`main.py`；内部函数：`rhs(q)`。
 
 顺序固定为：
 
@@ -380,13 +380,13 @@ du = -(F_right - F_left) / h
 | 通用体积力     | `cases.py::apply_forcing` | 动量源 `rho*G`，可选能量做功源 `rho*u*G`        |
 | 槽道专用体积力   | `channel.py::body_force`  | 按 `ChannelBC.F` 生成源项；是否做功由 `work` 控制 |
 
-与原码 channel 逐项对拍时使用 `--forcing-work off`，因为原码对应内核只添加动量源。正式 `run.py` 的默认值为 `on`。
+与原码 channel 逐项对拍时使用 `--forcing-work off`，因为原码对应内核只添加动量源。正式 `main.py` 的默认值为 `on`。
 
 ### 7.1 单块网格与边界描述（第 1 步）
 
 文件：`mesh_data.py`。
 
-`run.py`（`build_rhs` / `run`）和 `compare.py`（`cmd_jax_run`）在消费入口由
+`main.py`（`build_rhs` / `run`）和 `compare.py`（`cmd_jax_run`）在消费入口由
 `from_case(case)` 即时构造只读快照 `BlockMesh`，而不是另外保存一份配置。描述包含：
 
 * `grid`、`dxs`、`axes`、`bcs`：直接复用算例字典里的对象/值；
@@ -395,14 +395,14 @@ du = -(F_right - F_left) / h
 * `dif_bound`、`dif_axis_map`：保留原码六标志与 JAX 轴映射（平板仍是 `(0,2,1)`）；
 * `metrics`、`coords`：只有算例真的提供时才引用；没有就保持 `None`，不伪造。
 
-描述现在由 `boundary.build_execution` 转成唯一一份 `BoundaryExecution`，`run.py`
+描述现在由 `boundary.build_execution` 转成唯一一份 `BoundaryExecution`，`main.py`
 和 `compare.py` 都用它决定轴级 `bcs` 与 case 回调；描述不写回算例字典，避免出现
 两份可独立修改的状态。构造必须发生在创建 JIT 闭包之前；之后修改 `case` 不会回溯
 已经建立的闭包。
 
 ### 7.2 统一边界执行与扩展入口（第 2 步）
 
-文件：`boundary.py`、`mesh_data.py`、`run.py`。
+文件：`boundary.py`、`mesh_data.py`、`main.py`。
 
 通用边界（周期、出流、计算 j 方向壁面镜像、非周期鬼层清零）只在 `boundary.py` 实现；
 `fields.py` 只重新导出 canonical 名，`channel.py` / `plate.py` 保留壁面和回调的兼容入口，
@@ -479,7 +479,7 @@ case["bc_apply"] = special.apply
 
 ### 8.3 NPZ 输出
 
-文件：`io.py`、`run.py`。
+文件：`io.py`、`main.py`。
 
 每个结果文件包含：
 
@@ -546,7 +546,7 @@ channel 命令示例：
 
 
 ```
-python -m opencfd_jax.src.run --case channel `
+python -m opencfd_jax.src.main --case channel `
   --in path/to/opencfd-scu.in `
   --field path/to/opencfd.dat `
   --mesh path/to/OCFD3d-Mesh.dat `
@@ -571,7 +571,7 @@ python -m opencfd_jax.src.run --case channel `
 
 
 ```
-python -m opencfd_jax.src.run --case plate `
+python -m opencfd_jax.src.main --case plate `
   --ni 200 --nj 256 --nk 6 `
   --scheme OMP6_CD8 --viscous --vis-order CD8 `
   --Re 10000 --Ama 0.0955 --ref-t 1 `
@@ -588,7 +588,7 @@ python -m opencfd_jax.src.run --case plate `
 
 | 文件                 | 责任                                |
 | ------------------ | --------------------------------- |
-| `run.py`           | 命令行、正式主循环、RHS 总装、滤波 / 诊断 / 存盘节奏   |
+| `main.py`           | 命令行、正式主循环、RHS 总装、滤波 / 诊断 / 存盘节奏   |
 | `runtime_config.py`| `input.json` 读取 / 校验 / 合并 / 输出前缀（第 3 步） |
 | `cases.py`         | 五种算例的网格、物性、初值、边界与通用体积力            |
 | `fields.py`        | 守恒量数组布局、`Grid`、canonical 边界入口重新导出          |
@@ -656,7 +656,7 @@ python -m opencfd_jax.src.compare diff dump-npz dump-jax
 
 
 
-1. **RHS 不等于状态更新**：`run.build_rhs()` 只构造 `L(Q)`；真正更新状态的是 `solver.rk3_step*()`。
+1. **RHS 不等于状态更新**：`main.build_rhs()` 只构造 `L(Q)`；真正更新状态的是 `solver.rk3_step*()`。
 
 2. **滤波不在 RK 子步内**：它在整个 RK3 完成后按整步频率执行。
 

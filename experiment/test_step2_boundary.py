@@ -22,7 +22,7 @@ if str(_REPO_TAX) not in sys.path:
     sys.path.insert(0, str(_REPO_TAX))
 
 from opencfd_jax.src import boundary, cases, channel, fields, filtering
-from opencfd_jax.src import mesh_data, plate, run, solver, viscous
+from opencfd_jax.src import mesh_data, plate, main, solver, viscous
 from opencfd_jax.src.fields import (INFLOW, LAP, OUTFLOW, PERIODIC,
                                     PLATE, WALL, Grid)
 
@@ -328,7 +328,7 @@ def test_callback_order_through_build_rhs_and_rk3():
     case["bc_apply"] = wrapper
     args = argparse.Namespace(case="plate", scheme="UP7", vis_order="CD6",
                               viscous=False, weno_tv=False)
-    rhs = run.build_rhs(case, args)
+    rhs = main.build_rhs(case, args)
     rhs(case["cons0"])
     assert calls == ["bc"]
 
@@ -434,7 +434,7 @@ def test_boundary_exposes_ev_rules_separately_from_state_rules():
 # ---------------------------------------------------------- U4 运行链接入
 
 def test_build_rhs_reads_unified_boundary_execution(monkeypatch):
-    """U4：run.build_rhs 在 JIT 前构造并消费统一边界执行配置。"""
+    """U4：main.build_rhs 在 JIT 前构造并消费统一边界执行配置。"""
     from opencfd_jax.src import boundary as bnd
     plate_case = _plate_case()
     seen = []
@@ -448,7 +448,7 @@ def test_build_rhs_reads_unified_boundary_execution(monkeypatch):
     monkeypatch.setattr(bnd, "build_execution", record)
     args = argparse.Namespace(case="plate", scheme="UP7", vis_order="CD6",
                               viscous=False, weno_tv=False)
-    run.build_rhs(plate_case, args)
+    main.build_rhs(plate_case, args)
     assert len(seen) == 1
     assert seen[0].mode == "plate"
     assert seen[0].callback is plate_case["bc_apply"]
@@ -511,7 +511,7 @@ def test_case_side_special_boundary_is_explicit_and_stage_connected():
 
     args = argparse.Namespace(case="sod", scheme="UP7", vis_order="CD6",
                               viscous=False, weno_tv=False)
-    rhs = run.build_rhs(case, args)
+    rhs = main.build_rhs(case, args)
     rhs(case["cons0"])
     assert special.calls >= 1
 
@@ -547,7 +547,7 @@ def test_special_inlet_and_outflow_share_axis():
     np.testing.assert_array_equal(np.asarray(actual[..., LAP + case["grid"].ni:]), 0.75)
     args = argparse.Namespace(case="sod", scheme="UP7", vis_order="CD6",
                               viscous=False, weno_tv=False)
-    got = run.build_rhs(case, args)(case["cons0"])
+    got = main.build_rhs(case, args)(case["cons0"])
     assert np.all(np.isfinite(np.asarray(got)))
     ev = jnp.arange(4 * np.prod(case["grid"].shape[1:]), dtype=jnp.float64).reshape(
         (4,) + case["grid"].shape[1:])
@@ -555,7 +555,7 @@ def test_special_inlet_and_outflow_share_axis():
     expected_ev = np.repeat(np.asarray(ev[..., LAP + case["grid"].ni - 1:LAP + case["grid"].ni]), LAP, axis=-1)
     np.testing.assert_array_equal(np.asarray(filled_ev[..., LAP + case["grid"].ni:]), expected_ev)
     args.viscous = True
-    got_viscous = run.build_rhs(case, args)(case["cons0"])
+    got_viscous = main.build_rhs(case, args)(case["cons0"])
     assert np.all(np.isfinite(np.asarray(got_viscous)))
 
 

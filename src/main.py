@@ -1,9 +1,9 @@
 """正式运行入口（对应 OCFD_NS_Solver.cu 的 NS_solver_real 主循环）。
 
 用法（从工作区根目录运行，当前源码包路径为 opencfd_jax.src）：
-    python -m opencfd_jax.src.run --case sod --ni 256 --scheme UP7 --end-time 0.2
-    python -m opencfd_jax.src.run --case tg  --ni 64  --scheme UP7 --end-time 0.5 --Re 50
-    python -m opencfd_jax.src.run --case poiseuille --ni 32 --nj 64 --p-grad 0.1 \
+    python -m opencfd_jax.src.main --case sod --ni 256 --scheme UP7 --end-time 0.2
+    python -m opencfd_jax.src.main --case tg  --ni 64  --scheme UP7 --end-time 0.5 --Re 50
+    python -m opencfd_jax.src.main --case poiseuille --ni 32 --nj 64 --p-grad 0.1 \
         --Re 100 --end-time 2.0 --viscous
 
 主循环对齐原码：每步 dt_fn → RK3（+forcing）→ 每 Kstep_show 同步打印诊断
@@ -19,9 +19,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import boundary, config, io, runtime_config
+from . import boundary, config, init, io, runtime_config
 from .ana import check_nan, diagnostic_line
-from .cases import apply_forcing, build_case
+from .cases import apply_forcing
 from .mesh_data import from_case
 from .solver import compute_dt, inviscid_rhs, rk3_step
 from .viscous import viscous_rhs
@@ -206,26 +206,22 @@ def _warn_forced_viscous(args):
 
 
 def run(args):
-    """执行一次完整计算：设置精度、装配初值与 RHS，然后推进、滤波、诊断并存盘。
+    """执行一次完整计算：初始化状态、装配 RHS，然后推进、滤波、诊断并存盘。
 
     ``args`` 通常由 :func:`main` 的命令行解析器生成；计算到 ``end_time`` 或
     ``end_step`` 中任一条件满足时停止。输出只写物理内区，不包含鬼胞。
     """
-    if getattr(args, "fp32", False):
-        config.disable_x64()
-    else:
-        config.enable_x64()   # 缺省 FP64
-
+    state = init.prepare(args)
+    case = state.case
+    desc = state.desc
+    execution = state.execution
+    cons = state.cons0
     gamma = 1.4
-    case = build_case(args)
-    desc = from_case(case)
-    execution = boundary.build_execution(case, desc)
     grid = desc.grid
     dxs = desc.dxs
     params = case["params"]
 
     rhs = build_rhs(case, args, execution=execution)
-    cons = case["cons0"]
     bcs = execution.bcs
     bc_apply = execution.callback
 

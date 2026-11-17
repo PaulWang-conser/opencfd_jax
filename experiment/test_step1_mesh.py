@@ -18,7 +18,7 @@ _REPO_TAX = Path(__file__).resolve().parents[2]
 if str(_REPO_TAX) not in sys.path:
     sys.path.insert(0, str(_REPO_TAX))
 
-from opencfd_jax.src import cases, mesh_data, run
+from opencfd_jax.src import cases, mesh_data, main
 from opencfd_jax.src.fields import (INFLOW, OUTFLOW, PERIODIC, PLATE,
                                     WALL, Grid)
 
@@ -124,17 +124,17 @@ def test_build_rhs_reads_description_after_case_update(built, monkeypatch):
     case = dict(built["sod"])
     case["dxs"] = (0.04, 0.04, 0.04)
     seen = []
-    real = run.from_case
+    real = main.from_case
 
     def record(c):
         desc = real(c)
         seen.append(desc)
         return desc
 
-    monkeypatch.setattr(run, "from_case", record)
+    monkeypatch.setattr(main, "from_case", record)
     args = argparse.Namespace(case="sod", scheme="WENO7", vis_order="CD8",
                               viscous=False, weno_tv=False)
-    run.build_rhs(case, args)
+    main.build_rhs(case, args)
     assert seen and seen[-1].dxs == (0.04, 0.04, 0.04)
 
 

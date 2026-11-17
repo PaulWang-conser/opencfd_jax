@@ -1,4 +1,4 @@
-"""算例注册表与初值（从 run.py 抽出；对应 OCFD_init.cu 的 init + 各算例初值）。
+"""算例注册表与初值（从旧入口模块抽出；对应 OCFD_init.cu 的 init + 各算例初值）。
 
 每个 case 返回一个 dict，核心键包括：grid / cons0 / bcs / dxs / axes / params /
 forcing / gamma；按算例还可包含 bc_apply / source / metrics / dif_bound /
@@ -107,7 +107,7 @@ def build_case(args):
     if args.case == "sod":
         # 初值约定：E = p/(gamma-1)（标准可压 NS 约定，T 由该式隐含）。
         # 与 viscous.py 的 OCFD Ama 缩放约定（T = E_int/Cv）不匹配——
-        # sod + --viscous 时 mu 由该 T 算出，无物理意义（run.py 有警告）。
+        # sod + --viscous 时 mu 由该 T 算出，无物理意义（main.py 有警告）。
         # 对拍/研究粘性请用 tg 或 poiseuille 算例。
         ni = int(_dimension(args, "ni", 256))
         nj = int(_dimension(args, "nj", 4) or 4)

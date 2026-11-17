@@ -1,7 +1,7 @@
 """第 0 步（固定当前基准）用例清单。
 
-每个用例就是一条**真实入口命令** ``python -m opencfd_jax.src.run <argv>``，
-不复制 run.py 的解析逻辑，避免以后改 run.py 时基准与实现脱钩。
+每个用例就是一条**真实入口命令** ``python -m opencfd_jax.src.main <argv>``，
+不复制 main.py 的解析逻辑，避免以后改 main.py 时基准与实现脱钩。
 
 统一口径（用户 2026-11-17 指定）：
   - 无粘：``WENO7``（原码 SCHEME_INVIS=303 的 7 阶 WENO-Z），**不用 OMP6 系列**；

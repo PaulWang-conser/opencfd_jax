@@ -3,7 +3,7 @@
 流程（只比**一步**）：
   1. 解析 `dump/` 下 main_dump 的文本场：cons_*_step000000 / step000001、
      du_krk1..3_step000001（内区，5 分量）；
-  2. 用 JAX 侧的 `build_case` + `build_rhs`（与 run.py 完全同一条链）以原码
+  2. 用 JAX 侧的 `build_case` + `build_rhs`（与 main.py 完全同一条链）以原码
      step0 的守恒量为初值推进一步，取三个子步的 du 与末态；
   3. 逐场给 max|diff| / rms / 相对量 / 位置，并按 1e-12 判 PASS。
 
@@ -99,7 +99,7 @@ def main():
     import jax.numpy as jnp
     from types import SimpleNamespace
     from opencfd_jax.src.cases import build_case
-    from opencfd_jax.src.run import build_rhs
+    from opencfd_jax.src.main import build_rhs
     from opencfd_jax.src.solver import rk3_step_stages
 
     ns = SimpleNamespace(

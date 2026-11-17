@@ -13,13 +13,13 @@
 
 每个用例的产物：
     <out>/<id>/run.log              计算日志（含 ana 诊断行）
-    <out>/<id>/*.npz                run.py 自己存的守恒量（内区 5 分量 + _meta）
+    <out>/<id>/*.npz                main.py 自己存的守恒量（内区 5 分量 + _meta）
     <out>/<id>/case.json            命令行、墙钟、逐文件 sha256 与逐场统计
 <out>/manifest.json                 全局清单：版本、git、逐用例摘要
 
-设计要点：这里**不复制 run.py 的参数解析**，一律走子进程
-``python -m opencfd_jax.src.run``，所以基准与真实入口永远同源；
-以后 run.py 改错参数名，这一步会直接报非零退出码。
+设计要点：这里**不复制 main.py 的参数解析**，一律走子进程
+``python -m opencfd_jax.src.main``，所以基准与真实入口永远同源；
+以后 main.py 改错参数名，这一步会直接报非零退出码。
 """
 
 import argparse
@@ -128,7 +128,7 @@ def run_one(case: dict, out_root: Path, python: str, arg_source: str = "cli") ->
         run_argv = ["--config", str(config_path(case)), *case.get("json_argv", [])]
     else:
         run_argv = list(case["argv"])
-    cmd = [python, "-m", "opencfd_jax.src.run", *run_argv,
+    cmd = [python, "-m", "opencfd_jax.src.main", *run_argv,
            "--out-dir", str(case_out)]
     print(f"\n[{case['id']}] {case['title']}  ({arg_source})")
     print("  " + " ".join(cmd[1:]))
