@@ -37,6 +37,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import boundary
 from .mesh_data import from_case
 
 # 原版 dump 的守恒量标签，顺序 = pf 的第 0..4 分量
@@ -153,8 +154,10 @@ def cmd_jax_run(args):
     case["dxs"] = dxs
     # 对拍入口先覆盖步长，再构造描述，保证描述与后续 RHS 用同一组步长。
     desc = from_case(case)
+    execution = boundary.build_execution(case, desc)
     grid = desc.grid
     dxs = desc.dxs
+    bcs = execution.bcs
     params = case["params"]
     gamma = case["gamma"]
 
@@ -178,10 +181,10 @@ def cmd_jax_run(args):
     def rhs(q):
         """按原版 du_comput 的口径组合无粘、粘性和体积力右端项。"""
         # 原码 du_comput 恒算无粘 + 粘性，这里不加 --viscous 条件
-        du = inviscid_rhs(q, grid, gamma=gamma, bcs=desc.bcs,
+        du = inviscid_rhs(q, grid, gamma=gamma, bcs=bcs,
                           axes=desc.axes, dx=dxs, scheme=args.scheme,
                           metrics=metrics)
-        du = du + viscous_rhs(q, grid, params, desc.bcs, axes=desc.axes,
+        du = du + viscous_rhs(q, grid, params, bcs, axes=desc.axes,
                               dx=dxs, order=vis_order, metrics=metrics)
         du = du + apply_forcing(case, q)
         return du

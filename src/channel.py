@@ -26,7 +26,7 @@
 
 import jax.numpy as jnp
 
-from .fields import LAP, fill_wall_y
+from .boundary import LAP, fill_wall_y
 
 
 def primitive(cons, phys):

@@ -19,7 +19,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from .channel import primitive
-from .fields import LAP, _WALL_SIGN
+from .boundary import LAP, _WALL_SIGN
 
 
 def far_state(rho=1.0, u=1.0, v=0.0, w=0.0, T=1.0, Cv=1.0):

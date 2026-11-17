@@ -122,7 +122,9 @@ python -m opencfd_jax.src.run --help
 
 * 诊断和无粘 / 粘性右端项可以操作完整数组，但最终存盘只保存 `(nz, ny, nx)` 内区。
 
-`fields.py` 还负责周期环绕、零梯度出流和槽道壁面镜像等通用填充。平板的专用入口、壁面和顶部条件由 `plate.py` 写入。
+`boundary.py` 负责周期环绕、零梯度出流、壁面镜像和 Ev 等通用填充；`fields.py`
+只保留数组布局、`Grid` 和旧导入入口的兼容层。平板的专用入口、壁面和顶部条件仍由
+`plate.py` 写入，槽道双壁由 `channel.py` 写入。
 
 
 
@@ -214,7 +216,7 @@ Q(n+1) = 1/3 Qn + 2/3 [Q** + dt L(Q**)]
 
 ## 5. 无粘项怎样计算
 
-核心文件：`solver.py`、`schemes.py`、`fields.py`。
+核心文件：`solver.py`、`schemes.py`、`boundary.py`。
 
 对 `axes` 中的每个计算方向分别执行：
 
@@ -273,7 +275,8 @@ du = -(F_right - F_left) / h
 
 
 
-* `fields.py` 提供周期、出流和壁面镜像鬼胞。
+* `boundary.py` 提供周期、出流、壁面镜像和 Ev 鬼胞；`fields.py` 只重导出这些
+  兼容入口，实际实现只在 `boundary.py` 一处。
 
 * `schemes.py::flux_band_faces()` 根据 `DIF_BOUND` 在指定边界带改用原码单侧 / 降阶面通量公式。
   各格式分别声明原码 P/M 内核的 `(ka1, kb1)` 模板范围；新增格式可使用
@@ -281,7 +284,7 @@ du = -(F_right - F_left) / h
   包装并注册到 `SOLVE_SCHEMES`。模板偏移相对各自的 CUDA 内核节点，M 内核
   若调用 P 边界宏则传 `m_boundary="p"`。超出当前原码边界宏定义的范围会报错。
 
-* `boundary.py` 是这些边界公式的推导与核对笔记，**不被主循环直接调用**。
+* 边界带公式的原码核对笔记已移到 `docs/boundary_scheme_notes.md`。
 
 
 
@@ -328,8 +331,8 @@ du = -(F_right - F_left) / h
 
 | 类型        | 文件                        | 具体处理                                 |
 | --------- | ------------------------- | ------------------------------------ |
-| 周期边界      | `fields.py`               | 从对侧内区环绕复制鬼胞                          |
-| 零梯度出流     | `fields.py`               | 复制最靠近边界的内点值                          |
+| 周期边界      | `boundary.py`             | 从对侧内区环绕复制鬼胞                          |
+| 零梯度出流     | `boundary.py`             | 复制最靠近边界的内点值                          |
 | 槽道双壁      | `channel.py`              | 壁面无滑移；压力 / 温度按壁面类型外推；写入等温或绝热壁状态及镜像鬼胞 |
 | 平板入口 / 出口 | `plate.py`                | 入口写 Dirichlet 守恒量剖面，出口鬼层零梯度          |
 | 平板下壁 / 顶部 | `plate.py`                | 下壁无滑移等温并镜像，顶部写均匀自由来流                 |
@@ -351,10 +354,49 @@ du = -(F_right - F_left) / h
 * `dif_bound`、`dif_axis_map`：保留原码六标志与 JAX 轴映射（平板仍是 `(0,2,1)`）；
 * `metrics`、`coords`：只有算例真的提供时才引用；没有就保持 `None`，不伪造。
 
-描述**不驱动**新的边界实现：壁面状态更新、鬼胞填充、粘性通量和源项仍由
-`fields.py`、`channel.py`、`plate.py` 执行；`executor` 只是说明现状。描述也不写回
-算例字典，避免出现两份可独立修改的状态。构造必须发生在创建 JIT 闭包之前；
-之后修改 `case` 不会回溯已经建立的闭包。
+描述现在由 `boundary.build_execution` 转成唯一一份 `BoundaryExecution`，`run.py`
+和 `compare.py` 都用它决定轴级 `bcs` 与 case 回调；描述不写回算例字典，避免出现
+两份可独立修改的状态。构造必须发生在创建 JIT 闭包之前；之后修改 `case` 不会回溯
+已经建立的闭包。
+
+### 7.2 统一边界执行与扩展入口（第 2 步）
+
+文件：`boundary.py`、`mesh_data.py`、`run.py`。
+
+通用边界（周期、出流、y 方向壁面镜像、非周期鬼层清零）只在 `boundary.py` 实现；
+`fields.py` 只重导出旧名，`channel.py` / `plate.py` 仍提供各自的物理公式和
+`bc_apply` 回调。`build_execution(case, desc=None)` 在 JIT 前完成：
+
+* 校验 `case["bcs"]`、六侧 `FaceBoundary` 与 `bc_apply` 是否同源；
+* 拒绝“有回调但无专属标记”“多个专属标记同时存在”“固定六侧与 bcs 矛盾”
+  “通用 WALL 不在 y 方向”等组合，未知组合直接报错，不静默改成出流；
+* 返回 `BoundaryExecution(mode, bcs, callback, faces, ...)`，`mode` 为
+  `generic` / `channel` / `plate` / `custom`。
+
+**新增通用边界**：在 `boundary.py` 的 `_GENERIC_AXIS_FILLERS` 注册填充函数并加入
+`GENERIC_KINDS`，再让 `mesh_data._generic_faces` 能描述对应语义。通用 WALL 目前仅
+支持 y 方向；`filtering.py` 的滤波也仍只支持周期/出流。
+
+**新增 case 特殊边界**：case 侧显式提供一个对象，并同时把它的 `apply` 设为
+`case["bc_apply"]`：
+
+```python
+from types import SimpleNamespace
+
+special = SimpleNamespace(
+    name="my-boundary",
+    faces=(FaceBoundary(...), ...),  # 必须是 x-/x+/y-/y+/z-/z+ 六侧
+    apply=my_apply,                  # 纯 JAX 可追踪函数
+)
+case["special_boundary"] = special
+case["bc_apply"] = special.apply
+```
+
+约束：回调面所在轴的轴级 `bcs` 必须是 `INFLOW`/`PLATE`（no-op 占位，由回调写鬼层）；
+没有回调的轴只能是 `PERIODIC`/`OUTFLOW`；halo 面的 `kind` 必须等于轴级 `bcs`；
+`WALL` 仍只允许 y 方向。`special_boundary` 不能与 `plate`/`channel_bc` 同时出现。
+当前这是**显式导入**入口，不做动态注册；回调只允许数组运算，不得把 I/O 放进 JIT。
+槽道三点压力外推和平板两点外推仍是 case 专属公式，没有被统一。
 
 ***
 
@@ -505,7 +547,8 @@ python -m opencfd_jax.src.run --case plate `
 | ------------------ | --------------------------------- |
 | `run.py`           | 命令行、正式主循环、RHS 总装、滤波 / 诊断 / 存盘节奏   |
 | `cases.py`         | 五种算例的网格、物性、初值、边界与通用体积力            |
-| `fields.py`        | 守恒量数组布局、`Grid`、鬼胞和通用边界填充          |
+| `fields.py`        | 守恒量数组布局、`Grid`、旧边界导入兼容层          |
+| `boundary.py`      | 通用鬼胞填充、壁面镜像、Ev 与统一边界执行配置       |
 | `solver.py`        | 单方向 / 多方向无粘 RHS、声速、CFL 步长、SSP-RK3 |
 | `schemes.py`       | Steger–Warming 分裂、各对流格式、边界面通量带    |
 | `viscous.py`       | 物性、CD6/CD8、单侧导数、应力与粘性通量散度         |
@@ -521,7 +564,6 @@ python -m opencfd_jax.src.run --case plate `
 | `exact_riemann.py` | Sod 的 Riemann 精确解，仅用于验证           |
 | `blasius.py`       | 平板 Blasius 相似解，仅用于验证              |
 | `config.py`        | JAX FP64/FP32 开关                  |
-| `boundary.py`      | 物理边界公式的推导与核对笔记，不在主循环中调用           |
 | `__init__.py`      | 包级说明和核心模块导出                       |
 
 

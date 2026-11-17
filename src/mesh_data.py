@@ -2,7 +2,9 @@
 
 过渡期约定（见 ``docs/plans/2026-11-17-step1-mesh-boundary-requirements.md``）：
 现有算例字典仍是唯一可变来源；本模块只在消费者入口由 ``from_case()`` 即时
-构造一个只读快照，不与旧键并列保存，也不驱动新的边界实现。
+构造一个只读快照，不与旧键并列保存。第 2 步起，``boundary.build_execution``
+会把这份描述与 case 回调收敛成唯一一份执行配置，``run.py`` / ``compare.py``
+都从该配置取轴级 bcs 和回调。
 
 描述表达的是**现状**：
 - ``grid`` / ``dxs`` / ``axes`` / ``bcs`` 复用算例里的既有对象和值；
@@ -12,11 +14,12 @@
 """
 
 from collections.abc import Mapping as MappingABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping, Optional, Tuple
 
 from .fields import INFLOW, LAP, OUTFLOW, PERIODIC, PLATE, WALL, Grid
+from .boundary import validate_special_sides
 from .mesh import METRIC_KEYS
 
 AXIS_NAMES = ("x", "y", "z")
@@ -30,6 +33,7 @@ _EXEC_CALLBACK = "callback"
 _EXEC_CALLBACK_HALO = "callback+halo"
 
 _VALID_KINDS = (PERIODIC, OUTFLOW, WALL, INFLOW, PLATE, FARFIELD)
+_VALID_THERMAL = (None, "isothermal", "adiabatic")
 _COORD_KEYS = ("Axx", "Ayy", "Azz")
 
 
@@ -52,17 +56,27 @@ class FaceBoundary:
     executor: str
     dif_band: bool
     detail: str = ""
+    thermal: Optional[str] = None
+    params: Mapping = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self):
-        """拒绝拼错的面名、轴号和来源，避免描述悄悄失真。"""
+        """拒绝拼错的面名、轴号、来源和热条件，避免描述悄悄失真。"""
         if self.side not in SIDES:
             raise ValueError(f"side 必须是 {SIDES} 之一，得到 {self.side!r}")
+        if self.axis not in (0, 1, 2):
+            raise ValueError(f"axis 必须是 0/1/2，得到 {self.axis!r}")
         if self.side[0] != AXIS_NAMES[self.axis]:
             raise ValueError(f"side={self.side} 与 axis={self.axis} 不一致")
         if self.kind not in _VALID_KINDS:
             raise ValueError(f"kind 必须是 {_VALID_KINDS} 之一，得到 {self.kind!r}")
         if self.executor not in (_EXEC_HALO, _EXEC_CALLBACK, _EXEC_CALLBACK_HALO):
             raise ValueError(f"未知 executor: {self.executor!r}")
+        if self.thermal not in _VALID_THERMAL:
+            raise ValueError(f"未知 thermal: {self.thermal!r}")
+        if not isinstance(self.params, MappingABC):
+            raise ValueError(f"params 必须是映射，得到 {self.params!r}")
+        object.__setattr__(self, "params",
+                           MappingProxyType(dict(self.params)))
 
 
 @dataclass(frozen=True)
@@ -142,23 +156,31 @@ def _dif_band(dif_bound, axis, side, dif_axis_map):
     return bool(dif_bound[index])
 
 
-def _face(side, kind, executor, dif_bound, dif_axis_map, detail=""):
+def _face(side, kind, executor, dif_bound, dif_axis_map, detail="",
+          thermal=None, params=None):
     """构造一个面侧描述，统一推导 axis 与 dif_band。"""
     axis = AXIS_NAMES.index(side[0])
     return FaceBoundary(side=side, axis=axis, kind=kind, executor=executor,
                         dif_band=_dif_band(dif_bound, axis, side[1], dif_axis_map),
-                        detail=detail)
+                        detail=detail, thermal=thermal,
+                        params={} if params is None else params)
 
 
-def _plate_faces(dif_bound, dif_axis_map):
+def _thermal_for_tw(tw):
+    """槽道壁的热条件：Tw>0 等温，Tw<=0 绝热（与 channel._wall_layer 一致）。"""
+    return "isothermal" if float(tw) > 0.0 else "adiabatic"
+
+
+def _plate_faces(dif_bound, dif_axis_map, Tw=1.0):
     """平板：x 两侧不对称，y 下壁/上来流，z 周期；全部由 plate.apply 写状态。"""
     return (
         _face("x-", INFLOW, _EXEC_CALLBACK, dif_bound, dif_axis_map,
-              "入口 Dirichlet 剖面（plate.apply）"),
+              "入口 Dirichlet 剖面（plate.apply）", params={"profile": "inflow"}),
         _face("x+", OUTFLOW, _EXEC_CALLBACK, dif_bound, dif_axis_map,
               "出口零梯度鬼层（plate.apply）"),
         _face("y-", WALL, _EXEC_CALLBACK, dif_bound, dif_axis_map,
-              "无滑移等温壁 + 镜像鬼胞（plate.apply）"),
+              "无滑移等温壁 + 镜像鬼胞（plate.apply）",
+              thermal="isothermal", params={"Tw": float(Tw)}),
         _face("y+", FARFIELD, _EXEC_CALLBACK, dif_bound, dif_axis_map,
               "顶部自由来流 Dirichlet（plate.apply）"),
         _face("z-", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
@@ -166,15 +188,22 @@ def _plate_faces(dif_bound, dif_axis_map):
     )
 
 
-def _channel_faces(dif_bound, dif_axis_map):
-    """槽道：x/z 周期，y 双壁由 ChannelBC 每子步写状态、fill_wall_y 补镜像。"""
+def _channel_faces(channel_bc, dif_bound, dif_axis_map):
+    """槽道：x/z 周期，y 双壁由 ChannelBC 每子步写状态、fill_wall_y 补镜像。
+
+    每侧热条件来自该侧自己的 Tw：Tw>0 等温，Tw<=0 绝热；上下壁可以不同。
+    """
+    Tw_bottom = float(channel_bc.Tw_bottom)
+    Tw_top = float(channel_bc.Tw_top)
     return (
         _face("x-", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
         _face("x+", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
         _face("y-", WALL, _EXEC_CALLBACK_HALO, dif_bound, dif_axis_map,
-              "下壁无滑移等温壁（ChannelBC.apply + fill_wall_y）"),
+              f"下壁无滑移{_thermal_for_tw(Tw_bottom)}壁（ChannelBC.apply + fill_wall_y）",
+              thermal=_thermal_for_tw(Tw_bottom), params={"Tw": Tw_bottom}),
         _face("y+", WALL, _EXEC_CALLBACK_HALO, dif_bound, dif_axis_map,
-              "上壁无滑移等温壁（ChannelBC.apply + fill_wall_y）"),
+              f"上壁无滑移{_thermal_for_tw(Tw_top)}壁（ChannelBC.apply + fill_wall_y）",
+              thermal=_thermal_for_tw(Tw_top), params={"Tw": Tw_top}),
         _face("z-", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
         _face("z+", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
     )
@@ -193,6 +222,10 @@ def _generic_faces(bcs, dif_bound, dif_axis_map):
                 faces.append(_face(side, OUTFLOW, _EXEC_HALO, dif_bound,
                                    dif_axis_map, "零梯度出流"))
             elif bc == WALL:
+                if axis != 1:
+                    raise ValueError(
+                        f"{side} 的通用 WALL 不可用：壁面镜像只支持 y 方向"
+                        f"（axis=1）；得到 axis={axis}")
                 faces.append(_face(side, WALL, _EXEC_HALO, dif_bound,
                                    dif_axis_map, "壁面镜像鬼胞"))
             else:
@@ -276,11 +309,61 @@ def from_case(case: Mapping) -> BlockMesh:
     coords = _wrap_fields(case.get("coords"), "coords", _COORD_KEYS,
                           (grid.nz, grid.ny, grid.nx), "内区")
 
-    if case.get("plate") is not None:
-        faces = _plate_faces(dif_bound, dif_axis_map)
-    elif case.get("channel_bc") is not None:
-        faces = _channel_faces(dif_bound, dif_axis_map)
+    plate_marker = case.get("plate")
+    channel_marker = case.get("channel_bc")
+    special_marker = case.get("special_boundary")
+    if sum(x is not None for x in (plate_marker, channel_marker, special_marker)) > 1:
+        raise ValueError("case 只能选择一种特殊边界：plate / channel_bc / special_boundary")
+    if special_marker is not None:
+        if not callable(case.get("bc_apply")):
+            raise ValueError(
+                "special_boundary 需要可调用的 case['bc_apply'] 回调；"
+                f"得到 {case.get('bc_apply')!r}")
+        if not isinstance(getattr(special_marker, "name", None), str):
+            raise ValueError("special_boundary 需要字符串 name")
+        raw_faces = tuple(getattr(special_marker, "faces", ()))
+        if len(raw_faces) != 6 or tuple(f.side for f in raw_faces) != SIDES:
+            raise ValueError(
+                "special_boundary.faces 必须按 x-/x+/y-/y+/z-/z+ 顺序给出六侧")
+        if not all(isinstance(f, FaceBoundary) for f in raw_faces):
+            raise ValueError("special_boundary.faces 必须是 FaceBoundary")
+        faces = validate_special_sides(raw_faces, bcs)
+    elif plate_marker is not None:
+        if not callable(case.get("bc_apply")):
+            raise ValueError(
+                "plate 特殊边界需要可调用的 case['bc_apply'] 回调；"
+                f"得到 {case.get('bc_apply')!r}")
+        if bcs != (INFLOW, PLATE, PERIODIC):
+            raise ValueError(
+                f"plate 固定六侧与 bcs 矛盾：要求 bcs=(inflow, plate, periodic)，"
+                f"得到 {bcs}")
+        if not isinstance(plate_marker, MappingABC):
+            raise ValueError("case['plate'] 必须是映射")
+        Tw = float(plate_marker.get("Tw", plate_marker.get("T0", 1.0)))
+        if not (Tw == Tw and abs(Tw) != float("inf")) or Tw <= 0.0:
+            raise ValueError(f"plate 需要正的有限壁温 Tw，得到 {Tw}")
+        faces = _plate_faces(dif_bound, dif_axis_map, Tw=Tw)
+    elif channel_marker is not None:
+        if not callable(case.get("bc_apply")):
+            raise ValueError(
+                "channel 特殊边界需要可调用的 case['bc_apply'] 回调；"
+                f"得到 {case.get('bc_apply')!r}")
+        if bcs != (PERIODIC, WALL, PERIODIC):
+            raise ValueError(
+                f"channel 固定六侧与 bcs 矛盾：要求 bcs=(periodic, wall, periodic)，"
+                f"得到 {bcs}")
+        for attr in ("Tw_bottom", "Tw_top"):
+            if not hasattr(channel_marker, attr):
+                raise ValueError(f"channel_bc 缺少 {attr}")
+            value = float(getattr(channel_marker, attr))
+            if not (value == value and abs(value) != float("inf")):
+                raise ValueError(f"channel_bc.{attr} 含非有限值: {value}")
+        faces = _channel_faces(channel_marker, dif_bound, dif_axis_map)
     else:
+        if case.get("bc_apply") is not None:
+            raise ValueError(
+                "case 提供了 bc_apply，但没有 channel_bc / plate 特殊边界标记；"
+                "未知特殊边界必须在 case 侧显式选择并补六侧描述")
         faces = _generic_faces(bcs, dif_bound, dif_axis_map)
 
     return BlockMesh(grid=grid, dxs=dxs, axes=axes, bcs=bcs,

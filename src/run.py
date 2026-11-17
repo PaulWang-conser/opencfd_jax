@@ -19,7 +19,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import config, io
+from . import boundary, config, io
 from .ana import check_nan, diagnostic_line
 from .cases import apply_forcing, build_case
 from .mesh_data import from_case
@@ -27,17 +27,19 @@ from .solver import compute_dt, inviscid_rhs, rk3_step
 from .viscous import viscous_rhs
 
 
-def build_rhs(case, args):
+def build_rhs(case, args, execution=None):
     """根据算例和命令行参数构造单个 RK 子步的右端项函数 ``L(q)``。
 
     返回的 JIT 函数依次组合物理边界、无粘通量散度、可选粘性项、通用体积力
     和槽道专用源项，但不推进流场。激波滤波属于整步后处理，不在这个函数内。
     """
     desc = from_case(case)
+    if execution is None:
+        execution = boundary.build_execution(case, desc)
     grid = desc.grid
     gamma = case["gamma"]
     params = case["params"]
-    bcs = desc.bcs
+    bcs = execution.bcs
     dxs = desc.dxs
     axes = desc.axes
 
@@ -47,7 +49,6 @@ def build_rhs(case, args):
         weno_tv = (WENO7_TV_LIMITER_DEFAULT, WENO7_TV_MAX_DEFAULT)
 
     vis_order = {"CD6": 6, "CD8": 8}[args.vis_order]
-    bc_apply = case.get("bc_apply")
     src = case.get("source")
     metrics = desc.metrics
     dif_bound = desc.dif_bound
@@ -56,8 +57,7 @@ def build_rhs(case, args):
 
     def rhs(q):
         """计算当前 RK 子步状态 ``q`` 的总右端项 ``du = L(q)``。"""
-        if bc_apply is not None:
-            q = bc_apply(q)          # 与原码 OCFD_bc 同位置：每子步算 du 前先上壁面条件
+        q = execution.apply(q)   # 与原码 OCFD_bc 同位置：每子步算 du 前先上壁面条件
         du = inviscid_rhs(q, grid, gamma=gamma, bcs=bcs, axes=axes, dx=dxs,
                           scheme=args.scheme, weno_tv=weno_tv, metrics=metrics,
                           dif_bound=dif_bound, zero_state_ghosts=plate_ghosts,
@@ -90,14 +90,15 @@ def run(args):
     gamma = 1.4
     case = build_case(args)
     desc = from_case(case)
+    execution = boundary.build_execution(case, desc)
     grid = desc.grid
     dxs = desc.dxs
     params = case["params"]
 
-    rhs = build_rhs(case, args)
+    rhs = build_rhs(case, args, execution=execution)
     cons = case["cons0"]
-    bcs = desc.bcs
-    bc_apply = case.get("bc_apply")   # IBC=200 壁面条件（无则 None）
+    bcs = execution.bcs
+    bc_apply = execution.callback
 
     dt_mode = f"fixed({args.dt})" if args.dt is not None else \
         f"adaptive(cfl={args.cfl})"

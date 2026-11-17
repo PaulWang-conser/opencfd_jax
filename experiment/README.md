@@ -119,8 +119,9 @@ python opencfd_jax\experiment\compare_ocfd_jax.py
    它在这里的作用是"多步稳定性 + 实现一致性"，不是物理验证。
 3. **Poiseuille 长跑仍会发散**（`tests/test_wall_poiseuille.py::test_poiseuille_steady`
    目前是 skip：主格式模板在壁面邻格产生质量通量泄漏）。第 0 步只冻结前 5 步的有限演化。
-   等 `boundary.py` 的单侧壁面公式落地、这条测试转绿时，**必须显式重新生成 baseline**
-   并在提交说明里写明"基准因修复 x 而更新"，而不是悄悄放宽阈值。
+   等 `viscous.py` / `schemes.py` 的边界带单侧壁面公式落地、这条测试转绿时，
+   **必须显式重新生成 baseline** 并在提交说明里写明"基准因修复 x 而更新"，而不是
+   悄悄放宽阈值。
 4. **不重跑** `channel_case_iiA/main_128x129x96` 的 20000 步原版长跑（那是原版程序
    的外部参考，第 0 步不碰）；JAX 与原版的逐点对拍属于 `src/compare.py` 的职责，
    与本目录的"自身回归"分开。
@@ -144,6 +145,32 @@ collection error；本文件自带仓库根路径插入，可单独运行。全�
 没有改 `tests/` 的导入方式。真网格用例依赖 `channel_case_iiA/quick` 的本地数据，
 换机缺文件时只跳过该条。
 
+## 第 2 步验收：统一边界与执行配置
+
+`test_step2_boundary.py` 先冻结旧行为，再验收 `src/boundary.py` 的统一实现和
+`BoundaryExecution`：
+
+- x/y/z 周期与出流、四层鬼胞、角点覆盖次序；
+- 槽道三点壁面外推、不同壁温、单侧绝热；平板入口/出口/下壁/顶部及平板两点外推；
+- 状态壁面镜像、派生温度、Ev 的 x/y 符号与平板顶部复制；
+- 滤波启用时的周期/出流前后值，以及现有不支持的滤波边界报错；
+- 正式路径初态、三个 RHS 和末态的回调次数；`build_execution` 的冲突拒绝；
+- case 显式 `special_boundary` 对象 + `bc_apply` 的注入、六侧校验和阶段衔接。
+
+```powershell
+cd D:\Desktop\ocfd2jax\opencfd_jax
+python -m pytest experiment/test_step2_boundary.py -q
+```
+
+验收结果（2026-11-17，本机）：`23 passed`。Step 0 七例候选重跑 + `check_step0.py`
+总判定 PASS，七例全部 `max|diff|=0.000e+00`；全量套件用别名启动器运行，结果为
+`143 passed, 2 skipped, 1 xfailed`。
+
+滤波只支持周期/出流；通用 `WALL` 只支持 y 方向；槽道三点外推和平板两点外推仍留在
+`channel.py` / `plate.py`。添加通用边界和 case 特殊边界的位置、参数与约束见
+`src/README.md` 第 7.2 节；边界带公式的核对材料见 `docs/boundary_scheme_notes.md`。
+`special_boundary` 是显式导入入口，不做动态注册，也不允许 I/O 进入 JIT。
+
 ## 目录结构
 
 ```text
@@ -152,6 +179,7 @@ experiment/
   run_step0.py            批量跑 + sha256/统计 + manifest.json + STEP0.md
   check_step0.py          逐点比对 + check_report.json + PASS/FAIL 退出码
   test_step1_mesh.py      第 1 步单块网格/边界描述验收测试
+  test_step2_boundary.py  第 2 步统一边界/执行配置验收测试
   compare_ocfd_jax.py     原码 dump vs JAX 的单步对拍（--dir/--scheme 可换口径）
   cases/channel_small.in  小网格槽道 in 文件（同 IBC=200 口径）
   baseline/               基准数据（7 条用例、28.6 MB、可复现）

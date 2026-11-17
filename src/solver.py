@@ -16,9 +16,10 @@ du 的符号约定（OCFD_Schemes.cu:306 核实）：
 import jax
 import jax.numpy as jnp
 
-from .fields import (LAP, NVARS, OUTFLOW, PERIODIC, WALL, fill_halos_x,
-                     fill_halos_y, fill_halos_z, fill_wall_y,
-                     spatial_array_axis, zero_nonperiodic_ghosts)
+from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, WALL, fill_halos_x,
+                       fill_halos_y, fill_halos_z, fill_wall_y,
+                       zero_nonperiodic_ghosts)
+from .fields import spatial_array_axis
 from .schemes import (SOLVE_SCHEMES, steger_warming, up7_rhs_along_last_axis,
                     weno7_symbo_rhs_along_last_axis)
 from .viscous import dif_bound_for_axis
