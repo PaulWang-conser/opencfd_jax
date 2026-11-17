@@ -194,6 +194,16 @@ def test_output_prefix_from_mesh_and_case():
         runtime_config.derive_prefix("dir/.dat", "channel")
 
 
+def test_output_filename_uses_eight_digit_istep():
+    from opencfd_jax.src import io
+    assert io.checkpoint_name("sod", 1) == "sod-istep-00000001.npz"
+    assert io.checkpoint_name("OCFD3d-Mesh", 1000) == "OCFD3d-Mesh-istep-00001000.npz"
+    # 超过八位自然扩展，不截断
+    assert io.checkpoint_name("sod", 123456789) == "sod-istep-123456789.npz"
+    with pytest.raises(ValueError, match="负数"):
+        io.checkpoint_name("sod", -1)
+
+
 def test_channel_json_paths_are_relative_to_config():
     cfg = runtime_config.load_config(config_path(CASES[5]))
     expected = PROJECT / "channel_case_iiA" / "quick" / "OCFD3d-Mesh.dat"

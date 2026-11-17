@@ -46,7 +46,7 @@ class CheckStep0Test(unittest.TestCase):
             self.assertEqual(compare(cons_0=np.array([2.0]), _meta=meta), "FAIL")
 
     def test_step_filename_mapping(self):
-        """输出前缀变化时按 step 一对一配对，不改基准文件名。"""
+        """旧 _step 基准与新 -istep- 候选按 step 一对一配对，不改基准文件名。"""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             base, candidate = root / "base", root / "candidate"
@@ -62,28 +62,34 @@ class CheckStep0Test(unittest.TestCase):
             (base / "case.json").write_text(json.dumps(
                 {"files": [{"name": "channel_step000001.npz",
                             "sha256": digest}]}))
-            np.savez(candidate / "OCFD3d-Mesh_step000001.npz",
+            np.savez(candidate / "OCFD3d-Mesh-istep-00000001.npz",
                      cons_0=np.array([1.0]), _meta=meta)
             self.assertEqual(check.compare_case(base, candidate, 0)["status"], "PASS")
             # 同一步号多一个候选文件 → 无法一对一
-            np.savez(candidate / "other_step000001.npz",
+            np.savez(candidate / "other-istep-00000001.npz",
                      cons_0=np.array([1.0]), _meta=meta)
             self.assertEqual(check.compare_case(base, candidate, 0)["status"], "FAIL")
-            (candidate / "other_step000001.npz").unlink()
+            (candidate / "other-istep-00000001.npz").unlink()
             # 候选多出无法映射的步号
-            np.savez(candidate / "extra_step000002.npz",
+            np.savez(candidate / "extra-istep-00000002.npz",
                      cons_0=np.array([1.0]), _meta=meta)
             self.assertEqual(check.compare_case(base, candidate, 0)["status"], "FAIL")
-            (candidate / "extra_step000002.npz").unlink()
+            (candidate / "extra-istep-00000002.npz").unlink()
             # 文件名步号与 _meta.step 不一致
             bad = np.frombuffer(
                 json.dumps({"t": 0.1, "step": 2, "dt": 0.1}).encode(),
                 dtype=np.uint8)
-            np.savez(candidate / "OCFD3d-Mesh_step000001.npz",
+            np.savez(candidate / "OCFD3d-Mesh-istep-00000001.npz",
                      cons_0=np.array([1.0]), _meta=bad)
             result = check.compare_case(base, candidate, 0)
             self.assertEqual(result["status"], "FAIL")
             self.assertTrue(any("_meta.step" in p for p in result["problems"]))
+
+    def test_step_of_supports_both_output_names(self):
+        self.assertEqual(check.step_of("channel_step000001.npz"), 1)
+        self.assertEqual(check.step_of("OCFD3d-Mesh-istep-00000001.npz"), 1)
+        self.assertEqual(check.step_of("OCFD3d-Mesh-istep-000000001.npz"), 1)
+        self.assertIsNone(check.step_of("channel.npz"))
 
 
 if __name__ == "__main__":

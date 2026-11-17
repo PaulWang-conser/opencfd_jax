@@ -14,12 +14,24 @@ from .viscous import PhysParams
 
 
 def _dimension(args, name, legacy, default):
-    """读取一个网格尺寸：新名优先，旧名兼容，同时给出时冲突报错。"""
+    """读取一个网格尺寸：新名优先，旧名兼容，同时给出时冲突报错。
+
+    解析器把旧开关存到 ``legacy_*``，以避免正常解析器给旧名补默认值；
+    这里的直接 ``build_case`` 调用还需要兼容只带旧名的命名空间。
+    """
     new = getattr(args, name, None)
     old = getattr(args, legacy, None)
+    old_dest = getattr(args, f"legacy_{legacy}", None)
+    if old is None:
+        old = old_dest
     if new is None:
         return default if old is None else old
     if old is not None and old != new:
+        # 只带 legacy_* 的原始 parser 结果：旧名视为用户显式选择，直接
+        # 采用；生产路径已经由 runtime_config.resolve_args 同时写入新旧
+        # 两侧并处理显式冲突，不会走到这个分支。
+        if old_dest is not None:
+            return old
         raise ValueError(f"网格尺寸 {name}/{legacy} 冲突：{new!r} != {old!r}")
     return new
 

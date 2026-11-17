@@ -24,6 +24,10 @@ SCHEMES = ("UP7", "WENO7-SYMBO", "NND2", "WENO5", "WENO7",
 VIS_ORDERS = ("CD6", "CD8")
 CASE_NAMES = ("sod", "tg", "poiseuille", "channel", "plate")
 MESH_FORMATS = ("builtin", "ocfd")
+# (规范键, 旧兼容键, 旧开关实际 dest)
+_DIMENSION_ALIASES = (("ni", "N", "legacy_N"),
+                      ("nj", "ny", "legacy_ny"),
+                      ("nk", "nz", "legacy_nz"))
 
 
 class ConfigError(ValueError):
@@ -333,24 +337,32 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
 
     # 网格尺寸新旧 CLI 名指向同一组值：显式一侧驱动另一侧；两侧都显式
     # 且不同则拒绝，而不是静默选一个。JSON 不提供维数（Step 3 口径）。
-    for canonical, legacy in (("ni", "N"), ("nj", "ny"),
-                              ("nk", "nz")):
+    # 旧开关在解析器中存到 legacy_*，避免正常解析器给旧名补默认值。
+    missing = object()
+    for canonical, legacy, legacy_dest in _DIMENSION_ALIASES:
         new_cli = canonical in explicit
-        old_cli = legacy in explicit
-        if new_cli and old_cli and merged[canonical] != merged[legacy]:
+        old_explicit = explicit.get(legacy_dest,
+                                    explicit.get(legacy, missing))
+        old_cli = old_explicit is not missing
+        if new_cli and old_cli and merged[canonical] != old_explicit:
             raise ConfigError(
                 f"--{canonical} 与 --{legacy} 同时给出且不一致："
-                f"{merged[canonical]!r} != {merged[legacy]!r}")
-        if new_cli and not old_cli:
-            merged[legacy] = merged[canonical]
-            sources[legacy] = f"cli(--{canonical})"
-        elif old_cli and not new_cli:
-            merged[canonical] = merged[legacy]
+                f"{merged[canonical]!r} != {old_explicit!r}")
+        if old_cli and not new_cli:
+            merged[canonical] = old_explicit
             sources[canonical] = f"cli(--{legacy})"
-        elif merged[canonical] != merged[legacy]:
-            raise ConfigError(
-                f"网格尺寸 {canonical}/{legacy} 不一致："
-                f"{merged[canonical]!r} != {merged[legacy]!r}")
+            merged[legacy_dest] = old_explicit
+        elif new_cli and not old_cli:
+            merged[legacy_dest] = merged[canonical]
+            sources[legacy_dest] = f"cli(--{canonical})"
+        elif not new_cli and not old_cli:
+            merged[legacy_dest] = merged[canonical]
+            sources[legacy_dest] = sources[canonical]
+        else:
+            merged[legacy_dest] = merged[canonical]
+            sources[legacy_dest] = "cli"
+        merged[legacy] = merged[legacy_dest]
+        sources[legacy] = sources[legacy_dest]
         if merged[canonical] < 1:
             raise ConfigError(
                 f"网格尺寸 {canonical} 必须为正整数，得到 {merged[canonical]!r}")

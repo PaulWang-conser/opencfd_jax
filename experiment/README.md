@@ -179,6 +179,8 @@ python -m pytest experiment/test_step2_boundary.py -q
 - 未知字段、算例不适用字段（如 Sod 的 `p_grad`）、channel 缺 `.in` 启动前报错；
 - 槽道 `.in` 的物性优先级、`--no-*` 显式关闭、`--adaptive-dt`、`--fp32/--fp64`；
 - 输出前缀取网格文件名，以及在临时目录里旧 CLI 与 JSON 两条路径的 NPZ 逐位一致；
+- 输出文件名为 `<前缀>-istep-00000001.npz` 形式，步号至少八位；槽道 `_meta.N`
+  记录实际 `grid.ni`，不再沿用命令行默认尺寸；
 - 七条 Step 0 用例的 JSON 参数与旧 CLI 参数逐项相等。
 
 ```powershell
@@ -194,10 +196,11 @@ python opencfd_jax\experiment\run_step0.py --phase candidate_json --arg-source j
 python opencfd_jax\experiment\check_step0.py --candidate opencfd_jax\experiment\candidate_json
 ```
 
-验收结果（2026-11-17，本机）：`28 passed`；旧 CLI 候选 7 例 80 场
+验收结果（2026-11-17，本机）：`29 passed`；旧 CLI 候选 7 例 80 场
 `max|diff|=0.000e+00`；JSON 候选同样 7 例 80 场全零。`channel_1step` 的输出名从
-`channel_step000001.npz` 变为 `OCFD3d-Mesh_step000001.npz`，`check_step0.py` 按
-`_stepNNNNNN` 步号与基准一对一映射，基准文件未改名、未重写。
+`channel_step000001.npz` 变为 `OCFD3d-Mesh-istep-00000001.npz`，`check_step0.py`
+同时解析旧 `_stepNNNNNN` 和新 `-istep-NNNNNNNN`，按步号与基准一对一映射，
+基准文件未改名、未重写。
 
 ## 第 3.5 步验收：计算方向命名与兼容迁移
 

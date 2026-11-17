@@ -35,7 +35,7 @@ except ModuleNotFoundError:  # 兼容现有的 opencfd_jax = src 别名跑法
 
 def _ns(**kw):
     """构造 build_case 所需的最小 CLI 命名空间。"""
-    defaults = dict(case="sod", N=16, ny=8, nz=4, Re=10.0, Ama=0.1,
+    defaults = dict(case="sod", ni=16, nj=8, nk=4, Re=10.0, Ama=0.1,
                     ref_t=None, pr=0.7, forcing_work="off")
     defaults.update(kw)
     return argparse.Namespace(**defaults)
@@ -43,7 +43,7 @@ def _ns(**kw):
 
 def _plate_case():
     """较小且固定的平板算例，供边界/回调测试复用。"""
-    return cases.build_case(_ns(case="plate", N=16, ny=8, nz=4,
+    return cases.build_case(_ns(case="plate", ni=16, nj=8, nk=4,
                                 plate_x0=0.1, plate_x1=1.1, plate_h=0.12,
                                 plate_dif_bound="0 0 0 0 1 0"))
 
@@ -96,21 +96,21 @@ def _outflow_ref(f, axis, n):
 def _fill_axis(f, axis, bc, n):
     """调用现有单轴填充入口。"""
     if axis == 0:
-        return fields.fill_halos_x(f, bc, n)
+        return fields.fill_halos_i(f, bc, n)
     if axis == 1:
-        return fields.fill_halos_y(f, bc, n)
-    return fields.fill_halos_z(f, bc, n)
+        return fields.fill_halos_j(f, bc, n)
+    return fields.fill_halos_k(f, bc, n)
 
 
 def _cons_nonuniform(grid, phys):
     """构造适合壁面测试的非均匀守恒量场。"""
-    nz, ny, nx = grid.nz, grid.ny, grid.nx
-    z, y, x = np.indices((nz, ny, nx))
+    nk, nj, ni = grid.nk, grid.nj, grid.ni
+    z, y, x = np.indices((nk, nj, ni))
     rho = 1.0 + 0.03 * np.sin(0.3 * x + 0.2 * y + 0.1 * z)
     u = 0.02 * (1.0 + 0.15 * y)
     v = -0.01 * (1.0 + 0.1 * x)
     w = 0.005 * (1.0 + 0.1 * z)
-    T = 1.0 + 0.04 * np.cos(0.2 * y) + 0.01 * x / max(nx, 1)
+    T = 1.0 + 0.04 * np.cos(0.2 * y) + 0.01 * x / max(ni, 1)
     return channel.cons_from_primitive(
         (rho, u, v, w, T), grid, phys)
 
@@ -119,9 +119,9 @@ def _cons_nonuniform(grid, phys):
 
 @pytest.mark.parametrize("axis", [0, 1, 2])
 def test_periodic_all_axes_four_layers_and_corners(axis):
-    """U1：x/y/z 周期各四层鬼胞，含跨轴角点，逐位等于独立参考。"""
+    """U1：i/j/k 周期各四层鬼胞，含跨轴角点，逐位等于独立参考。"""
     grid = Grid(9, 8, 7)
-    n = (grid.nx, grid.ny, grid.nz)[axis]
+    n = (grid.ni, grid.nj, grid.nk)[axis]
     f = _field(grid)
     got = np.asarray(_fill_axis(f, axis, PERIODIC, n))
     np.testing.assert_array_equal(got, _periodic_ref(np.asarray(f), axis, n))
@@ -129,9 +129,9 @@ def test_periodic_all_axes_four_layers_and_corners(axis):
 
 @pytest.mark.parametrize("axis", [0, 1, 2])
 def test_outflow_all_axes_four_layers_and_corners(axis):
-    """U1：x/y/z 出流四层鬼胞复制最近内点，含角点。"""
+    """U1：i/j/k 出流四层鬼胞复制最近内点，含角点。"""
     grid = Grid(9, 8, 7)
-    n = (grid.nx, grid.ny, grid.nz)[axis]
+    n = (grid.ni, grid.nj, grid.nk)[axis]
     f = _field(grid)
     got = np.asarray(_fill_axis(f, axis, OUTFLOW, n))
     np.testing.assert_array_equal(got, _outflow_ref(np.asarray(f), axis, n))
@@ -143,16 +143,16 @@ def test_channel_two_wall_temperatures_and_one_adiabatic_side():
     """U1：下壁等温 0.9、上壁绝热；壁点/鬼胞与独立三点外推一致。"""
     case = _channel_case()
     grid, phys = case["grid"], case["params"]
-    ny = grid.ny
+    nj = grid.nj
     q = _cons_nonuniform(grid, phys)
-    q = fields.fill_halos_x(q, PERIODIC, grid.nx)
-    q = fields.fill_halos_z(q, PERIODIC, grid.nz)
+    q = fields.fill_halos_i(q, PERIODIC, grid.ni)
+    q = fields.fill_halos_k(q, PERIODIC, grid.nk)
     out = channel.apply_wall_bc(q, grid, phys, Tw_bottom=0.9, Tw_top=0.0)
     out_np = np.asarray(out)
 
     rho, _, T = channel.primitive(q, phys)
     rho_np, T_np = np.asarray(rho), np.asarray(T)
-    zi, xi = slice(LAP, LAP + grid.nz), slice(LAP, LAP + grid.nx)
+    zi, xi = slice(LAP, LAP + grid.nk), slice(LAP, LAP + grid.ni)
 
     # 下壁：Tw=0.9 等温，压力三点外推，rho_w=pw/Tw
     jw = LAP
@@ -165,12 +165,12 @@ def test_channel_two_wall_temperatures_and_one_adiabatic_side():
                                rtol=1e-14, atol=1e-13)
 
     # 上壁：Tw<=0 绝热；T 三点外推，rho_w=pw/Tw
-    jw2 = LAP + ny - 1
-    pw_hi = (18.0 * rho_np[zi, LAP + ny - 2, xi] * T_np[zi, LAP + ny - 2, xi]
-             - 9.0 * rho_np[zi, LAP + ny - 3, xi] * T_np[zi, LAP + ny - 3, xi]
-             + 2.0 * rho_np[zi, LAP + ny - 4, xi] * T_np[zi, LAP + ny - 4, xi]) / 11.0
-    T_hi = (18.0 * T_np[zi, LAP + ny - 2, xi] - 9.0 * T_np[zi, LAP + ny - 3, xi]
-            + 2.0 * T_np[zi, LAP + ny - 4, xi]) / 11.0
+    jw2 = LAP + nj - 1
+    pw_hi = (18.0 * rho_np[zi, LAP + nj - 2, xi] * T_np[zi, LAP + nj - 2, xi]
+             - 9.0 * rho_np[zi, LAP + nj - 3, xi] * T_np[zi, LAP + nj - 3, xi]
+             + 2.0 * rho_np[zi, LAP + nj - 4, xi] * T_np[zi, LAP + nj - 4, xi]) / 11.0
+    T_hi = (18.0 * T_np[zi, LAP + nj - 2, xi] - 9.0 * T_np[zi, LAP + nj - 3, xi]
+            + 2.0 * T_np[zi, LAP + nj - 4, xi]) / 11.0
     np.testing.assert_allclose(out_np[0, zi, jw2, xi], pw_hi / T_hi, rtol=0, atol=1e-13)
     np.testing.assert_array_equal(out_np[1:4, zi, jw2, xi], 0.0)
     np.testing.assert_allclose(out_np[4, zi, jw2, xi],
@@ -200,27 +200,27 @@ def test_plate_inlet_outlet_wall_far_and_corners():
     """U1：平板入口物理点、出口鬼层、下壁两点外推、顶部远场与角点顺序。"""
     case = _plate_case()
     grid, phys = case["grid"], case["params"]
-    nx, ny = grid.nx, grid.ny
+    ni, nj = grid.ni, grid.nj
     far = plate.far_state(rho=1.0, u=1.0, T=1.0, Cv=phys.Cv)
     q = _cons_nonuniform(grid, phys)
-    q = q.at[:, LAP:LAP + grid.nz, LAP:LAP + ny, :LAP + 1].set(
+    q = q.at[:, LAP:LAP + grid.nk, LAP:LAP + nj, :LAP + 1].set(
         case["plate"]["inflow"][:, :, :, None])
-    q = q.at[:, :, :, LAP + nx:].set(q[:, :, :, LAP + nx - 1:LAP + nx])
+    q = q.at[:, :, :, LAP + ni:].set(q[:, :, :, LAP + ni - 1:LAP + ni])
     out = np.asarray(plate.apply(q, grid, phys, inflow=case["plate"]["inflow"],
                                  far=far, Tw=1.0))
     out_q = np.asarray(q)
-    ny_in = LAP + ny
+    nj_in = LAP + nj
 
     # 入口：x- 鬼层 + 第一个内区物理点 = 入口剖面；y 两端随后分别被
     # 下壁无滑移/顶部远场覆盖，故比较内部物理行。
     np.testing.assert_array_equal(
-        out[:, LAP:LAP + grid.nz, LAP + 1:ny_in - 1, :LAP + 1],
+        out[:, LAP:LAP + grid.nk, LAP + 1:nj_in - 1, :LAP + 1],
         np.broadcast_to(np.asarray(case["plate"]["inflow"])[:, :, 1:-1, None],
-                        (5, grid.nz, ny - 2, LAP + 1)))
+                        (5, grid.nk, nj - 2, LAP + 1)))
     # 出口：四个鬼层复制最后一个内点；y 两端随后分别被壁面/顶部覆盖。
-    outlet = out[:, LAP:LAP + grid.nz, LAP + 1:ny_in - 1, LAP + nx:]
-    last = out_q[:, LAP:LAP + grid.nz, LAP + 1:ny_in - 1,
-                LAP + nx - 1:LAP + nx]
+    outlet = out[:, LAP:LAP + grid.nk, LAP + 1:nj_in - 1, LAP + ni:]
+    last = out_q[:, LAP:LAP + grid.nk, LAP + 1:nj_in - 1,
+                LAP + ni - 1:LAP + ni]
     np.testing.assert_array_equal(
         outlet, np.broadcast_to(last, outlet.shape))
 
@@ -234,7 +234,7 @@ def test_plate_inlet_outlet_wall_far_and_corners():
     np.testing.assert_allclose(out[4, :, LAP, :], rho_w * phys.Cv, rtol=0, atol=1e-13)
 
     # 顶部：末内点 + 四层鬼胞全部写远场常数；角点也归远场
-    top = out[:, :, ny_in - 1:, :]
+    top = out[:, :, nj_in - 1:, :]
     np.testing.assert_array_equal(
         top, np.broadcast_to(np.asarray(far).reshape(5, 1, 1, 1), top.shape))
 
@@ -248,10 +248,10 @@ def test_plate_inlet_outlet_wall_far_and_corners():
 
 # ---------------------------------------------------------------- U1 Ev / 滤波
 
-def test_ev_y_mirror_and_plate_top_copy():
-    """U1：Ev 的 y 壁镜像符号；平板顶部 Ev 是零梯度复制，不是状态镜像。"""
+def test_ev_j_mirror_and_plate_top_copy():
+    """U1：Ev 的 j 壁镜像符号；平板顶部 Ev 是零梯度复制，不是状态镜像。"""
     grid = Grid(8, 8, 6)
-    ny = grid.ny
+    nj = grid.nj
     signs = viscous._EV_WALL_SIGNS[1]
     f = np.zeros((4, grid.shape[1], grid.shape[2], grid.shape[3]))
     for i, s in enumerate(signs):
@@ -259,22 +259,22 @@ def test_ev_y_mirror_and_plate_top_copy():
         f[i] = s * line[None, :, None] + 0.1 * i
     stack = jnp.asarray(f)
 
-    got = np.asarray(viscous._fill_ev_wall_y(stack, ny, signs))
-    # 下壁 ghost[p] = f[2LAP-p] * sign；上壁 ghost[ny+LAP+q] = f[ny+LAP-2-q] * sign。
+    got = np.asarray(viscous._fill_ev_wall_j(stack, nj, signs))
+    # 下壁 ghost[p] = f[2LAP-p] * sign；上壁 ghost[nj+LAP+q] = f[nj+LAP-2-q] * sign。
     for i in range(4):
         for p in range(LAP):
             np.testing.assert_array_equal(got[i, :, p, :],
                                           f[i, :, 2 * LAP - p, :] * signs[i])
         for q in range(LAP):
             np.testing.assert_array_equal(
-                got[i, :, ny + LAP + q, :],
-                f[i, :, ny + LAP - 2 - q, :] * signs[i])
+                got[i, :, nj + LAP + q, :],
+                f[i, :, nj + LAP - 2 - q, :] * signs[i])
 
-    got_plate = np.asarray(viscous._fill_ev_plate_y(stack, ny, signs))
-    np.testing.assert_array_equal(got_plate[:, :, ny + LAP:, :],
+    got_plate = np.asarray(viscous._fill_ev_plate_j(stack, nj, signs))
+    np.testing.assert_array_equal(got_plate[:, :, nj + LAP:, :],
                                   np.broadcast_to(
-                                      got_plate[:, :, ny + LAP - 1:ny + LAP, :],
-                                      got_plate[:, :, ny + LAP:, :].shape))
+                                      got_plate[:, :, nj + LAP - 1:nj + LAP, :],
+                                      got_plate[:, :, nj + LAP:, :].shape))
 
 
 def test_ev_direction_tables_and_axis_dispatch():
@@ -285,14 +285,14 @@ def test_ev_direction_tables_and_axis_dispatch():
     grid = Grid(8, 8, 6)
     f = jnp.zeros((4, grid.shape[1], grid.shape[2], grid.shape[3]))
     f = f.at[0].set(1.0)
-    got_wall = boundary.fill_ev_axis(f, 1, WALL, grid.ny, is_ev=True)
+    got_wall = boundary.fill_ev_axis(f, 1, WALL, grid.nj, is_ev=True)
     np.testing.assert_array_equal(np.asarray(got_wall),
-                                  np.asarray(boundary.fill_ev_wall_y(
-                                      f, grid.ny, boundary.EV_WALL_SIGNS[1])))
-    got_plate = boundary.fill_ev_axis(f, 1, PLATE, grid.ny, is_ev=True)
+                                  np.asarray(boundary.fill_ev_wall_j(
+                                      f, grid.nj, boundary.EV_WALL_SIGNS[1])))
+    got_plate = boundary.fill_ev_axis(f, 1, PLATE, grid.nj, is_ev=True)
     np.testing.assert_array_equal(np.asarray(got_plate),
-                                  np.asarray(boundary.fill_ev_plate_y(
-                                      f, grid.ny, boundary.EV_WALL_SIGNS[1])))
+                                  np.asarray(boundary.fill_ev_plate_j(
+                                      f, grid.nj, boundary.EV_WALL_SIGNS[1])))
 
 
 def test_viscous_channel_uniform_state_is_fixed_point():
@@ -354,10 +354,10 @@ def test_channel_thermal_description_tracks_each_side():
     case["channel_bc"].Tw_bottom = 0.8
     case["channel_bc"].Tw_top = -1.0
     desc = mesh_data.from_case(case)
-    assert desc.face("y-").thermal == "isothermal"
-    assert desc.face("y+").thermal == "adiabatic"
-    assert desc.face("y-").params["Tw"] == 0.8
-    assert desc.face("y+").params["Tw"] == -1.0
+    assert desc.face("j-").thermal == "isothermal"
+    assert desc.face("j+").thermal == "adiabatic"
+    assert desc.face("j-").params["Tw"] == 0.8
+    assert desc.face("j+").params["Tw"] == -1.0
 
 
 def test_channel_execution_rejects_stale_wall_temperature():
@@ -400,13 +400,13 @@ def test_plate_bcs_conflict_and_missing_callback_are_rejected():
         mesh_data.from_case(case)
 
 
-def test_generic_wall_is_y_only_and_unknown_callback_rejected():
-    """U2/R7：通用 WALL 只在 y 向支持；无标记的未知回调用途必须报错。"""
+def test_generic_wall_is_j_only_and_unknown_callback_rejected():
+    """U2/R7：通用 WALL 只在 j 向支持；无标记的未知回调用途必须报错。"""
     from opencfd_jax.src import mesh_data, boundary
     base = dict(grid=Grid(4, 4, 4), dxs=(0.1, 0.1, 0.1), axes=(0,),
                 bcs=(WALL, PERIODIC, PERIODIC), dif_bound=(0,) * 6,
                 dif_axis_map=(0, 1, 2))
-    with pytest.raises(ValueError, match="WALL|y 方向|壁面"):
+    with pytest.raises(ValueError, match="WALL|j 方向|壁面"):
         mesh_data.from_case(base)
 
     case = dict(grid=Grid(4, 4, 4), dxs=(0.1, 0.1, 0.1), axes=(0,),
@@ -420,18 +420,21 @@ def test_generic_wall_is_y_only_and_unknown_callback_rejected():
 
 def test_fields_reexports_boundary_implementations():
     """U3：公共填充只有 boundary.py 一份实现，旧 fields 入口是别名。"""
-    assert fields.fill_halos_x is boundary.fill_halos_x
-    assert fields.fill_halos_y is boundary.fill_halos_y
-    assert fields.fill_halos_z is boundary.fill_halos_z
-    assert fields.fill_wall_y is boundary.fill_wall_y
+    assert fields.fill_halos_i is boundary.fill_halos_i
+    assert fields.fill_halos_j is boundary.fill_halos_j
+    assert fields.fill_halos_k is boundary.fill_halos_k
+    assert fields.fill_halos_x is boundary.fill_halos_i
+    assert fields.fill_halos_y is boundary.fill_halos_j
+    assert fields.fill_halos_z is boundary.fill_halos_k
+    assert fields.fill_wall_j is boundary.fill_wall_j
     assert fields.zero_nonperiodic_ghosts is boundary.zero_nonperiodic_ghosts
 
 
 def test_boundary_exposes_ev_rules_separately_from_state_rules():
     """U3/R4：Ev 与守恒量状态规则分开，不做同一套镜像。"""
-    assert boundary.fill_ev_wall_y is not boundary.fill_wall_y
+    assert boundary.fill_ev_wall_j is not boundary.fill_wall_j
     assert boundary.EV_WALL_SIGNS != fields._WALL_SIGN
-    assert boundary.fill_ev_plate_y.__module__ == boundary.__name__
+    assert boundary.fill_ev_plate_j.__module__ == boundary.__name__
 
 
 # ---------------------------------------------------------- U4 运行链接入
@@ -458,18 +461,18 @@ def test_build_rhs_reads_unified_boundary_execution(monkeypatch):
 
 
 def _special_case():
-    """构造仅用于测试的 case 特殊边界：x 两侧写固定鬼层，y/z 仍走通用周期。"""
+    """构造仅用于测试的 case 特殊边界：i 两侧写固定鬼层，j/k 仍走通用周期。"""
     case = dict(cases.build_case(_ns(case="sod")))
     case["bcs"] = (INFLOW, PERIODIC, PERIODIC)
     faces = (
-        mesh_data.FaceBoundary("x-", 0, INFLOW, "callback", False,
+        mesh_data.FaceBoundary("i-", 0, INFLOW, "callback", False,
                                params={"test": "fixed-left"}),
-        mesh_data.FaceBoundary("x+", 0, OUTFLOW, "callback", False,
+        mesh_data.FaceBoundary("i+", 0, OUTFLOW, "callback", False,
                                params={"test": "fixed-right"}),
-        mesh_data.FaceBoundary("y-", 1, PERIODIC, "halo", False),
-        mesh_data.FaceBoundary("y+", 1, PERIODIC, "halo", False),
-        mesh_data.FaceBoundary("z-", 2, PERIODIC, "halo", False),
-        mesh_data.FaceBoundary("z+", 2, PERIODIC, "halo", False),
+        mesh_data.FaceBoundary("j-", 1, PERIODIC, "halo", False),
+        mesh_data.FaceBoundary("j+", 1, PERIODIC, "halo", False),
+        mesh_data.FaceBoundary("k-", 2, PERIODIC, "halo", False),
+        mesh_data.FaceBoundary("k+", 2, PERIODIC, "halo", False),
     )
 
     class TestBoundary:
@@ -483,7 +486,7 @@ def _special_case():
         def apply(self, q):
             self.calls += 1
             q = q.at[..., :LAP].set(0.25)
-            return q.at[..., LAP + self.grid.nx:].set(0.5)
+            return q.at[..., LAP + self.grid.ni:].set(0.5)
 
     special = TestBoundary()
     case["special_boundary"] = special
@@ -503,14 +506,14 @@ def test_case_side_special_boundary_is_explicit_and_stage_connected():
     q = special.apply(case["cons0"])
     np.testing.assert_array_equal(np.asarray(q[..., :LAP]), 0.25)
     np.testing.assert_array_equal(
-        np.asarray(q[..., LAP + case["grid"].nx:]), 0.5)
-    # x 的 INFLOW 是保留型 no-op；y/z 通用周期填充只能在回调之后执行。
+        np.asarray(q[..., LAP + case["grid"].ni:]), 0.5)
+    # i 的 INFLOW 是保留型 no-op；j/k 通用周期填充只能在回调之后执行。
     np.testing.assert_array_equal(
-        np.asarray(fields.fill_halos_x(q, INFLOW, case["grid"].nx)), np.asarray(q))
-    filled = fields.fill_halos_y(q, PERIODIC, case["grid"].ny)
+        np.asarray(fields.fill_halos_i(q, INFLOW, case["grid"].ni)), np.asarray(q))
+    filled = fields.fill_halos_j(q, PERIODIC, case["grid"].nj)
     np.testing.assert_array_equal(
         np.asarray(filled[..., :LAP, :]),
-        np.asarray(filled[..., case["grid"].ny:case["grid"].ny + LAP, :]))
+        np.asarray(filled[..., case["grid"].nj:case["grid"].nj + LAP, :]))
 
     args = argparse.Namespace(case="sod", scheme="UP7", vis_order="CD6",
                               viscous=False, weno_tv=False)
@@ -538,16 +541,16 @@ def test_special_inlet_and_outflow_share_axis():
     """特殊入口与普通出流组合时，右侧鬼层由内区末点复制。"""
     case, special = _special_case()
     faces = list(special.faces)
-    faces[1] = mesh_data.FaceBoundary("x+", 0, OUTFLOW, "halo", False)
+    faces[1] = mesh_data.FaceBoundary("i+", 0, OUTFLOW, "halo", False)
     special.faces = tuple(faces)
     inlet = jnp.asarray([0.25, 0.0, 0.0, 0.0, 1.0]).reshape(5, 1, 1, 1)
     special.apply = lambda q: q.at[..., :LAP].set(inlet)
     case["bc_apply"] = special.apply
     execution = boundary.build_execution(case)
-    q = case["cons0"].at[..., LAP + case["grid"].nx - 1].set(0.75)
+    q = case["cons0"].at[..., LAP + case["grid"].ni - 1].set(0.75)
     actual = execution.apply(q)
     np.testing.assert_array_equal(np.asarray(actual[0, ..., :LAP]), 0.25)
-    np.testing.assert_array_equal(np.asarray(actual[..., LAP + case["grid"].nx:]), 0.75)
+    np.testing.assert_array_equal(np.asarray(actual[..., LAP + case["grid"].ni:]), 0.75)
     args = argparse.Namespace(case="sod", scheme="UP7", vis_order="CD6",
                               viscous=False, weno_tv=False)
     got = run.build_rhs(case, args)(case["cons0"])
@@ -555,8 +558,8 @@ def test_special_inlet_and_outflow_share_axis():
     ev = jnp.arange(4 * np.prod(case["grid"].shape[1:]), dtype=jnp.float64).reshape(
         (4,) + case["grid"].shape[1:])
     filled_ev = execution.fill_mixed_outflow(ev, axis=0)
-    expected_ev = np.repeat(np.asarray(ev[..., LAP + case["grid"].nx - 1:LAP + case["grid"].nx]), LAP, axis=-1)
-    np.testing.assert_array_equal(np.asarray(filled_ev[..., LAP + case["grid"].nx:]), expected_ev)
+    expected_ev = np.repeat(np.asarray(ev[..., LAP + case["grid"].ni - 1:LAP + case["grid"].ni]), LAP, axis=-1)
+    np.testing.assert_array_equal(np.asarray(filled_ev[..., LAP + case["grid"].ni:]), expected_ev)
     args.viscous = True
     got_viscous = run.build_rhs(case, args)(case["cons0"])
     assert np.all(np.isfinite(np.asarray(got_viscous)))

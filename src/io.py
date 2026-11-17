@@ -15,6 +15,18 @@ import json
 import numpy as np
 
 
+def checkpoint_name(prefix: str, step: int) -> str:
+    """返回八位步号的 NPZ 文件名：``<prefix>-istep-00000001.npz``。
+
+    步号超过八位时自然扩展，不截断；负步号或非整数直接报错。
+    """
+    if isinstance(step, bool) or not isinstance(step, int):
+        raise TypeError(f"step 必须是整数，得到 {type(step).__name__}")
+    if step < 0:
+        raise ValueError(f"step 不能为负数，得到 {step}")
+    return f"{prefix}-istep-{step:08d}.npz"
+
+
 def save_npz(path, fields: dict, meta: dict | None = None):
     """未压缩 npz 存档。fields: {name: ndarray}; meta 任意可 json 化对象。"""
     arrays = {k: np.asarray(v) for k, v in fields.items()}

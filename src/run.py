@@ -109,9 +109,11 @@ def build_parser(explicit_only=False):
     add("--ni", type=int, default=256, help="计算 i 方向网格（旧名 --N）")
     add("--nj", type=int, default=64, help="计算 j 方向网格（旧名 --ny）")
     add("--nk", type=int, default=4, help="计算 k 方向网格（旧名 --nz）")
-    add("--N", type=int, default=256, help="兼容旧名，等同 --ni（计算 i 方向）")
-    add("--ny", type=int, default=64, help="兼容旧名，等同 --nj（计算 j 方向）")
-    add("--nz", type=int, default=4,
+    add("--N", dest="legacy_N", type=int, default=None,
+        help="兼容旧名，等同 --ni（计算 i 方向）")
+    add("--ny", dest="legacy_ny", type=int, default=None,
+        help="兼容旧名，等同 --nj（计算 j 方向）")
+    add("--nz", dest="legacy_nz", type=int, default=None,
         help="兼容旧名，等同 --nk（计算 k 方向；原码 in 文件 GRID_3D 的第三个数）")
     add("--scheme", default="UP7",
         choices=runtime_config.SCHEMES)
@@ -301,10 +303,10 @@ def run(args):
             print(diagnostic_line(cons, grid, t, step, time.time() - t0))
         if step % args.kstep_save == 0 or t >= args.end_time:
             io.save_npz(
-                f"{args.out_dir}/{prefix}_step{step:06d}.npz",
+                f"{args.out_dir}/{io.checkpoint_name(prefix, step)}",
                 {f"cons_{i}": np.asarray(cons[grid.inner()][i]) for i in range(5)},
                 meta={"t": t, "step": step, "dt": dt, "case": args.case,
-                      "N": args.N, "scheme": args.scheme, "gamma": gamma,
+                      "N": grid.ni, "scheme": args.scheme, "gamma": gamma,
                       "Re": args.Re, "Ama": args.Ama,
                       "Ref_T": params.Ref_T, "Pr": params.Pr})
     print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")

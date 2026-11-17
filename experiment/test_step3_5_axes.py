@@ -195,6 +195,18 @@ def test_cli_legacy_dimension_names_fill_canonical_aliases():
     assert args.config_sources["ni"] == "cli(--N)"
 
 
+def test_cli_legacy_names_use_separate_dest_and_build_case():
+    """旧开关无缺省 dest；直接 parser + build_case 也能得到旧尺寸。"""
+    parsed = run.build_parser().parse_args(
+        ["--case", "sod", "--N", "16", "--ny", "8", "--nz", "4"])
+    assert parsed.legacy_N == 16
+    assert parsed.legacy_ny == 8
+    assert parsed.legacy_nz == 4
+    assert not hasattr(parsed, "N")
+    case = run.build_case(parsed)
+    assert (case["grid"].ni, case["grid"].nj, case["grid"].nk) == (16, 8, 4)
+
+
 def test_cli_dimension_conflict_is_rejected():
     with pytest.raises(runtime_config.ConfigError, match="不一致"):
         _resolve(["--ni", "8", "--N", "16"])

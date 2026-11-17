@@ -33,7 +33,7 @@ io.py：只保存物理内区的守恒量 NPZ
 
 
 ```
-python -m opencfd_jax.src.run --case sod --N 256 --scheme UP7 --end-time 0.2
+python -m opencfd_jax.src.run --case sod --ni 256 --scheme UP7 --end-time 0.2
 ```
 
 当前目录结构中，源码包名是 `opencfd_jax.src`，所以不要写成 `python -m opencfd_jax.run`。
@@ -43,10 +43,13 @@ python -m opencfd_jax.src.run --case sod --N 256 --scheme UP7 --end-time 0.2
 
 
 ```
-output/sod_step000050.npz
-output/sod_step000100.npz
+output/sod-istep-00000050.npz
+output/sod-istep-00000100.npz
 ...
 ```
+
+输出文件名以 `-istep-` 加至少八位步号结尾；旧基准的 `_stepNNNNNN` 文件保持原名，由
+`experiment/check_step0.py` 按步号映射比较。
 
 程序默认使用 FP64。常用控制参数：
 
@@ -105,7 +108,7 @@ JSON 只分六组，外加顶层 `precision`：
 （与 `--dt` 同时给出会报错）。
 
 网格文件名决定输出前缀：给了 `--mesh`/`mesh.file` 就用文件名去最后一个扩展名
-（`OCFD3d-Mesh.dat` → `OCFD3d-Mesh_step000001.npz`），否则用算例名。JSON 内相对
+（`OCFD3d-Mesh.dat` → `OCFD3d-Mesh-istep-00000001.npz`），否则用算例名。JSON 内相对
 路径按 JSON 所在目录解析，命令行路径按当前工作目录解析。
 
 `channel` 的网格维数、`RE/AMA/T_REF`、可选 `GAMMA/PR`、`IBC` 与
@@ -485,7 +488,7 @@ case["bc_apply"] = special.apply
 
 ```
 cons_0 ... cons_4：五个守恒变量的物理内区，形状均为 (nk, nj, ni)
-_meta            ：JSON 元信息，包括 t、step、dt、case、N、scheme、gamma、Re、Ama、Ref_T、Pr
+_meta            ：JSON 元信息，包括 t、step、dt、case、N（实际 i 方向网格）、scheme、gamma、Re、Ama、Ref_T、Pr
 ```
 
 读取示例：
@@ -495,7 +498,7 @@ _meta            ：JSON 元信息，包括 t、step、dt、case、N、scheme、
 ```
 import numpy as np
 
-with np.load("output/sod_step000100.npz") as data:
+with np.load("output/sod-istep-00000100.npz") as data:
     rho = data["cons_0"]
     rho_u = data["cons_1"]
     print(rho.shape, rho_u.shape)

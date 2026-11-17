@@ -27,21 +27,25 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from step0_cases import CASES, by_id        # noqa: E402
 
-_STEP_RE = re.compile(r"_step(\d{6})$")
+_STEP_RE = re.compile(
+    r"(?:_step(?P<legacy>\d{6})|-istep-(?P<istep>\d{8,}))$")
 
 
 def step_of(name: str):
-    """从 ``*_stepNNNNNN.npz`` 提取步号；没有该后缀返回 ``None``。"""
+    """从旧 ``*_stepNNNNNN.npz`` 或新 ``*-istep-NNNNNNNN.npz`` 提取步号。"""
     match = _STEP_RE.search(Path(name).stem)
-    return int(match.group(1)) if match else None
+    if not match:
+        return None
+    value = match.group("legacy") or match.group("istep")
+    return int(value)
 
 
 def pair_files(base_files, cand_names):
     """把基准文件与候选文件一对一配对。
 
-    先按文件名精确匹配（兼容不带步号的历史用例），剩下的一侧再按
-    ``_stepNNNNNN`` 的步号配对。这样网格文件名变化导致输出前缀变化时，
-    基准文件本身不需要改名，检查器仍能逐位比较。
+    先按文件名精确匹配（兼容不带步号的历史用例），剩下的一侧再按旧
+    ``_stepNNNNNN`` 或新 ``-istep-NNNNNNNN`` 的步号配对。这样网格文件名
+    变化或输出命名迁移时，基准文件本身不需要改名，检查器仍能逐位比较。
     """
     pairs = []
     problems = []
