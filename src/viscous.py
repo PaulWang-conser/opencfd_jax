@@ -27,8 +27,11 @@
 
 import jax.numpy as jnp
 
-from .fields import (LAP, PLATE, WALL, fill_halos_x, fill_halos_y, fill_halos_z,
-                     fill_wall_y, spatial_array_axis, zero_nonperiodic_ghosts)
+from .boundary import (LAP, PLATE, WALL, _EV_WALL_SIGNS,
+                       _fill_axis, _fill_ev_plate_y, _fill_ev_wall_y,
+                       fill_halos_x, fill_halos_y, fill_halos_z,
+                       fill_wall_y, zero_nonperiodic_ghosts)
+from .fields import spatial_array_axis
 
 _CD6_A = (45.0, -9.0, 1.0)
 _CD6_DEN = 60.0
@@ -133,59 +136,7 @@ def dif_bound_for_axis(dif_bound, axis, dif_axis_map=(0, 1, 2)):
     return (int(dif_bound[i]), int(dif_bound[j]))
 
 
-_EV_WALL_SIGNS = {
-    0: (+1.0, -1.0, +1.0, -1.0),   # x 方向 Ev=(s11,s12,s13,E1)：y 镜像物理推导
-    1: (-1.0, +1.0, -1.0, -1.0),   # y 方向 Ev=(s12,s22,s23,E2)：原码符号
-}
-
-
-def _fill_ev_wall_y(f, ny, signs):
-    """粘性通量 Ev（4 分量堆叠，(4,z,y,x)）的 y 壁面镜像。
-
-    对应 OCFD_NS_Jacobian3d.cu:442-461 boundary_symmetry_pole_vis_y_ker
-    （原码符号 Ev1-,Ev2+,Ev3-,Ev4- 是对 y 方向 Ev=(s12,s22,s23,E2)）。
-    signs 按方向给出 4 个分量的镜像符号（y 镜像物理推导见 _EV_WALL_SIGNS）。
-    上壁对齐原码 ker_p（y1 = 2*(ny+LAP-1) - y）：ghost[ny+LAP+q] =
-    f[ny+LAP-2-q]；下壁 ker_m（y1 = 2*LAP - y）：ghost[p] = f[2*LAP-p]。
-    """
-    sign = jnp.array(signs).reshape(4, 1, 1, 1)
-    mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
-    f = f.at[:, :, :LAP, :].set(mir_lo * sign)
-    mir_hi = f[:, :, ny + LAP - 2:ny + LAP - 6:-1, :]
-    f = f.at[:, :, ny + LAP:ny + 2 * LAP, :].set(mir_hi * sign)
-    return f
-
-
-def _fill_ev_plate_y(f, ny, signs):
-    """粘性通量 Ev 的平板 y 向填充：下壁镜像 + 顶部零梯度（自由来流侧）。
-
-    下壁与槽道下壁完全相同（无滑移等温壁 ⇒ 同 `_fill_ev_wall_y` 的下壁分支）；
-    顶部是自由来流，Ev 在均匀来流里为 0、梯度为 0，取零梯度（末行复制）。
-    """
-    sign = jnp.array(signs).reshape(4, 1, 1, 1)
-    mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
-    f = f.at[:, :, :LAP, :].set(mir_lo * sign)
-    f = f.at[:, :, ny + LAP:, :].set(f[:, :, ny + LAP - 1:ny + LAP, :])
-    return f
-
-
-def _fill_axis(f, axis, bc, nxi, is_ev=False):
-    """标准布局 (z,y,x) 3 维场的单轴鬼胞填充，按方向选函数。
-
-    wall 目前仅支持 y 方向（槽道流）；is_ev=True 时 f 为 4 分量堆叠的
-    (4,z,y,x)，用粘性通量的镜像符号规则；x/z 的 wall 待扩展。
-    """
-    if axis == 0:
-        return fill_halos_x(f, bc, nxi)
-    if axis == 1:
-        if bc == WALL:
-            assert is_ev, "cons-level wall fill 应走 fill_wall_y（var 镜像）"
-            return _fill_ev_wall_y(f, nxi, _EV_WALL_SIGNS[axis])
-        if bc == PLATE:
-            assert is_ev, "cons-level plate fill 由 plate.apply 写入"
-            return _fill_ev_plate_y(f, nxi, _EV_WALL_SIGNS[axis])
-        return fill_halos_y(f, bc, nxi)
-    return fill_halos_z(f, bc, nxi)
+# Ev 与状态壁面的实现都在 boundary.py；本模块仅保留旧测试使用的别名导入。
 
 
 def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=None,

@@ -221,7 +221,7 @@ def build_case(args):
                                                    inflow=inflow, far=far, Tw=T0),
                     metrics=None, dif_bound=dif_bound, dif_axis_map=(0, 2, 1),
                     plate=dict(x0=x0, x1=x1, H=H, dx=dx, dy=dy, xc=xc, yc=yc,
-                               U=U, nu=nu, inflow=inflow))
+                               U=U, nu=nu, inflow=inflow, far=far, Tw=T0))
 
     raise ValueError(f"unknown case: {args.case}")
 

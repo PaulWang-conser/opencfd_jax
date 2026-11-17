@@ -19,7 +19,8 @@ False 处不滤波）。周期/出流鬼胞由调用方填充 p 与 f 的鬼胞�
 
 import jax.numpy as jnp
 
-from .fields import LAP, NVARS, OUTFLOW, PERIODIC, fill_halos_x, fill_halos_y, fill_halos_z
+from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, fill_halos_x,
+                       fill_halos_y, fill_halos_z)
 
 _C1 = -0.2103830
 _C2 = 0.0396170

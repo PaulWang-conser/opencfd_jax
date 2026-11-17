@@ -1,75 +1,413 @@
-"""物理边界单侧降阶公式的设计与核对笔记。
+"""统一边界层：通用鬼胞填充、壁面镜像、粘性 Ev 规则与执行配置。
 
-当前求解链中的边界带实现位于 ``schemes.flux_band_faces`` 和
-``viscous.band_one_sided``；本文件保留原码公式、索引推导和待核对事项，不参与
-主循环调用。阅读或修改边界处理时，应同时对照上述两个实现和本文件的说明。
+本模块负责**所有通用边界**的数值实现：
 
-历史核对记录（2026-11-14）：公式材料逐行核实完毕，但 coords（边界层偏移）
-与面编号的精确对应依赖原码 outer kernel 的 job 范围与 block 重叠技巧
-（put_du_p 的 `if(threadIdx.x != 0)` 跳过每 warp 首线程、由相邻 block 的
-重叠线程补写）。周期/出流算例不经过这些物理边界带；出流边界使用零梯度
-鬼胞加主格式模板，边界四格精度受限。
+- 周期/出流沿 x/y/z 的鬼胞填充；
+- 无滑移壁面的守恒量镜像（``fill_wall_y``）；
+- 粘性通量 Ev 的壁面/平板镜像（``fill_ev_wall_y`` / ``fill_ev_plate_y``）；
+- 非周期鬼层清零（``zero_nonperiodic_ghosts``）。
 
-已核实的公式材料（OCFD_bound_Scheme.cu，全部逐行核对）：
+槽道三点压力外推、平板两点压力外推和入口/顶部 Dirichlet 仍是 case 专属
+物理公式，分别保留在 ``channel.py`` 与 ``plate.py``；它们通过
+``build_execution`` 返回的同一份 :class:`BoundaryExecution` 接入主循环。
+这样通用填充只有一份实现，特殊边界也只有一个明确的 case 侧入口。
 
-**WENO5 变体 8 个（489-667 行，边界层专用，实参为原码 stencil 的连续 5 点
-切片，内 s0..s4 = 实参起 5 点；ε=1e-6、12ε 进权）**：
+边界带（DIF_BOUND 面通量、粘性单侧导数）的设计与核对笔记已移到
+``docs/boundary_scheme_notes.md``；本模块不承接那部分历史材料。
 
-- P_lift（基 s2，面 s2+1/2）：单候选
-    face = (2*s2 + 5*s3 - s4)/6
-- P_lift_plus（基 s2，两候选 a0=3/(12ε+S0)²、a1=6/(12ε+S1)²，
-  S0 用 s2..s4、S1 用 s1..s3）：
-    q03 = 2*s2+5*s3-s4;  q13 = -s1+5*s2+2*s3
-    face = (a0*q03 + a1*q13) / (6*(a0+a1))
-- P_right（基 s1，面 s1+1/2）：单候选
-    face = (2*s0 + 7*(-s1) + 11*s2)/6   # 原码 q23 = 2*s0-7*s1+11*s2
-- P_right_plus（基 s1，两候选 a0=3/(12ε+S0)²、a1=6/(12ε+S1)²，
-  S0 用 s0..s2、S1 用 s1..s3）：
-    q03 = 2*s2+5*s1-s0;  q13 = -s3+5*s2+2*s1
-    face = (a0*q03 + a1*q13) / (6*(a0+a1))
-- WENO5_P（完整三候选，同 schemes._weno5_face_P 的单面形式）
-- M_lift / M_lift_plus / M_right / M_right_plus：P 系列的镜像
-  （基 s2、面 s2-1/2；q 系数下标翻转，如 M_lift = (2*s4-7*s3+11*s2)/6）
-- WENO5_M（完整三候选镜像）
+扩展位置：
 
-**边界层结构**（boundp1/boundp2/boundm1/boundm2，671-876 行）：
-
-- 低端 P（boundp1，`coords <= -ka1` 时替换）：coords = 0,1,2,...,|ka1|
-    coords=0:   face = f[cell coords+1]            （零阶直接值）
-    coords=1:   face = P_lift
-    coords=2:   face = P_lift_plus
-    coords=3:   face = WENO5_P
-    （层数 = |ka1|+1；UP7 |ka1|=3 → 4 层；WENO5 |ka1|=2 → 3 层）
-- 高端 P（boundp2，`coords > -kb1`）：coords' = -1..-kb1
-    coords'=-1:  face = f[cell nx-1] + 0.5*(f[nx-1]-f[nx-2])   （NND 外推；
-                 原码 minmod2(Δ,Δ)=Δ）
-    coords'=-2:  face = P_right_plus
-    coords'=-3:  face = WENO5_P          （完整 5 点，模板 cells n-5..n-1）
-    coords'=-4 及更低: 不覆盖（bound 函数回落主格式，见 schemes.py hi 分支）
-    （层数 = kb1；注意高端公式**只用 cell ≤ n-1**，不读上界鬼胞——2026-11-15 用
-      `diag_top_band_verify.py` 与 `diag_top_ghost_dependence.py` 逐面实测确认：
-      面 n/n-1/n-2 读 0 层鬼胞，n-3 的 P 侧走正常 OMP6 才读 1 层）
-- 低端 M（boundm1，`coords < -ka1_M`）：
-    coords=0:   face = M_lift                （(2f2-7f1+11f0)/6 形式）
-    coords=1:   face = M_lift_plus
-    coords>=2:  face = WENO5_M               （完整 5 点，域内）
-- 高端 M（boundm2，`coords >= -kb1_M-1`）：
-    coords'=-1:  face = f[cell nx-1]          （零阶）
-    coords'=-2:  face = f[nx-1] - 0.5*(f[nx-1]-f[nx-2])   （NND 外推）
-    coords'=-3:  face = M_right_plus
-    coords'=-4:  face = WENO5_M
-
-**各格式的 ka1/kb1**（从各 kernel 的 ia1/ib1；P/M 分别取）：
-    UP7:    P(-3,4)  M(-4,3)     WENO5:  P(-2,2)  M(-2,2)
-    WENO7:  P(-3,3)  M(-4,3)     NND2:   P(-2,2)  M(-2,2)
-    OMP6:   P(-3,4)  M(-4,3)
-
-**开放问题（对拍锚定点）**：
-1. coords 与面编号 j 的映射（原码 P 线程产面 x+1/2 但 put_du_p 由
-   threadIdx.x!=0 与 block 重叠共同决定实际写入位置）；
-2. 物理面 0 的 P 通量与物理面 nx 的 M 通量的产生机制（outer kernel）；
-3. 每格式的边界层数与 bound 宏条件（coords <= -ka1 vs coords < -ka1）的
-   精确边界（boundp1 用 <=、boundm1 用 <）。
-
-实现时验证：均匀流+单点扰动场，比对边界面通量 vs 原码 dump（方案 9.1 节）。
+- 新增**通用**边界：在 ``_GENERIC_AXIS_FILLERS`` 注册 x/y/z 三个填充函数，
+  并把类型加入 ``GENERIC_KINDS``；轴级 ``bcs`` 会自动展开到六侧。
+- 新增**case 特殊**边界：在 case 侧显式提供带 ``name``、``faces``、``apply``
+  的 ``special_boundary`` 对象，并把 ``apply`` 同时设为 ``bc_apply``；
+  ``mesh_data.from_case`` 和 ``validate_special_sides`` 在 JIT 前校验六侧、
+  回调与轴级 bcs 一致。``plate`` / ``channel`` 是同一入口的两个内置实现。
 """
+
+from collections.abc import Mapping as MappingABC
+from dataclasses import dataclass
+from typing import Any, Callable, Optional, Tuple
+
+import jax.numpy as jnp
+
+LAP = 4
+NVARS = 5
+
+# 边界类型。INFLOW/PLATE/FARFIELD 只用于描述非对称 case 边界；FARFIELD 不是
+# 主循环的轴级 bc，只在 FaceBoundary.kind 出现。
+PERIODIC = "periodic"
+OUTFLOW = "outflow"
+INFLOW = "inflow"
+PLATE = "plate"
+WALL = "wall"
+FARFIELD = "farfield"
+
+GENERIC_KINDS = (PERIODIC, OUTFLOW, WALL)
+SIX_SIDES = ("x-", "x+", "y-", "y+", "z-", "z+")
+
+# 守恒量 var 轴符号：(rho, rho*u, rho*v, rho*w, rho*E)
+_WALL_SIGN = (1.0, -1.0, -1.0, -1.0, 1.0)
+WALL_SIGN = _WALL_SIGN
+
+# 粘性通量 Ev 的镜像符号。x/y 是不同物理分量，不能共用一套。
+EV_WALL_SIGNS = {
+    0: (+1.0, -1.0, +1.0, -1.0),   # x 方向 Ev=(s11,s12,s13,E1)
+    1: (-1.0, +1.0, -1.0, -1.0),   # y 方向 Ev=(s12,s22,s23,E2)：原码符号
+}
+_EV_WALL_SIGNS = EV_WALL_SIGNS
+
+
+def fill_halos_x(f, bc, nx):
+    """沿 x（axis=-1）填充四层鬼胞。f: (..., nx+2*LAP)。"""
+    if bc == PERIODIC:
+        f = f.at[..., :LAP].set(f[..., nx:nx + LAP])
+        f = f.at[..., LAP + nx:].set(f[..., LAP:LAP + LAP])
+    elif bc == OUTFLOW:
+        f = f.at[..., :LAP].set(f[..., LAP:LAP + 1])
+        f = f.at[..., LAP + nx:].set(f[..., LAP + nx - 1:LAP + nx])
+    elif bc in (INFLOW, PLATE):
+        pass   # 由 case 回调写入入口剖面/壁面；单轴填充只保留原值
+    else:
+        raise ValueError(f"unknown bc: {bc}")
+    return f
+
+
+def fill_halos_y(f, bc, ny):
+    """沿 y（axis=-2）填充四层鬼胞。"""
+    if bc == PERIODIC:
+        f = f.at[..., :LAP, :].set(f[..., ny:ny + LAP, :])
+        f = f.at[..., LAP + ny:, :].set(f[..., LAP:LAP + LAP, :])
+    elif bc == OUTFLOW:
+        f = f.at[..., :LAP, :].set(f[..., LAP:LAP + 1, :])
+        f = f.at[..., LAP + ny:, :].set(f[..., LAP + ny - 1:LAP + ny, :])
+    elif bc in (INFLOW, PLATE):
+        pass   # 由 case 回调写入入口/顶部/壁面；单轴填充只保留原值
+    else:
+        raise ValueError(f"unknown bc: {bc}")
+    return f
+
+
+def fill_halos_z(f, bc, nz):
+    """沿 z（axis=-3）填充四层鬼胞。"""
+    if bc == PERIODIC:
+        f = f.at[:, :LAP, :, :].set(f[:, nz:nz + LAP, :, :])
+        f = f.at[:, LAP + nz:, :, :].set(f[:, LAP:LAP + LAP, :, :])
+    elif bc == OUTFLOW:
+        f = f.at[:, :LAP, :, :].set(f[:, LAP:LAP + 1, :, :])
+        f = f.at[:, LAP + nz:, :, :].set(f[:, LAP + nz - 1:LAP + nz, :, :])
+    elif bc in (INFLOW, PLATE):
+        pass   # 由 case 回调写入；单轴填充只保留原值
+    else:
+        raise ValueError(f"unknown bc: {bc}")
+    return f
+
+
+_GENERIC_AXIS_FILLERS = {
+    0: fill_halos_x,
+    1: fill_halos_y,
+    2: fill_halos_z,
+}
+
+
+def fill_halos_axis(f, axis, bc, n):
+    """按方向调用单轴通用填充（f 的最后三轴为 (z,y,x)）。"""
+    return _GENERIC_AXIS_FILLERS[axis](f, bc, n)
+
+
+def fill_wall_y(f, ny):
+    """沿 y 的无滑移壁面状态镜像：rho/rhoE 偶、三个动量奇。
+
+    下壁 ``ghost[p] = f[2*LAP-p] * sign``；上壁
+    ``ghost[ny+LAP+q] = f[ny+LAP-2-q] * sign``。
+    """
+    sign = jnp.array(_WALL_SIGN).reshape(5, 1, 1, 1)
+    mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
+    f = f.at[:, :, :LAP, :].set(mir_lo * sign)
+    mir_hi = f[:, :, ny + LAP - 2:ny + LAP - 6:-1, :]
+    f = f.at[:, :, ny + LAP:ny + 2 * LAP, :].set(mir_hi * sign)
+    return f
+
+
+def fill_halos(f, bcs, nx, ny, nz):
+    """依次填充 x/y/z 鬼胞；y 的 WALL 走状态镜像而不是单轴通用表。"""
+    f = fill_halos_x(f, bcs[0], nx)
+    if bcs[1] == WALL:
+        f = fill_wall_y(f, ny)
+    else:
+        f = fill_halos_y(f, bcs[1], ny)
+    f = fill_halos_z(f, bcs[2], nz)
+    return f
+
+
+def zero_nonperiodic_ghosts(f, bcs, preserve_inflow=False):
+    """清除非周期方向的鬼层，周期方向保留交换值。
+
+    ``preserve_inflow=True`` 时保留 INFLOW 低端鬼层（平板入口状态）。
+    f 的最后三轴为 (z, y, x)，bcs 顺序为 (x, y, z)。
+    """
+    for axis, bc in enumerate(bcs):
+        if bc == PERIODIC:
+            continue
+        ax = f.ndim - 1 - axis
+        f = jnp.moveaxis(f, ax, -1)
+        if not (preserve_inflow and bc == INFLOW):
+            f = f.at[..., :LAP].set(0.0)
+        f = f.at[..., -LAP:].set(0.0)
+        f = jnp.moveaxis(f, -1, ax)
+    return f
+
+
+def fill_ev_wall_y(f, ny, signs):
+    """粘性通量 Ev（4 分量堆叠，(4,z,y,x)）的 y 双壁镜像。"""
+    sign = jnp.array(signs).reshape(4, 1, 1, 1)
+    mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
+    f = f.at[:, :, :LAP, :].set(mir_lo * sign)
+    mir_hi = f[:, :, ny + LAP - 2:ny + LAP - 6:-1, :]
+    f = f.at[:, :, ny + LAP:ny + 2 * LAP, :].set(mir_hi * sign)
+    return f
+
+
+def fill_ev_plate_y(f, ny, signs):
+    """平板 Ev：下壁镜像（同槽道下壁）+ 顶部零梯度（自由来流侧）。"""
+    sign = jnp.array(signs).reshape(4, 1, 1, 1)
+    mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
+    f = f.at[:, :, :LAP, :].set(mir_lo * sign)
+    f = f.at[:, :, ny + LAP:, :].set(f[:, :, ny + LAP - 1:ny + LAP, :])
+    return f
+
+
+def fill_ev_axis(f, axis, bc, nxi, is_ev=False):
+    """Ev 场的单轴填充；壁面/平板规则与守恒量状态规则显式分开。
+
+    wall 目前只在 y 方向支持；x/z 的 WALL 走通用填充会按未知边界报错，
+    避免把槽道镜像误用于其他方向。
+    """
+    if axis == 0:
+        return fill_halos_x(f, bc, nxi)
+    if axis == 1:
+        if bc == WALL:
+            assert is_ev, "cons-level wall fill 应走 fill_wall_y（var 镜像）"
+            return fill_ev_wall_y(f, nxi, EV_WALL_SIGNS[axis])
+        if bc == PLATE:
+            assert is_ev, "cons-level plate fill 由 plate.apply 写入"
+            return fill_ev_plate_y(f, nxi, EV_WALL_SIGNS[axis])
+        return fill_halos_y(f, bc, nxi)
+    return fill_halos_z(f, bc, nxi)
+
+
+# 兼容旧 viscous 内部名；数值行为与 fill_ev_axis 完全相同。
+_fill_ev_wall_y = fill_ev_wall_y
+_fill_ev_plate_y = fill_ev_plate_y
+_fill_axis = fill_ev_axis
+
+
+@dataclass(frozen=True)
+class BoundaryExecution:
+    """JIT 前冻结的边界执行配置（描述、轴级 bcs 与 case 回调同源）。
+
+    mode: ``generic`` / ``channel`` / ``plate`` / ``custom``。
+    callback: case 提供的 ``bc_apply``；generic 必须为 None。
+    faces: 六侧只读描述，用于校验和文档化。
+    channel_bc / plate: 特殊边界的参数包或几何/剖面字典；custom 由 case
+    通过 ``special_boundary`` 对象提供 ``name``、``faces`` 和 ``bc_apply``。
+    """
+
+    mode: str
+    bcs: Tuple[str, str, str]
+    callback: Optional[Callable]
+    faces: Tuple[Any, ...] = ()
+    channel_bc: Any = None
+    plate: Any = None
+
+    def apply(self, q):
+        """调用 case 特殊边界；generic 保持原状态。"""
+        return q if self.callback is None else self.callback(q)
+
+
+def _as_float(value, name):
+    """把边界参数读成有限浮点，拒绝 NaN/inf。"""
+    try:
+        out = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} 必须是浮点数，得到 {value!r}") from exc
+    if not (out == out and abs(out) != float("inf")):
+        raise ValueError(f"{name} 含非有限值: {out}")
+    return out
+
+
+def _face_map(desc):
+    """把描述里的六侧转成 side -> FaceBoundary 的映射。"""
+    faces = tuple(getattr(desc, "faces", ()))
+    if len(faces) != 6 or tuple(f.side for f in faces) != SIX_SIDES:
+        raise ValueError("边界描述必须按 x-/x+/y-/y+/z-/z+ 顺序包含六侧")
+    return {f.side: f for f in faces}
+
+
+def _require_callback(case, label):
+    """取 case 的 bc_apply 并确认可调用。"""
+    callback = case.get("bc_apply")
+    if not callable(callback):
+        raise ValueError(
+            f"{label} 需要可调用的 case['bc_apply'] 回调；"
+            f"得到 {callback!r}")
+    return callback
+
+
+def validate_special_sides(faces, bcs):
+    """校验 case 特殊边界的六侧与轴级 bcs 是否一致，并返回原元组。"""
+    if len(faces) != 6 or tuple(f.side for f in faces) != SIX_SIDES:
+        raise ValueError(
+            "special_boundary.faces 必须按 x-/x+/y-/y+/z-/z+ 顺序给出六侧")
+    for axis, bc in enumerate(bcs):
+        axis_faces = [f for f in faces if f.axis == axis]
+        callback_faces = [f for f in axis_faces
+                          if f.executor in ("callback", "callback+halo")]
+        halo_faces = [f for f in axis_faces if f.executor == "halo"]
+        if callback_faces and bc not in (INFLOW, PLATE):
+            raise ValueError(
+                f"special_boundary axis={axis} 有回调面，轴级 bcs 必须是 "
+                f"INFLOW/PLATE（no-op 占位），得到 {bc!r}")
+        if not callback_faces and bc not in (PERIODIC, OUTFLOW):
+            raise ValueError(
+                f"special_boundary axis={axis} 没有回调面，轴级 bcs 只能是 "
+                f"PERIODIC/OUTFLOW，得到 {bc!r}")
+        for face in halo_faces:
+            if face.kind != bc:
+                raise ValueError(
+                    f"special_boundary {face.side} 的 halo 描述 {face.kind!r} "
+                    f"与轴级 bcs {bc!r} 不一致")
+        if bc == WALL and axis != 1:
+            raise ValueError("special_boundary 的 WALL 只支持 y 方向")
+    return faces
+
+
+def _check_faces(faces, kinds, executors, label):
+    """逐侧核对语义与执行来源；不匹配时在 JIT 前失败。"""
+    expected = {
+        "x-": kinds[0], "x+": kinds[1],
+        "y-": kinds[2], "y+": kinds[3],
+        "z-": kinds[4], "z+": kinds[5],
+    }
+    exec_expected = {
+        "x-": executors[0], "x+": executors[1],
+        "y-": executors[2], "y+": executors[3],
+        "z-": executors[4], "z+": executors[5],
+    }
+    for side in ("x-", "x+", "y-", "y+", "z-", "z+"):
+        face = faces[side]
+        if face.kind != expected[side]:
+            raise ValueError(
+                f"{label} 的 {side} 描述是 {face.kind!r}，但执行配置要求 "
+                f"{expected[side]!r}")
+        if face.executor != exec_expected[side]:
+            raise ValueError(
+                f"{label} 的 {side} 执行来源是 {face.executor!r}，但要求 "
+                f"{exec_expected[side]!r}")
+
+
+def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
+    """在 JIT 前把 case、六侧描述和轴级 bcs 收敛成一份执行配置。
+
+    现有组合只接受三类：通用（仅周期/出流/y 壁面）、channel（IBC=200）、
+    plate（IBC=124）。任何“回调存在但没有专属标记”“标记存在但回调缺失”
+    “固定六侧与 bcs 矛盾”都在这里报错，绝不猜一个能跑的组合。
+    """
+    if not isinstance(case, MappingABC):
+        raise ValueError("case 必须是映射")
+    if desc is None:
+        from .mesh_data import from_case
+        desc = from_case(case)
+    bcs = tuple(getattr(desc, "bcs", ()))
+    if len(bcs) != 3:
+        raise ValueError(f"边界执行配置需要三个轴级 bcs，得到 {bcs}")
+    # case 可能在描述构造后被原地修改；两份轴级 bcs 必须仍是同一份决策。
+    if "bcs" in case and tuple(case["bcs"]) != bcs:
+        raise ValueError(
+            f"case['bcs']={tuple(case['bcs'])} 与已构造描述的 bcs={bcs} 不一致；"
+            "请在修改 bcs 后重新构造描述")
+
+    faces = _face_map(desc)
+    callback = case.get("bc_apply")
+    has_plate = case.get("plate") is not None
+    has_channel = case.get("channel_bc") is not None
+    has_special = case.get("special_boundary") is not None
+    if sum(x is not None for x in (case.get("plate"), case.get("channel_bc"),
+                                   case.get("special_boundary"))) > 1:
+        raise ValueError("case 同时带多种特殊边界标记，无法确定执行策略")
+
+    if has_channel:
+        callback = _require_callback(case, "channel 特殊边界")
+        if bcs != (PERIODIC, WALL, PERIODIC):
+            raise ValueError(
+                f"channel 的固定六侧要求 bcs=(periodic, wall, periodic)，"
+                f"得到 {bcs}；不能把周期轴改成其他边界")
+        _check_faces(
+            faces,
+            (PERIODIC, PERIODIC, WALL, WALL, PERIODIC, PERIODIC),
+            ("halo", "halo", "callback+halo", "callback+halo", "halo", "halo"),
+            "channel")
+        channel_bc = case["channel_bc"]
+        for attr in ("Tw_bottom", "Tw_top"):
+            if not hasattr(channel_bc, attr):
+                raise ValueError(f"channel_bc 缺少 {attr}")
+            _as_float(getattr(channel_bc, attr), f"channel_bc.{attr}")
+        for side in ("y-", "y+"):
+            face = faces[side]
+            if face.thermal not in ("isothermal", "adiabatic"):
+                raise ValueError(f"channel {side} 缺少热条件描述")
+            if "Tw" not in face.params:
+                raise ValueError(f"channel {side} 缺少 Tw 参数")
+        return BoundaryExecution("channel", bcs, callback, tuple(faces.values()),
+                                 channel_bc=channel_bc)
+
+    if has_plate:
+        callback = _require_callback(case, "plate 特殊边界")
+        if bcs != (INFLOW, PLATE, PERIODIC):
+            raise ValueError(
+                f"plate 的固定六侧要求 bcs=(inflow, plate, periodic)，"
+                f"得到 {bcs}；入口/壁面/顶部不能换成通用轴级边界")
+        _check_faces(
+            faces,
+            (INFLOW, OUTFLOW, WALL, FARFIELD, PERIODIC, PERIODIC),
+            ("callback", "callback", "callback", "callback", "halo", "halo"),
+            "plate")
+        plate_marker = case["plate"]
+        if not isinstance(plate_marker, MappingABC):
+            raise ValueError("case['plate'] 必须是映射")
+        for side in ("y-", "y+"):
+            face = faces[side]
+            if side == "y-" and face.thermal != "isothermal":
+                raise ValueError("plate y- 必须描述为等温壁")
+        return BoundaryExecution("plate", bcs, callback, tuple(faces.values()),
+                                 plate=plate_marker)
+
+    if has_special:
+        callback = _require_callback(case, "special_boundary 特殊边界")
+        special = case["special_boundary"]
+        if not isinstance(getattr(special, "name", None), str):
+            raise ValueError("special_boundary 需要字符串 name")
+        marker_faces = tuple(getattr(special, "faces", ()))
+        validate_special_sides(marker_faces, bcs)
+        if marker_faces != tuple(faces.values()):
+            raise ValueError("special_boundary.faces 与已构造的六侧描述不一致")
+        return BoundaryExecution("custom", bcs, callback, marker_faces)
+
+    if callback is not None:
+        raise ValueError(
+            "case 提供了 bc_apply，但没有 channel_bc / plate 特殊边界标记；"
+            "未知特殊边界必须在 case 侧显式选择并补六侧描述")
+    for axis, bc in enumerate(bcs):
+        if bc not in GENERIC_KINDS:
+            raise ValueError(
+                f"通用边界不支持轴级 {bc!r}；INFLOW/PLATE 只能用于专属算例")
+        if bc == WALL and axis != 1:
+            raise ValueError(
+                f"通用 WALL 只支持 y 方向（axis=1），得到 axis={axis}")
+    _check_faces(faces, kinds_for(bcs), ("halo",) * 6, "generic")
+    return BoundaryExecution("generic", bcs, None, tuple(faces.values()))
+
+
+def kinds_for(bcs):
+    """把轴级 bcs 展开成六侧语义序列（x-,x+,y-,y+,z-,z+）。"""
+    return (bcs[0], bcs[0], bcs[1], bcs[1], bcs[2], bcs[2])
