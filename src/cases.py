@@ -13,27 +13,10 @@ from .fields import INFLOW, OUTFLOW, PERIODIC, PLATE, WALL, Grid
 from .viscous import PhysParams
 
 
-def _dimension(args, name, legacy, default):
-    """读取一个网格尺寸：新名优先，旧名兼容，同时给出时冲突报错。
-
-    解析器把旧开关存到 ``legacy_*``，以避免正常解析器给旧名补默认值；
-    这里的直接 ``build_case`` 调用还需要兼容只带旧名的命名空间。
-    """
-    new = getattr(args, name, None)
-    old = getattr(args, legacy, None)
-    old_dest = getattr(args, f"legacy_{legacy}", None)
-    if old is None:
-        old = old_dest
-    if new is None:
-        return default if old is None else old
-    if old is not None and old != new:
-        # 只带 legacy_* 的原始 parser 结果：旧名视为用户显式选择，直接
-        # 采用；生产路径已经由 runtime_config.resolve_args 同时写入新旧
-        # 两侧并处理显式冲突，不会走到这个分支。
-        if old_dest is not None:
-            return old
-        raise ValueError(f"网格尺寸 {name}/{legacy} 冲突：{new!r} != {old!r}")
-    return new
+def _dimension(args, name, default):
+    """读取一个网格尺寸；缺省时返回算例的默认值。"""
+    value = getattr(args, name, None)
+    return default if value is None else value
 
 
 def make_initial_sod(grid, dx, x_diaphragm=0.5, gamma=1.4):
@@ -109,7 +92,7 @@ def build_case(args):
     """
     gamma = 1.4
     # 横向/展向网格数：原码由 in 文件 GRID_3D 决定，这里不再写死 4。
-    nk = int(_dimension(args, "nk", "nz", 4) or 4)
+    nk = int(_dimension(args, "nk", 4) or 4)
     # Ref_T 是**有量纲的参考温度（K）**，与原码 in 文件的 T_REF 同义：
     # Tsb = 110.4/Ref_T、amu_C0 = (1+110.4/Ref_T)/Re，所以 μ(T=1)=1/Re 与
     # Ref_T 无关，但 T≠1 的 Sutherland 曲线随 Ref_T 变——原码对拍必须同值。
@@ -126,8 +109,8 @@ def build_case(args):
         # 与 viscous.py 的 OCFD Ama 缩放约定（T = E_int/Cv）不匹配——
         # sod + --viscous 时 mu 由该 T 算出，无物理意义（run.py 有警告）。
         # 对拍/研究粘性请用 tg 或 poiseuille 算例。
-        ni = int(_dimension(args, "ni", "N", 256))
-        nj = int(_dimension(args, "nj", "ny", 4) or 4)
+        ni = int(_dimension(args, "ni", 256))
+        nj = int(_dimension(args, "nj", 4) or 4)
         grid = Grid(ni=ni, nj=nj, nk=nk)
         dx = 1.0 / ni
         cons = make_initial_sod(grid, dx, gamma=gamma)
@@ -136,8 +119,8 @@ def build_case(args):
                     forcing=None, gamma=gamma)
 
     if args.case == "tg":
-        ni = int(_dimension(args, "ni", "N", 256))
-        nj = int(_dimension(args, "nj", "ny", ni))
+        ni = int(_dimension(args, "ni", 256))
+        nj = int(_dimension(args, "nj", ni))
         grid = Grid(ni=ni, nj=nj, nk=nk)
         dx = 2.0 * np.pi / ni
         cons = make_initial_tg(grid, params)
@@ -146,8 +129,8 @@ def build_case(args):
                     forcing=None, gamma=gamma)
 
     if args.case == "poiseuille":
-        ni = int(_dimension(args, "ni", "N", 256))
-        nj = int(_dimension(args, "nj", "ny", 64))
+        ni = int(_dimension(args, "ni", 256))
+        nj = int(_dimension(args, "nj", 64))
         grid = Grid(ni=ni, nj=nj, nk=nk)
         dx = 2.0 * np.pi / ni          # 流向周期域 [0,2pi]
         G = args.p_grad               # 体积力（单位质量）
@@ -219,8 +202,8 @@ def build_case(args):
         # 无量纲口径：ρ∞=T∞=U∞=1 ⇒ μ(T=1)=1/Re（与 Ref_T 无关）、ν=1/Re、
         # Re_x = x·Re、M∞ = U∞/sqrt(γ R T) = Ama。验收基准是 blasius.py。
         from . import blasius, channel, plate
-        ni = int(_dimension(args, "ni", "N", 256))
-        nj = int(_dimension(args, "nj", "ny", 64))
+        ni = int(_dimension(args, "ni", 256))
+        nj = int(_dimension(args, "nj", 64))
         x0 = float(getattr(args, "plate_x0", 0.1))
         x1 = float(getattr(args, "plate_x1", 1.1))
         H = float(getattr(args, "plate_h", 0.12))

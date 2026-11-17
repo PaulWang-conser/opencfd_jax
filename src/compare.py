@@ -3,7 +3,7 @@
 子命令：
   compare.py dat2npz <原版dump目录> [--out dump-npz]
       原版 dump（patches/main_dump.c 的 %.17e 文本）→ npz（统一对拍格式）。
-  compare.py jax-run --case sod --N 128 --steps 3 --dt 0.001 [--fp64] [--out dump-jax]
+  compare.py jax-run --case sod --ni 128 --steps 3 --dt 0.001 [--fp64] [--out dump-jax]
       JAX 侧对照跑：读原版 step0 守恒量作初值，跑同 dt 步数，逐 RK 子步存 du、
       每整步存 cons（npz）。
   compare.py diff <原版npz目录> <jax npz目录>
@@ -135,11 +135,11 @@ def cmd_jax_run(args):
     from opencfd_jax.solver import inviscid_rhs, rk3_step_stages
     from opencfd_jax.viscous import viscous_rhs
 
-    args_case = argparse.Namespace(case=args.case, N=args.N, ny=args.ny,
+    args_case = argparse.Namespace(case=args.case, ni=args.ni, nj=args.nj,
                                    Re=args.Re, Ama=args.Ama,
                                    ref_t=getattr(args, "ref_t", None),
                                    pr=getattr(args, "pr", 0.7),
-                                   nz=getattr(args, "nz", 4),
+                                   nk=getattr(args, "nk", 4),
                                    p_grad=args.p_grad, scheme=args.scheme,
                                    viscous=args.viscous,
                                    forcing_work=getattr(args, "forcing_work", "off"))
@@ -173,7 +173,7 @@ def cmd_jax_run(args):
             raise ValueError(
                 f"ref {tag} shape {arr.shape} != grid (nk,nj,ni)="
                 f"{(grid.nk, grid.nj, grid.ni)}——原版 in 文件 GRID_3D 与 JAX 侧"
-                f"网格不一致（用 --N/--ny/--nz 对齐 in 文件的三维）")
+                f"网格不一致（用 --ni/--nj/--nk 对齐 in 文件的三维）")
         cons = cons.at[(v,) + grid.inner()[1:]].set(jnp.asarray(arr))
 
     metrics = desc.metrics
@@ -278,10 +278,10 @@ def main():
                      help="原码场文件（opencfd.dat / OCFD000xx.dat），channel 初场")
     sp2.add_argument("--mesh", default=None,
                      help="原码 OCFD3d-Mesh.dat；给出则按 JAC_BOUND=1 接入度量")
-    sp2.add_argument("--N", type=int, default=128)
-    sp2.add_argument("--ny", type=int, default=8)
-    sp2.add_argument("--nz", type=int, default=4,
-                     help="z 向网格数，必须等于 in 文件 GRID_3D 的第三个数")
+    sp2.add_argument("--ni", type=int, default=128)
+    sp2.add_argument("--nj", type=int, default=8)
+    sp2.add_argument("--nk", type=int, default=4,
+                     help="k 向网格数，必须等于 in 文件 GRID_3D 的第三个数")
     sp2.add_argument("--steps", type=int, default=3)
     sp2.add_argument("--dt", type=float, default=0.001)
     sp2.add_argument("--Re", type=float, default=1000.0)

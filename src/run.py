@@ -5,7 +5,6 @@
     python -m opencfd_jax.src.run --case tg  --ni 64  --scheme UP7 --end-time 0.5 --Re 50
     python -m opencfd_jax.src.run --case poiseuille --ni 32 --nj 64 --p-grad 0.1 \
         --Re 100 --end-time 2.0 --viscous
-旧名 --N/--ny/--nz 仍可用，分别等同 --ni/--nj/--nk。
 
 主循环对齐原码：每步 dt_fn → RK3（+forcing）→ 每 Kstep_show 同步打印诊断
 （ana_residual/NAN）→ 每 Kstep_save 存 npz。滤波按原码节奏每 nstep_filter
@@ -106,15 +105,9 @@ def build_parser(explicit_only=False):
     add("--mesh", default=None,
         help="原码 OCFD3d-Mesh.dat；给出则按 JAC_BOUND=1 算度量并接进差分主链，"
              "不给等于 JAC_BOUND=0（Ajac=1）")
-    add("--ni", type=int, default=256, help="计算 i 方向网格（旧名 --N）")
-    add("--nj", type=int, default=64, help="计算 j 方向网格（旧名 --ny）")
-    add("--nk", type=int, default=4, help="计算 k 方向网格（旧名 --nz）")
-    add("--N", dest="legacy_N", type=int, default=None,
-        help="兼容旧名，等同 --ni（计算 i 方向）")
-    add("--ny", dest="legacy_ny", type=int, default=None,
-        help="兼容旧名，等同 --nj（计算 j 方向）")
-    add("--nz", dest="legacy_nz", type=int, default=None,
-        help="兼容旧名，等同 --nk（计算 k 方向；原码 in 文件 GRID_3D 的第三个数）")
+    add("--ni", type=int, default=256, help="计算 i 方向网格")
+    add("--nj", type=int, default=64, help="计算 j 方向网格")
+    add("--nk", type=int, default=4, help="计算 k 方向网格")
     add("--scheme", default="UP7",
         choices=runtime_config.SCHEMES)
     add("--cfl", type=float, default=0.4)
@@ -306,9 +299,10 @@ def run(args):
                 f"{args.out_dir}/{io.checkpoint_name(prefix, step)}",
                 {f"cons_{i}": np.asarray(cons[grid.inner()][i]) for i in range(5)},
                 meta={"t": t, "step": step, "dt": dt, "case": args.case,
-                      "N": grid.ni, "scheme": args.scheme, "gamma": gamma,
-                      "Re": args.Re, "Ama": args.Ama,
-                      "Ref_T": params.Ref_T, "Pr": params.Pr})
+                      "N": grid.ni, "scheme": args.scheme,
+                      "gamma": params.gamma, "Re": params.Re,
+                      "Ama": params.Ama, "Ref_T": params.Ref_T,
+                      "Pr": params.Pr})
     print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")
 
 

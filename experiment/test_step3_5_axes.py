@@ -2,7 +2,7 @@
 
 覆盖：i/j/k 与旧 x/y/z 的词表映射、Grid 新旧构造入口、FaceBoundary/
 BlockMesh 的规范面名与旧名查找、boundary 填充别名、`infile.grid_dims_ijk`
-及 CLI `--ni/--nj/--nk` 与旧 `--N/--ny/--nz` 的合并/冲突。
+及 CLI `--ni/--nj/--nk` 入口。
 """
 
 import argparse
@@ -181,36 +181,16 @@ def test_field_reader_new_and_old_dimensions_agree():
 
 # --------------------------------------------------------------------- CLI
 
-def test_cli_new_dimension_names_fill_legacy_aliases():
+def test_cli_new_dimension_names_fill_canonical_values():
     args = _resolve(["--ni", "8", "--nj", "7", "--nk", "6"])
     assert (args.ni, args.nj, args.nk) == (8, 7, 6)
-    assert (args.N, args.ny, args.nz) == (8, 7, 6)
-    assert args.config_sources["N"] == "cli(--ni)"
+    assert args.config_sources["ni"] == "cli"
 
 
-def test_cli_legacy_dimension_names_fill_canonical_aliases():
-    args = _resolve(["--N", "8", "--ny", "7", "--nz", "6"])
-    assert (args.N, args.ny, args.nz) == (8, 7, 6)
-    assert (args.ni, args.nj, args.nk) == (8, 7, 6)
-    assert args.config_sources["ni"] == "cli(--N)"
-
-
-def test_cli_legacy_names_use_separate_dest_and_build_case():
-    """旧开关无缺省 dest；直接 parser + build_case 也能得到旧尺寸。"""
-    parsed = run.build_parser().parse_args(
-        ["--case", "sod", "--N", "16", "--ny", "8", "--nz", "4"])
-    assert parsed.legacy_N == 16
-    assert parsed.legacy_ny == 8
-    assert parsed.legacy_nz == 4
-    assert not hasattr(parsed, "N")
-    case = run.build_case(parsed)
-    assert (case["grid"].ni, case["grid"].nj, case["grid"].nk) == (16, 8, 4)
-
-
-def test_cli_dimension_conflict_is_rejected():
-    with pytest.raises(runtime_config.ConfigError, match="不一致"):
-        _resolve(["--ni", "8", "--N", "16"])
-    with pytest.raises(runtime_config.ConfigError, match="不一致"):
-        _resolve(["--nj", "7", "--ny", "8"])
-    with pytest.raises(runtime_config.ConfigError, match="不一致"):
-        _resolve(["--nk", "6", "--nz", "4"])
+def test_cli_old_dimension_flags_are_gone():
+    with pytest.raises(SystemExit):
+        run.build_parser().parse_args(["--N", "8"])
+    with pytest.raises(SystemExit):
+        run.build_parser().parse_args(["--ny", "7"])
+    with pytest.raises(SystemExit):
+        run.build_parser().parse_args(["--nz", "6"])

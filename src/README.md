@@ -59,7 +59,6 @@ output/sod-istep-00000100.npz
 | ------------------------- | ------------------------------------------------------- |
 | `--case`                  | 算例：`sod` / `tg` / `poiseuille` / `channel` / `plate`    |
 | `--ni --nj --nk`          | 计算 i/j/k 方向内区网格数，缺省 256/64/4                          |
-| `--N --ny --nz`           | 兼容旧名，分别等同 `--ni/--nj/--nk`；新旧同时给出且不同值会报错            |
 | `--scheme`                | 无粘重构格式，默认 `UP7`                                         |
 | `--dt`                    | 固定时间步长；不提供时按 `--cfl` 自适应计算                              |
 | `--cfl`                   | 自适应步长的 CFL 数，默认 0.4                                     |
@@ -488,7 +487,7 @@ case["bc_apply"] = special.apply
 
 ```
 cons_0 ... cons_4：五个守恒变量的物理内区，形状均为 (nk, nj, ni)
-_meta            ：JSON 元信息，包括 t、step、dt、case、N（实际 i 方向网格）、scheme、gamma、Re、Ama、Ref_T、Pr
+_meta            ：JSON 元信息，包括 t、step、dt、case、N（实际 i 方向网格）、scheme、gamma、Re、Ama、Ref_T、Pr；槽道的 Re/Ama 取 `.in` 解析后的实际物性
 ```
 
 读取示例：
@@ -573,7 +572,7 @@ python -m opencfd_jax.src.run --case channel `
 
 ```
 python -m opencfd_jax.src.run --case plate `
-  --N 200 --ny 256 --nz 6 `
+  --ni 200 --nj 256 --nk 6 `
   --scheme OMP6_CD8 --viscous --vis-order CD8 `
   --Re 10000 --Ama 0.0955 --ref-t 1 `
   --dt 0.000009051060300912213 --end-step 1
@@ -640,7 +639,7 @@ JAX NPZ（逐子步 du、逐整步 cons）
 python -m opencfd_jax.src.compare dat2npz path/to/original-dump --out dump-npz
 
 python -m opencfd_jax.src.compare jax-run `
-  --case sod --N 128 --ny 4 --nz 4 `
+  --case sod --ni 128 --nj 4 --nk 4 `
   --steps 3 --dt 0.001 --scheme UP7 `
   --ref-dir dump-npz --out dump-jax
 

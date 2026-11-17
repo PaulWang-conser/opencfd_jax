@@ -103,7 +103,7 @@ def main():
     from opencfd_jax.src.solver import rk3_step_stages
 
     ns = SimpleNamespace(
-        case="channel", N=96, ny=97, nz=64, Re=190.7, Ama=0.0955,
+        case="channel", ni=96, nj=97, nk=64, Re=190.7, Ama=0.0955,
         ref_t=300.0, pr=0.7, p_grad=0.1, scheme=args.scheme,
         vis_order=args.vis_order, weno_tv=False, viscous=True,
         forcing_work="off", infile=str(run_dir / "opencfd-scu.in"),

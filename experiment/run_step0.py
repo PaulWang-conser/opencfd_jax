@@ -118,7 +118,7 @@ def run_one(case: dict, out_root: Path, python: str, arg_source: str = "cli") ->
     """跑一个用例：清目录 → 子进程 → 收 npz → 写 case.json。
 
     ``arg_source="json"`` 时改用用例的 ``input.json``（只把 JSON 无可表达的
-    网格维数留在命令行），用于验证 JSON 与旧 CLI 的数值等价。
+    网格维数留在命令行），用于验证 JSON 与新 CLI 的数值等价。
     """
     case_out = out_root / case["id"]
     safe_rmtree(case_out, out_root)
@@ -199,7 +199,7 @@ def main():
     p.add_argument("--only", nargs="*", default=None, help="只跑这些 id")
     p.add_argument("--python", default=sys.executable)
     p.add_argument("--arg-source", choices=["cli", "json"], default="cli",
-                   help="走旧命令行（cli）还是用例 JSON（json）；基准始终用 cli")
+                   help="走命令行（cli）还是用例 JSON（json）；基准始终用 cli")
     p.add_argument("--list", action="store_true", help="只打印用例清单")
     args = p.parse_args()
 

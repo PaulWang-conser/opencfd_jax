@@ -1,7 +1,7 @@
 """Step 3 统一运行配置（`input.json`）的验收测试。
 
 覆盖：默认值/JSON/显式 CLI 的合并优先级、字段与算例适用范围、槽道 `.in`
-优先级、输出前缀、负向开关、自适应 dt，以及七条 Step 0 用例的 JSON 与旧
+优先级、输出前缀、负向开关、自适应 dt，以及七条 Step 0 用例的 JSON 与
 CLI 参数等价。
 """
 
@@ -213,7 +213,7 @@ def test_channel_json_paths_are_relative_to_config():
 
 
 COMPARE_ATTRS = (
-    "case", "N", "ny", "nz", "scheme", "vis_order", "viscous", "Re", "Ama",
+    "case", "ni", "nj", "nk", "scheme", "vis_order", "viscous", "Re", "Ama",
     "ref_t", "pr", "forcing_work", "p_grad", "dt", "cfl", "end_time",
     "end_step", "kstep_show", "kstep_save", "plate_x0", "plate_x1", "plate_h",
     "mesh", "field", "infile", "out_prefix",
@@ -221,11 +221,11 @@ COMPARE_ATTRS = (
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
-def test_json_matches_legacy_cli_arguments(case):
-    legacy = parse(case["argv"])
+def test_json_matches_cli_arguments(case):
+    cli = parse(case["argv"])
     as_json = parse(["--config", str(config_path(case)), *case["json_argv"]])
     for attr in COMPARE_ATTRS:
-        assert getattr(as_json, attr) == getattr(legacy, attr), attr
+        assert getattr(as_json, attr) == getattr(cli, attr), attr
 
 
 def test_channel_without_infile_cli_fails():
@@ -247,9 +247,9 @@ def test_missing_cli_input_file_fails():
 
 
 def test_cli_and_json_bitwise(tmp_path):
-    """同一条 Sod 用例：旧 CLI 与 input.json 的 npz 必须逐位一致。"""
+    """同一条 Sod 用例：新 CLI 与 input.json 的 npz 必须逐位一致。"""
     cli_out, json_out = tmp_path / "cli", tmp_path / "json"
-    base = ["--case", "sod", "--N", "16", "--ny", "4", "--nz", "4",
+    base = ["--case", "sod", "--ni", "16", "--nj", "4", "--nk", "4",
             "--scheme", "UP7", "--dt", "5e-4", "--end-step", "3",
             "--end-time", "0.01", "--kstep-show", "1", "--kstep-save", "1"]
     subprocess.run(
@@ -264,7 +264,7 @@ def test_cli_and_json_bitwise(tmp_path):
     })
     subprocess.run(
         [sys.executable, "-m", "opencfd_jax.src.run", "--config", cfg,
-         "--N", "16", "--ny", "4", "--nz", "4"],
+         "--ni", "16", "--nj", "4", "--nk", "4"],
         cwd=str(PROJECT), check=True, capture_output=True, text=True)
 
     cli_files = sorted(cli_out.glob("*.npz"))
