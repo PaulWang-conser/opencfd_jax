@@ -89,7 +89,8 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
         elif scheme == "WENO7-SYMBO":
             tv = weno_tv if weno_tv is not None else (None, None)
             du_var = weno7_symbo_rhs_along_last_axis(
-                fp[var], fm[var], dxs[axis], tv_limiter=tv[0], tv_max_cap=tv[1])
+                fp[var], fm[var], dxs[axis], tv_limiter=tv[0], tv_max_cap=tv[1],
+                bound=bound)
         elif scheme in SOLVE_SCHEMES:
             du_var = SOLVE_SCHEMES[scheme](fp[var], fm[var], dxs[axis], bound=bound)
         else:

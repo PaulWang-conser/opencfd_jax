@@ -276,6 +276,10 @@ du = -(F_right - F_left) / h
 * `fields.py` 提供周期、出流和壁面镜像鬼胞。
 
 * `schemes.py::flux_band_faces()` 根据 `DIF_BOUND` 在指定边界带改用原码单侧 / 降阶面通量公式。
+  各格式分别声明原码 P/M 内核的 `(ka1, kb1)` 模板范围；新增格式可使用
+  `schemes.make_flux_rhs(face_P, face_M, p_template, m_template, m_boundary="m")`
+  包装并注册到 `SOLVE_SCHEMES`。模板偏移相对各自的 CUDA 内核节点，M 内核
+  若调用 P 边界宏则传 `m_boundary="p"`。超出当前原码边界宏定义的范围会报错。
 
 * `boundary.py` 是这些边界公式的推导与核对笔记，**不被主循环直接调用**。
 

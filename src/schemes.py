@@ -257,11 +257,13 @@ def weno7_symbo_face_M(g, tv_limiter=None, tv_max_cap=None):
 
 
 def weno7_symbo_rhs_along_last_axis(fp, fm, h=1.0,
-                                    tv_limiter=None, tv_max_cap=None):
+                                    tv_limiter=None, tv_max_cap=None, bound=None):
     """单方向 WENO7-SYMBO 通量差分（fp 走 P、fm 走 M，M 为镜像实现）。"""
-    face = (_weno7_symbo_face_P(fp, tv_limiter, tv_max_cap)
-            + weno7_symbo_face_M(fm, tv_limiter, tv_max_cap))
-    return _du_from_faces(face) / h
+    p = _weno7_symbo_face_P(fp, tv_limiter, tv_max_cap)
+    m = weno7_symbo_face_M(fm, tv_limiter, tv_max_cap)
+    if bound is not None and (bound[0] or bound[1]):
+        p, m = flux_band_faces(p, m, fp, fm, lo=bool(bound[0]), hi=bool(bound[1]))
+    return _du_from_faces(p + m) / h
 
 
 # ============================ 格式族扩展（P2） ==============================
@@ -340,11 +342,13 @@ def _weno7_face_P(g):
     t1 = 12.0 * s3 - 30.0 * s4 + 24.0 * s5 - 6.0 * s6
     t2 = -6.0 * s3 + 18.0 * (s4 - s5) + 6.0 * s6
     S3 = 960.0 * t0 ** 2 + 1040.0 * t1 ** 2 + 1043.0 * t2 ** 2 + 80.0 * t0 * t2
-    e2 = _WENO7_EPS * _WENO7_EPS
-    a0 = (e2 + S1) * (e2 + S1) * (e2 + S2) * (e2 + S2) * (e2 + S3) * (e2 + S3)
-    a1 = 12.0 * (e2 + S0) * (e2 + S0) * (e2 + S2) * (e2 + S2) * (e2 + S3) * (e2 + S3)
-    a2 = 18.0 * (e2 + S0) * (e2 + S0) * (e2 + S1) * (e2 + S1) * (e2 + S3) * (e2 + S3)
-    a3 = 4.0 * (e2 + S0) * (e2 + S0) * (e2 + S1) * (e2 + S1) * (e2 + S2) * (e2 + S2)
+    # 原码 OCFD_Schemes.cu:643-646 直接写 (3.456e-4 + S)，加性项就是 epsilon 本身，
+    # 不能再平方（平方后 1.19e-7 与原码差 2900 倍，会在通量很小的贴壁带放大成 1e-4 量级）。
+    e = _WENO7_EPS
+    a0 = (e + S1) * (e + S1) * (e + S2) * (e + S2) * (e + S3) * (e + S3)
+    a1 = 12.0 * (e + S0) * (e + S0) * (e + S2) * (e + S2) * (e + S3) * (e + S3)
+    a2 = 18.0 * (e + S0) * (e + S0) * (e + S1) * (e + S1) * (e + S3) * (e + S3)
+    a3 = 4.0 * (e + S0) * (e + S0) * (e + S1) * (e + S1) * (e + S2) * (e + S2)
     am = a0 + a1 + a2 + a3
     p = ((-3.0 * s0 + 13.0 * s1 - 23.0 * s2 + 25.0 * s3) * a0
          + (s1 - 5.0 * s2 + 13.0 * s3 + 3.0 * s4) * a1
@@ -445,38 +449,6 @@ def _omp6_face_M(g, omp6_flag):
 
 
 # ---- 面通量带：OCFD boundp1/boundp2 + boundm1/boundm2 ----
-#
-# 原码在物理边界那侧把 job 往外扩一行（OCFD_Schemes_Choose.cu:201-213 / ~547-550
-# `job_in.start.y -= 1` / `job_in.end.y += 1`，blockdim.y += 1），所以宏里的局部坐标
-# coords = 内区节点号 ∓ 1（`get_data_kernel` 返回的是**作业内局部下标**，
-# job.start 的偏移在 get_SoA_LAP 的 offset 里加，见 OCFD_Schemes.cu:159-232）。
-# 据此把 OCFD_bound_Scheme.cu:689-701（P 侧 boundp2）与 :789-804（M 侧 boundm2）
-# 翻译成面数组的覆盖值。上界作业的几何是
-#     P 内核：节点 y = ny-4 .. ny+2，blockdim.y = 8  ⇒ tmp1 = coords - (2LAP+1) ∈ [-9,-1]
-#     M 内核：节点 y = ny-3 .. ny+3（最上一行是上界鬼胞）
-# 层数由各格式的 ka1/kb1 定：OMP6 P kb1=4 ⇒ 守卫 coords > -4 ⇒ 命中 -1,-2,-3；
-# OMP6 M kb1=3 ⇒ 守卫 coords >= -4 ⇒ 命中 -1,-2,-3,-4；tmp1 ≤ -5 时 bound 函数
-# 不返回 0、代码落到末尾 `return 1`，调用方于是跑正常重构（静默回落，无未定义行为）。
-#
-#   P 侧（fp，boundp2）       面号 → 公式
-#       face n   = P[n-1] + 0.5(P[n-1]-P[n-2])           (tmp1=-1，2 阶单侧外推)
-#       face n-1 = P_right_plus，s = P[n-4..n-1]         (tmp1=-2)
-#       face n-2 = WENO5_P，s = P[n-5..n-1]              (tmp1=-3)
-#       face n-3 / 更低  正常 OMP6（tmp1=-4 越界 ⇒ 回落）
-#   M 侧（fm，boundm2）
-#       face n   = M[n-1]                                (tmp1=-1，壁面 cell 的 M 拷贝)
-#       face n-1 = M[n-1] - 0.5(M[n-1]-M[n-2])           (tmp1=-2)
-#       face n-2 = M_right_plus，s = M[n-4..n-1]         (tmp1=-3)
-#       face n-3 = WENO5_M，s = M[n-5..n-1]              (tmp1=-4)
-#
-# 关键点：上面 7 条**全部只用 compact cell ≤ n-1**（n-1 就是壁面那一层 cell，由 BC
-# 写成 u=v=w=0 / T=Tw / ρ=pw/T），一个鬼胞都不读。这不是巧合：M 内核 end+1 的偏移
-# 让它的"节点 n"正好落在鬼胞上，公式于是改用 cell n-1 的拷贝；壁面面通量由壁面状态
-# 决定（(P+M)[n-1] 数值上就是 (0, 0, p_w, 0, 0)），用镜像鬼胞做插值拿到的是反射状态
-# 的分裂通量，会把唯一非零的压力项也搅掉。
-#
-# 低端（boundp1/boundm1）照旧保留：P 3 面 + M 1 面，M 侧那一处原码确实借了 f_{-1}，
-# 这里照抄。整体公式按 OMP6 的 ka1/kb1 硬编码（槽道算例用 OMP6_CD8）。
 _BAND_EP = 1e-6
 
 
@@ -495,97 +467,84 @@ def _band_S_lift(f0, f1, f2):
     return 13.0 * (f0 - 2.0 * f1 + f2) ** 2 + 3.0 * (3.0 * f0 - 4.0 * f1 + f2) ** 2
 
 
-def flux_band_faces(Fp, Fm, fp, fm, lo=True, hi=True):
-    """把原码的边界带覆盖到 P/M 面数组上（只改边界那几个面，其余原样）。
+def flux_band_faces(Fp, Fm, fp, fm, lo=True, hi=True,
+                    p_template=(-3, 4), m_template=(-4, 3),
+                    m_boundary="m"):
+    """按 OCFD 的模板范围和边界宏覆盖 P/M 面值。
 
-    Fp/Fm: (..., n+1) 正常重构出来的 P/M 面值；fp/fm: (..., n+2LAP) 分裂通量场。
-    lo: 该侧是否 DIF_BOUND=1（下界，原码走 boundp1/boundm1）。
-    hi: 上界，原码走 boundp2/boundm2（P 3 层 + M 4 层，全部只用 cell ≤ n-1）。
-
-    当前低端带的面与窗口映射尚需逐面和原码核对；调用方应根据边界状态计算
-    分裂通量鬼层，不能假定它们都为零。
+    模板是 CUDA 内核传给边界宏的 (ka1, kb1)，相对该内核节点；
+    P 节点为面左侧，M 节点为面右侧。m_boundary="p" 对应 WENO7
+    的 M 内核调用 P 宏。新增格式应声明自己的两个模板和宏类型。
+    当前边界宏只定义到 P 的 coords=3、M 的 coords=3 及相应上界。
     """
+    if m_boundary not in ("p", "m"):
+        raise ValueError("m_boundary 必须是 p 或 m")
+    for template, kind in ((p_template, "p"), (m_template, m_boundary)):
+        ka, kb = template
+        if not (-3 <= ka <= -2 if kind == "p" else -4 <= ka <= -2):
+            raise ValueError("模板左边界超出 OCFD 边界宏支持范围")
+        if not (2 <= kb <= 4 if kind == "p" else 2 <= kb <= 3):
+            raise ValueError("模板右边界超出 OCFD 边界宏支持范围")
+
     n = fp.shape[-1] - 2 * LAP
     if n < 6:
-        return Fp, Fm                       # 太小，跳过（原码也不会有这么小的块）
-    P = fp[..., LAP:LAP + n]                # 内区节点（紧凑索引 = 节点号）
-    M = fm[..., LAP:LAP + n]
+        raise ValueError("启用面通量边界带至少需要 6 个节点")
     e = 12.0 * _BAND_EP
 
-    if lo:
-        # ---------------- P 侧：boundp1 ----------------
-        # 面 0 → stencil[-ka1+1]（源码就是"拷贝偏移 +1 那格"，er 已简化为直接拷）
-        # 面 1 → P_lift 窗口 (0,1,2)  ⇒ (2f0+5f1−f2)/6
-        # 面 2 → P_lift_plus 窗口 (−1,0,1,2)
-        Fp = Fp.at[..., 0].set(P[..., 0])
-        Fp = Fp.at[..., 1].set((2.0 * P[..., 0] + 5.0 * P[..., 1] - P[..., 2]) / 6.0)
-        q03 = 2.0 * P[..., 1] + 5.0 * P[..., 2] - P[..., 3]
-        q13 = -P[..., 0] + 5.0 * P[..., 1] + 2.0 * P[..., 2]
-        a0 = 3.0 / (e + _band_S_lift(P[..., 1], P[..., 2], P[..., 3])) ** 2
-        a1 = 6.0 / (e + _band_S_sym(P[..., 0], P[..., 1], P[..., 2])) ** 2
-        Fp = Fp.at[..., 2].set((a0 * q03 + a1 * q13) / (6.0 * (a0 + a1)))
+    def reconstruct(g, base, kind, branch):
+        # stencil[-ka-2] 指向 base-2；实际只取各分支用到的值。
+        def at(offset):
+            return g[..., LAP + base + offset]
 
-        # ---------------- M 侧：boundm1 ----------------
-        # coords==0 → OCFD_weno5_kernel_M_lift(&stencil[-ka1-2])：**单候选**，
-        # 结果就是纯 q23/6（窗口 (0,1,2)，不含鬼胞）。之前这里写成了 q13/q23 的加权混合，
-        # 壁面 k0 因此差 48.8%；改成纯 q23/6 后差 0.45%。
-        q23 = 2.0 * M[..., 2] - 7.0 * M[..., 1] + 11.0 * M[..., 0]
-        Fm = Fm.at[..., 0].set(q23 / 6.0)
+        if kind == "p" and branch == "lo0":
+            return at(1)
+        if kind == "m" and branch == "hi1":
+            return at(-1)
+        if kind == "p" and branch == "hi1":
+            return at(0) + 0.5 * (at(0) - at(-1))
+        if kind == "m" and branch == "hi2":
+            return at(0) - 0.5 * (at(0) - at(-1))
 
-    if hi:
-        # ---------------- P 侧：boundp2（tmp1=-1,-2,-3 三层；-4 越界回落正常）--------
-        # 面 n：2 阶单侧外推（minmod2(d,d)=d），锚在壁面 cell n-1
-        Fp = Fp.at[..., n].set(P[..., n - 1] + 0.5 * (P[..., n - 1] - P[..., n - 2]))
-        # 面 n-1：P_right_plus，s = (P[n-4], P[n-3], P[n-2], P[n-1])
-        s0, s1, s2, s3 = P[..., n - 4], P[..., n - 3], P[..., n - 2], P[..., n - 1]
-        a1 = 6.0 / (e + _band_S_sym(s1, s2, s3)) ** 2      # S1 = 13(s1-2s2+s3)^2 + 3(s1-s3)^2
-        a2 = 1.0 / (e + _band_S_right(s0, s1, s2)) ** 2    # S2 = 13(s0-2s1+s2)^2 + 3(s0-4s1+3s2)^2
-        q13 = -s1 + 5.0 * s2 + 2.0 * s3
-        q23 = 2.0 * s0 - 7.0 * s1 + 11.0 * s2
-        Fp = Fp.at[..., n - 1].set((a1 * q13 + a2 * q23) / (6.0 * (a1 + a2)))
-        # 面 n-2：完整 WENO5_P，s = (P[n-5], ..., P[n-1])
-        t0, t1, t2, t3, t4 = (P[..., n - 5], P[..., n - 4], P[..., n - 3],
-                              P[..., n - 2], P[..., n - 1])
-        S0 = _band_S_lift(t2, t3, t4)                      # 13(t2-2t3+t4)^2 + 3(3t2-4t3+t4)^2
-        S1 = _band_S_sym(t1, t2, t3)                       # 13(t1-2t2+t3)^2 + 3(t1-t3)^2
-        S2 = _band_S_right(t0, t1, t2)                     # 13(t0-2t1+t2)^2 + 3(t0-4t1+3t2)^2
-        q03 = 2.0 * t2 + 5.0 * t3 - t4
-        q13 = -t1 + 5.0 * t2 + 2.0 * t3
-        q23 = 2.0 * t0 - 7.0 * t1 + 11.0 * t2
-        A0 = 3.0 * (e + S1) ** 2 * (e + S2) ** 2
-        A1 = 6.0 * (e + S0) ** 2 * (e + S2) ** 2
-        A2 = (e + S0) ** 2 * (e + S1) ** 2
-        Fp = Fp.at[..., n - 2].set((A0 * q03 + A1 * q13 + A2 * q23)
-                                   / (6.0 * (A0 + A1 + A2)))
+        a, b, c = at(-2), at(-1), at(0)
+        d, f = at(1), at(2)
+        if kind == "m":
+            a, b, d, f = f, d, b, a
+        s0 = _band_S_lift(c, d, f)
+        s1 = _band_S_sym(b, c, d)
+        s2 = _band_S_right(a, b, c)
+        q0 = 2.0*c + 5.0*d - f
+        q1 = -b + 5.0*c + 2.0*d
+        q2 = 2.0*a - 7.0*b + 11.0*c
+        if (kind == "p" and branch == "lo1"):
+            return q0 / 6.0
+        if kind == "m" and branch == "lo0":
+            return q2 / 6.0
+        if (kind == "p" and branch == "lo2") or (kind == "m" and branch == "hi3"):
+            w0, w1 = 3.0 / (e + s0)**2, 6.0 / (e + s1)**2
+            return (w0*q0 + w1*q1) / (6.0*(w0 + w1))
+        if (kind == "p" and branch == "hi2") or (kind == "m" and branch == "lo1"):
+            w1, w2 = 6.0 / (e + s1)**2, 1.0 / (e + s2)**2
+            return (w1*q1 + w2*q2) / (6.0*(w1 + w2))
+        w0 = 3.0 * (e + s1)**2 * (e + s2)**2
+        w1 = 6.0 * (e + s0)**2 * (e + s2)**2
+        w2 = (e + s0)**2 * (e + s1)**2
+        return (w0*q0 + w1*q1 + w2*q2) / (6.0*(w0 + w1 + w2))
 
-        # ---------------- M 侧：boundm2（tmp1=-1..-4 四层）--------
-        # 面 n：M 内核 end+1 的偏移让"节点 n"落在鬼胞上，公式取 cell n-1 的拷贝
-        Fm = Fm.at[..., n].set(M[..., n - 1])
-        # 面 n-1：M_lift 型单侧外推，锚在壁面 cell n-1
-        Fm = Fm.at[..., n - 1].set(M[..., n - 1] - 0.5 * (M[..., n - 1] - M[..., n - 2]))
-        # 面 n-2：M_right_plus，s = (M[n-4], M[n-3], M[n-2], M[n-1])
-        u0, u1, u2, u3 = M[..., n - 4], M[..., n - 3], M[..., n - 2], M[..., n - 1]
-        b0 = 3.0 / (e + _band_S_lift(u2, u1, u0)) ** 2     # S0 = 13(u2-2u1+u0)^2 + 3(3u2-4u1+u0)^2
-        b1 = 6.0 / (e + _band_S_sym(u3, u2, u1)) ** 2      # S1 = 13(u3-2u2+u1)^2 + 3(u3-u1)^2
-        p03 = 2.0 * u2 + 5.0 * u1 - u0
-        p13 = -u3 + 5.0 * u2 + 2.0 * u1
-        Fm = Fm.at[..., n - 2].set((b0 * p03 + b1 * p13) / (6.0 * (b0 + b1)))
-        # 面 n-3：完整 WENO5_M，s = (M[n-5], ..., M[n-1])
-        v0, v1, v2, v3, v4 = (M[..., n - 5], M[..., n - 4], M[..., n - 3],
-                              M[..., n - 2], M[..., n - 1])
-        T0 = _band_S_lift(v2, v1, v0)                      # 13(v2-2v1+v0)^2 + 3(3v2-4v1+v0)^2
-        T1 = _band_S_sym(v3, v2, v1)                       # 13(v3-2v2+v1)^2 + 3(v3-v1)^2
-        T2 = _band_S_right(v4, v3, v2)                     # 13(v4-2v3+v2)^2 + 3(v4-4v3+3v2)^2
-        r03 = 2.0 * v2 + 5.0 * v1 - v0
-        r13 = -v3 + 5.0 * v2 + 2.0 * v1
-        r23 = 2.0 * v4 - 7.0 * v3 + 11.0 * v2
-        B0 = 3.0 * (e + T1) ** 2 * (e + T2) ** 2
-        B1 = 6.0 * (e + T0) ** 2 * (e + T2) ** 2
-        B2 = (e + T0) ** 2 * (e + T1) ** 2
-        Fm = Fm.at[..., n - 3].set((B0 * r03 + B1 * r13 + B2 * r23)
-                                   / (6.0 * (B0 + B1 + B2)))
+    def apply(faces, g, template, kind, node_shift):
+        ka, kb = template
+        for face in range(n + 1):
+            upper = face - n - 1
+            branch = None
+            if lo and (face <= -ka if kind == "p" else face < -ka):
+                branch = "lo" + str(min(face, 2 if kind == "m" else 3))
+            elif hi and (upper > -kb if kind == "p" else upper >= -kb - 1):
+                branch = "hi" + str(min(-upper, 3 if kind == "p" else 4))
+            if branch is not None:
+                faces = faces.at[..., face].set(reconstruct(g, face + node_shift, kind, branch))
+        return faces
 
-    return Fp, Fm
+    return (apply(Fp, fp, p_template, "p", -1),
+            apply(Fm, fm, m_template, m_boundary, 0))
 
 
 def _face_M_from_P(face_P_fn):
@@ -602,15 +561,17 @@ def _rhs_from_faces(face):
 
 
 # ---- 格式注册表：scheme 名 → (face_P, face_M) ----
-def _make_rhs(face_P, face_M):
-    """把一对 P/M 界面重构函数包装成统一的单方向 RHS 接口。"""
+def make_flux_rhs(face_P, face_M, p_template, m_template, m_boundary="m"):
+    """注册自定义面重构时，声明 OCFD P/M 模板及 M 所用边界宏。"""
     def rhs_along_last_axis(fp, fm, h=1.0, bound=None, **kwargs):
         """重构 P/M 面通量，按需覆盖边界带，并返回除以步长后的通量散度。"""
         Fp = face_P(fp, **kwargs)
         Fm = face_M(fm, **kwargs)
         if bound is not None and (bound[0] or bound[1]):
             Fp, Fm = flux_band_faces(Fp, Fm, fp, fm,
-                                     lo=bool(bound[0]), hi=bool(bound[1]))
+                                     lo=bool(bound[0]), hi=bool(bound[1]),
+                                     p_template=p_template, m_template=m_template,
+                                     m_boundary=m_boundary)
         return _du_from_faces(Fp + Fm) / h
     return rhs_along_last_axis
 
@@ -620,12 +581,12 @@ _weno5_face_M = _face_M_from_P(_weno5_face_P)
 _weno7_face_M = _face_M_from_P(_weno7_face_P)
 
 SOLVE_SCHEMES = {
-    "NND2": _make_rhs(_nnd2_face_P, _nnd2_face_M),
-    "WENO5": _make_rhs(_weno5_face_P, _weno5_face_M),
-    "WENO7": _make_rhs(_weno7_face_P, _weno7_face_M),
-    "OMP6-1": _make_rhs(lambda g: _omp6_face_P(g, 1), lambda g: _omp6_face_M(g, 1)),
-    "OMP6-2": _make_rhs(lambda g: _omp6_face_P(g, 2), lambda g: _omp6_face_M(g, 2)),
-    "OMP6-3": _make_rhs(lambda g: _omp6_face_P(g, 3), lambda g: _omp6_face_M(g, 3)),
+    "NND2": make_flux_rhs(_nnd2_face_P, _nnd2_face_M, (-2, 2), (-2, 2)),
+    "WENO5": make_flux_rhs(_weno5_face_P, _weno5_face_M, (-2, 2), (-2, 2)),
+    "WENO7": make_flux_rhs(_weno7_face_P, _weno7_face_M, (-3, 3), (-3, 3), "p"),
+    "OMP6-1": make_flux_rhs(lambda g: _omp6_face_P(g, 1), lambda g: _omp6_face_M(g, 1), (-3, 4), (-4, 3)),
+    "OMP6-2": make_flux_rhs(lambda g: _omp6_face_P(g, 2), lambda g: _omp6_face_M(g, 2), (-3, 4), (-4, 3)),
+    "OMP6-3": make_flux_rhs(lambda g: _omp6_face_P(g, 3), lambda g: _omp6_face_M(g, 3), (-3, 4), (-4, 3)),
 }
 
 # 原码 in 文件的 SCHEME_INVIS 名字 → 本模块的键。
