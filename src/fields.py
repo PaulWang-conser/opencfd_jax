@@ -2,7 +2,9 @@
 
 与 OpenCFD 对齐（head/config_parameters.h: LAP=4, NVARS=5）：
 守恒变量 SoA，shape (NVARS, nz+2*LAP, ny+2*LAP, nx+2*LAP)，
-变量顺序 0:rho, 1:rho*u, 2:rho*v, 3:rho*w, 4:rho*E，axis=-1 为 x 方向。
+变量顺序 0:rho, 1:rho*u, 2:rho*v, 3:rho*w, 4:rho*E；空间末轴为计算 i 方向。
+计算坐标 (i,j,k) 对应 (ξ,η,ζ)，物理坐标为 (x,y,z)。现有代码中的
+nx/ny/nz 和 x/y/z 轴标签依次对应计算 i/j/k，不代表曲线网格的物理方向。
 
 边界填充的实际实现已迁到 ``boundary.py``；本模块保留 ``LAP`` / ``NVARS`` /
 边界类型 / ``fill_halos_*`` 等旧导入入口，供历史测试和调用方兼容使用。
@@ -28,7 +30,7 @@ class Grid:
         self.nx, self.ny, self.nz = nx, ny, nz
         self.shape = (NVARS, nz + 2 * LAP, ny + 2 * LAP, nx + 2 * LAP)
         self.n_inner = (nz, ny, nx)
-        # 各轴全长（含鬼胞），按轴顺序 (z, y, x) 与 shape 对齐
+        # 各轴全长（含鬼胞），按计算轴顺序 (k, j, i) 与 shape 对齐
         self._n_full = (nz + 2 * LAP, ny + 2 * LAP, nx + 2 * LAP)
 
     def inner(self):

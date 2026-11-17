@@ -36,7 +36,7 @@ def sound_speed(cons, gamma):
 def _inner_slice_moved(axis, grid):
     """moved 视图（求解方向在末轴）下的内区 slice，含变量轴。"""
     dims_inner = (grid.nz, grid.ny, grid.nx)
-    # moved 轴序：axis=0 -> (z,y,x)；axis=1 -> (z,x,y)；axis=2 -> (y,x,z)
+    # moved 计算轴序：axis=0 -> (k,j,i)；axis=1 -> (k,i,j)；axis=2 -> (j,i,k)
     if axis == 0:
         order = (0, 1, 2)
     elif axis == 1:
@@ -74,7 +74,7 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
 
     moved_metric = None
     if metric is not None:
-        # metric 是 3 维标量场（轴序 (z,y,x)，无变量轴）：2-axis 是它在数组里的轴
+        # metric 是 3 维标量场（计算轴序 (k,j,i)，无变量轴）；2-axis 是数组轴
         moved_metric = tuple(jnp.moveaxis(m, spatial_array_axis(axis), -1) for m in metric)
     fp, fm = steger_warming(moved, gamma, epsl_sw, axis, metric=moved_metric)
 
@@ -111,7 +111,8 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
                 scheme="UP7", weno_tv=None, metrics=None, dif_bound=None,
                 zero_flux_ghosts=False, zero_state_ghosts=False, dif_axis_map=(0, 1, 2)):
     """无粘 RHS。bcs 与 axes 均按计算方向 (i,j,k) 排列；
-    dx: 该方向的物理步长（标量或三元组，与 axes 中的方向对应取用；
+    dx: 该方向的计算空间步长（直角算例可与物理步长一致；标量或三元组，
+    与 axes 中的方向对应取用；
     非求解方向填 0 占位即可）。
 
     metrics: 可选，`mesh.compute_metrics_from_coords` 的输出。

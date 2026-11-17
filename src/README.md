@@ -114,7 +114,11 @@ python -m opencfd_jax.src.run --help
 
 
 
-* 空间轴顺序是 `(z, y, x)`，不是 `(x, y, z)`。
+* 计算坐标为 `(i, j, k) = (ξ, η, ζ)`，空间数组轴顺序是 `(k, j, i)`。
+  现有标识符 `nx/ny/nz` 和 `x/y/z` 轴标签依次对应计算 `i/j/k`；
+  物理笛卡尔坐标 `x/y/z` 与计算坐标通过网格度量联系。
+* 原码度量键 `Akx/Aky/Akz`、`Aix/Aiy/Aiz`、`Asx/Asy/Asz` 分别属于
+  计算 `i/j/k` 方向；键末尾的 `x/y/z` 表示物理坐标分量。
 
 * 每个方向有 `LAP = 4` 层鬼胞，为高阶模板和边界处理提供数据。
 
@@ -364,8 +368,8 @@ du = -(F_right - F_left) / h
 文件：`boundary.py`、`mesh_data.py`、`run.py`。
 
 通用边界（周期、出流、y 方向壁面镜像、非周期鬼层清零）只在 `boundary.py` 实现；
-`fields.py` 只重导出旧名，`channel.py` / `plate.py` 仍提供各自的物理公式和
-`bc_apply` 回调。`build_execution(case, desc=None)` 在 JIT 前完成：
+`fields.py` 只重导出旧名，`channel.py` / `plate.py` 保留壁面和回调的兼容入口，
+壁面及平板的已有状态赋值公式由 `boundary.py` 提供。`build_execution(case, desc=None)` 在 JIT 前完成：
 
 * 校验 `case["bcs"]`、六侧 `FaceBoundary` 与 `bc_apply` 是否同源；
 * 拒绝“有回调但无专属标记”“多个专属标记同时存在”“固定六侧与 bcs 矛盾”
@@ -392,11 +396,13 @@ case["special_boundary"] = special
 case["bc_apply"] = special.apply
 ```
 
-约束：回调面所在轴的轴级 `bcs` 必须是 `INFLOW`/`PLATE`（no-op 占位，由回调写鬼层）；
-没有回调的轴只能是 `PERIODIC`/`OUTFLOW`；halo 面的 `kind` 必须等于轴级 `bcs`；
+约束：回调面所在轴的轴级 `bcs` 必须是 `INFLOW`/`PLATE`（no-op 占位）；同轴另一侧
+可设为 `OUTFLOW` halo，回调后由执行配置填充该侧状态鬼层，并在粘性通量阶段
+填充对应出流侧的 Ev 鬼层；特殊侧的 Ev 暂时保留原值，其他物理条件需另行实现和验证。没有回调的轴只能是
+`PERIODIC`/`OUTFLOW`，其 halo 面的 `kind` 必须等于轴级 `bcs`；
 `WALL` 仍只允许 y 方向。`special_boundary` 不能与 `plate`/`channel_bc` 同时出现。
 当前这是**显式导入**入口，不做动态注册；回调只允许数组运算，不得把 I/O 放进 JIT。
-槽道三点压力外推和平板两点外推仍是 case 专属公式，没有被统一。
+槽道三点压力外推和平板两点外推在 `boundary.py` 中分别保留原有公式。
 
 ***
 
@@ -617,7 +623,7 @@ python -m opencfd_jax.src.compare diff dump-npz dump-jax
 
 3. **输出不含鬼胞**：内存数组每方向多 8 层，NPZ 只有物理内区。
 
-4. **空间数组顺序是&#x20;**`(z,y,x)`：计算方向和命令行参数仍按 `(x,y,z)` 理解，代码通过 `spatial_array_axis()` 映射。
+4. **空间数组的计算轴顺序是 `(k,j,i)`**：计算方向按 `(i,j,k)` 排列，代码通过 `spatial_array_axis()` 映射；命令行的 x/y/z 标签依次指向这三个计算方向。
 
 5. **无粘和粘性是两条独立空间离散链**：前者走 “通量分裂 → 界面重构 → 通量差分”，后者走 “梯度 → 应力 / 热流通量 → 再求导”。
 

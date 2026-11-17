@@ -88,7 +88,8 @@ def steger_warming(cons, gamma, epsl_sw=0.0, axis=0, metric=None):
             所以面通量是"面积 × 单位法向通量"。缺这一步则 du 会小 ss 倍
             （见 patches/main_dump.c 与 ocfd_p1_1 的线性场定标）。
 
-    cons: (5, nz+2L, ny+2L, nx+2L) 守恒量，axis: 0=x, 1=y, 2=z。
+    cons: (5, nz+2L, ny+2L, nx+2L) 守恒量，空间数组轴为 (k,j,i)；
+    axis: 0=i(ξ), 1=j(η), 2=k(ζ)，x/y/z 是物理速度和度量分量。
     返回 (fp, fm)，各 (5, ...)，cell 中心的分裂通量（鬼胞为任意值，
     调用方负责分裂后的鬼胞填充）。
     """

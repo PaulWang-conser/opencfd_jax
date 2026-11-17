@@ -9,14 +9,15 @@
     Aix = yk*zi - zk*yi,  Aiy = zk*xi - xk*zi,  Aiz = xk*yi - yk*xi
     Asx = yi*zj - zi*yj,  Asy = zi*xj - xi*zj,  Asz = xi*yj - yi*xj
 
-其中 xi = d(x)/d(i)，i/j/k 依次对应数组的 x/y/z 三轴（已核对：直角坐标
-i=x,j=y,k=z 时 Akx=Aiy=Asz=1，与原码初始化一致）。偏导用 CD6/CD8
+其中 xi = d(x)/dξ，xj = d(x)/dη，xk = d(x)/dζ；计算方向
+(i,j,k) 对应 (ξ,η,ζ)，物理坐标是 (x,y,z)。直角单位度量时
+Akx=Aiy=Asz=1。偏导用 CD6/CD8
 （复用 viscous.cd_along_axis），鬼胞复制最近内点（等价原码 kernel 的
 边界复制，此处用 OUTFLOW 填充实现）。
 
-度量语义（与 viscous.py 的 (k,i,s) 命名对齐）：Akx/Aky/Akz 是 k 方向
-（≡x 轴）度量向量的 x/y/z 分量；Aix/Aiy/Aiz 是 i 方向（≡y 轴）；Asx..Asz
-是 s 方向（≡z 轴）。
+度量键沿用原码：Akx/Aky/Akz 对应计算 i（ξ）方向，Aix/Aiy/Aiz 对应
+计算 j（η）方向，Asx/Asy/Asz 对应计算 k（ζ）方向；末尾 x/y/z 是
+物理坐标分量。这些键中的 k/i/s 是原码名称，不是这里的 i/j/k 索引。
 """
 
 import numpy as np
@@ -38,18 +39,18 @@ METRIC_KEYS = ("Akx", "Aky", "Akz", "Aix", "Aiy", "Aiz",
 def compute_metrics_from_coords(coords: dict, dxs, order=6,
                                 jac_bound=(1, 1, 1),
                                 periodic=(True, False, True)):
-    """由坐标场（含鬼胞）计算度量。coords: {"Axx","Ayy","Azz"}，3 维 (z,y,x)。
+    """由坐标场（含鬼胞）计算度量。coords: {"Axx","Ayy","Azz"}，计算轴序 (k,j,i)。
 
     dxs: 三轴参考步长 (hx, hy, hz)——注意是计算空间步长（均匀网格索引间距），
     非 x 方向物理步长。返回 METRIC_KEYS 的度量场 dict（含鬼胞）。
 
-    jac_bound: 原码 `JAC_BOUND`（x/y/z 三标志）。为 1 的轴，每侧 LAP 层
+    jac_bound: 原码 `JAC_BOUND`（计算 i/j/k 三标志）。为 1 的轴，每侧 LAP 层
     坐标导数覆盖成单侧公式（`OCFD_Dx0_bound/Dy0_bound/Dz0_bound`，
     OCFD_bound_Scheme.cu:232-269 / viscous.band_one_sided）。
     原码缺省 `JAC_BOUND=1 1 1`，槽道 in 文件也是 `1 1 1`；只有全 0 时才
     与旧的"全场中心 CD6"逐位相同。
 
-    periodic: 原码 `IPERIODIC`（x/y/z），按数组轴 (z,y,x) 使用。周期轴的
+    periodic: 原码 `IPERIODIC`（计算 i/j/k），按数组轴 (k,j,i) 使用。周期轴的
     坐标鬼胞按**环绕**填（原码 MPI Sendrecv 自收自发），非周期轴边缘复制。
     注意：jac_bound 为 1 时边界带本来就被单侧覆盖，鬼胞填法只影响
     jac_bound=0 的轴，但为了与原码一致仍按 IPERIODIC 填。
@@ -58,7 +59,7 @@ def compute_metrics_from_coords(coords: dict, dxs, order=6,
     shape = np.broadcast_shapes(*(np.shape(v) for v in coords.values()))
     Axx, Ayy, Azz = (jnp.broadcast_to(jnp.asarray(coords[k]), shape)
                      for k in ("Axx", "Ayy", "Azz"))
-    # 数组轴 (z,y,x)=(0,1,2) ↔ 物理方向 (x,y,z)=(2,1,0) ↔ dxs[0..2]
+    # 标量数组轴 (k,j,i)=(0,1,2)；计算方向 (i,j,k) 对应 dxs[0..2]
     # 每项 (array_axis, dxs_index, jac_bound_index)
     combos = ((2, 0, 0), (1, 1, 1), (0, 2, 2))
 
@@ -114,7 +115,7 @@ def _edge_ghosts(a, lap=None):
 def pad_coords(arr, periodic=(True, False, True)):
     """按 IPERIODIC 给坐标场补 LAP 层鬼胞（与 `pad_to_lap` 的边缘复制不同）。
 
-    periodic 按 (x, y, z) 给出，数组轴是 (z, y, x)；周期轴取**对侧内区**
+    periodic 按计算方向 (i, j, k) 给出，数组轴是 (k, j, i)；周期轴取**对侧内区**
     （原码 `exchange_boundary_x/y/z_packed_dev` 单块自收自发等价于环绕），
     非周期轴边缘复制。
     """

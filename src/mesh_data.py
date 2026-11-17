@@ -42,7 +42,7 @@ class FaceBoundary:
     """单块的一个面侧。
 
     side: ``"x-"`` 等六个方向侧。
-    axis: 计算方向 0/1/2（x/y/z）。
+    axis: 计算方向 0/1/2，即 i/j/k（ξ/η/ζ）；side 仍用现有 x/y/z 标签。
     kind: 该侧语义（periodic/outflow/wall/inflow/plate/farfield）。
     executor: 当前执行来源，``halo`` = 既有鬼胞填充，``callback`` = 算例
         ``bc_apply``，``callback+halo`` = 两者都参与。
