@@ -21,15 +21,9 @@ _REPO_TAX = Path(__file__).resolve().parents[2]
 if str(_REPO_TAX) not in sys.path:
     sys.path.insert(0, str(_REPO_TAX))
 
-try:  # 正常包路径
-    from opencfd_jax.src import boundary, cases, channel, fields, filtering
-    from opencfd_jax.src import mesh_data, plate, run, solver, viscous
-    from opencfd_jax.src.fields import (INFLOW, LAP, OUTFLOW, PERIODIC,
-                                        PLATE, WALL, Grid)
-except ModuleNotFoundError:  # 兼容现有的 opencfd_jax = src 别名跑法
-    from opencfd_jax import boundary, cases, channel, fields, filtering
-    from opencfd_jax import mesh_data, plate, run, solver, viscous
-    from opencfd_jax.fields import (INFLOW, LAP, OUTFLOW, PERIODIC,
+from opencfd_jax.src import boundary, cases, channel, fields, filtering
+from opencfd_jax.src import mesh_data, plate, run, solver, viscous
+from opencfd_jax.src.fields import (INFLOW, LAP, OUTFLOW, PERIODIC,
                                     PLATE, WALL, Grid)
 
 
@@ -259,7 +253,7 @@ def test_ev_j_mirror_and_plate_top_copy():
         f[i] = s * line[None, :, None] + 0.1 * i
     stack = jnp.asarray(f)
 
-    got = np.asarray(viscous._fill_ev_wall_j(stack, nj, signs))
+    got = np.asarray(viscous.fill_ev_wall_j(stack, nj, signs))
     # 下壁 ghost[p] = f[2LAP-p] * sign；上壁 ghost[nj+LAP+q] = f[nj+LAP-2-q] * sign。
     for i in range(4):
         for p in range(LAP):
@@ -270,7 +264,7 @@ def test_ev_j_mirror_and_plate_top_copy():
                 got[i, :, nj + LAP + q, :],
                 f[i, :, nj + LAP - 2 - q, :] * signs[i])
 
-    got_plate = np.asarray(viscous._fill_ev_plate_j(stack, nj, signs))
+    got_plate = np.asarray(viscous.fill_ev_plate_j(stack, nj, signs))
     np.testing.assert_array_equal(got_plate[:, :, nj + LAP:, :],
                                   np.broadcast_to(
                                       got_plate[:, :, nj + LAP - 1:nj + LAP, :],
@@ -419,15 +413,15 @@ def test_generic_wall_is_j_only_and_unknown_callback_rejected():
 # ---------------------------------------------------------- U3 单一实现来源
 
 def test_fields_reexports_boundary_implementations():
-    """U3：公共填充只有 boundary.py 一份实现，旧 fields 入口是别名。"""
+    """U3：公共填充只有 boundary.py 一份实现，fields 只导出 canonical 名。"""
     assert fields.fill_halos_i is boundary.fill_halos_i
     assert fields.fill_halos_j is boundary.fill_halos_j
     assert fields.fill_halos_k is boundary.fill_halos_k
-    assert fields.fill_halos_x is boundary.fill_halos_i
-    assert fields.fill_halos_y is boundary.fill_halos_j
-    assert fields.fill_halos_z is boundary.fill_halos_k
     assert fields.fill_wall_j is boundary.fill_wall_j
     assert fields.zero_nonperiodic_ghosts is boundary.zero_nonperiodic_ghosts
+    assert not hasattr(fields, "fill_halos_x")
+    assert not hasattr(fields, "fill_halos_y")
+    assert not hasattr(fields, "fill_halos_z")
 
 
 def test_boundary_exposes_ev_rules_separately_from_state_rules():

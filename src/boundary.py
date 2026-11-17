@@ -30,7 +30,7 @@ from typing import Any, Callable, Optional, Tuple
 
 import jax.numpy as jnp
 
-from .axes import LEGACY_SIDES, SIDES, grid_extent
+from .axes import SIDES, grid_extent
 
 LAP = 4
 NVARS = 5
@@ -46,7 +46,6 @@ FARFIELD = "farfield"
 
 GENERIC_KINDS = (PERIODIC, OUTFLOW, WALL)
 SIX_SIDES = SIDES
-LEGACY_SIX_SIDES = LEGACY_SIDES
 
 # 守恒量 var 轴符号：(rho, rho*u, rho*v, rho*w, rho*E)
 _WALL_SIGN = (1.0, -1.0, -1.0, -1.0, 1.0)
@@ -105,11 +104,6 @@ def fill_halos_k(f, bc, nk):
     return f
 
 
-# 兼容旧名：旧函数名与 canonical 名指向同一函数对象，不复制实现。
-fill_halos_x = fill_halos_i
-fill_halos_y = fill_halos_j
-fill_halos_z = fill_halos_k
-
 _GENERIC_AXIS_FILLERS = {
     0: fill_halos_i,
     1: fill_halos_j,
@@ -134,9 +128,6 @@ def fill_wall_j(f, nj):
     mir_hi = f[:, :, nj + LAP - 2:nj + LAP - 6:-1, :]
     f = f.at[:, :, nj + LAP:nj + 2 * LAP, :].set(mir_hi * sign)
     return f
-
-
-fill_wall_y = fill_wall_j
 
 
 def primitive(cons, phys):
@@ -241,8 +232,7 @@ def zero_nonperiodic_ghosts(f, bcs, preserve_inflow=False):
     """清除非周期方向的鬼层，周期方向保留交换值。
 
     ``preserve_inflow=True`` 时保留 INFLOW 低端鬼层（平板入口状态）。
-    f 的最后三轴为计算 (k, j, i)，bcs 按计算 (i, j, k) 排列；
-    代码中的 x/y/z 边界标签只作为兼容输入，依次对应 i/j/k。
+    f 的最后三轴为计算 (k, j, i)，bcs 按计算 (i, j, k) 排列。
     """
     for axis, bc in enumerate(bcs):
         if bc == PERIODIC:
@@ -275,10 +265,6 @@ def fill_ev_plate_j(f, nj, signs):
     return f
 
 
-fill_ev_wall_y = fill_ev_wall_j
-fill_ev_plate_y = fill_ev_plate_j
-
-
 def fill_ev_axis(f, axis, bc, nxi, is_ev=False):
     """Ev 场的单轴填充；壁面/平板规则与守恒量状态规则显式分开。
 
@@ -296,14 +282,6 @@ def fill_ev_axis(f, axis, bc, nxi, is_ev=False):
             return fill_ev_plate_j(f, nxi, EV_WALL_SIGNS[axis])
         return fill_halos_j(f, bc, nxi)
     return fill_halos_k(f, bc, nxi)
-
-
-# 兼容旧 viscous 内部名；数值行为与 fill_ev_axis 完全相同。
-_fill_ev_wall_j = fill_ev_wall_j
-_fill_ev_plate_j = fill_ev_plate_j
-_fill_ev_wall_y = fill_ev_wall_j
-_fill_ev_plate_y = fill_ev_plate_j
-_fill_axis = fill_ev_axis
 
 
 @dataclass(frozen=True)

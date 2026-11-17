@@ -24,7 +24,7 @@ import numpy as np
 
 import jax.numpy as jnp
 
-from .axes import MISSING, resolve_dimensions
+from .axes import resolve_dimensions
 from .fields import LAP
 from .viscous import cd_along_axis
 
@@ -148,44 +148,41 @@ def make_metrics_cartesian(grid, dxs=(1.0, 1.0, 1.0)):
     }
 
 
-def read_ocfd_mesh(path, nx=MISSING, ny=MISSING, nz=MISSING, *,
-                   ni=MISSING, nj=MISSING, nk=MISSING):
+def read_ocfd_mesh(path, ni, nj, nk):
     """读原码的 `OCFD3d-Mesh.dat`（X/Y/Z 三个坐标场，内区 (nk, nj, ni)）。
 
-    `nx/ny/nz` 与 `ni/nj/nk` 是同一组尺寸的新旧关键字；位置参数仍按计算
-    i/j/k 顺序解释。格式（由 channel_case_iiA/gen_case.py 写、原码
-    OCFD_Comput_Jacobian3d.cu:126-130 + read_3d1 读，两边一致）：
+    尺寸参数只接受规范 ``ni/nj/nk``。格式（由 channel_case_iiA/gen_case.py 写、
+    原码 OCFD_Comput_Jacobian3d.cu:126-130 + read_3d1 读，两边一致）：
       - 无文件头；三个场依次是 X、Y、Z；
-      - 每个场按 k 面一条记录：`int32 长度标记 + nx*ny 个 float64 + int32 长度标记`
-        （长度标记 = nx*ny*8 字节），数组内 i 最快、j 次之（C 序）；
+      - 每个场按 k 面一条记录：`int32 长度标记 + ni*nj 个 float64 + int32 长度标记`
+        （长度标记 = ni*nj*8 字节），数组内 i 最快、j 次之（C 序）；
       - 长度标记只用作完整性校验（原码的 offset 步长
         `(2*sizeof(int) + NX*NY*sizeof(REAL)) * NZ` 就来自它）。
 
     尺寸由 in 文件的 GRID_3D 给出（原码也是从 in 文件读，网格文件里没有维数）。
     返回 {"Axx": x, "Ayy": y, "Azz": z}，均为 (nk, nj, ni)，**不含鬼胞**。
     """
-    nx, ny, nz = resolve_dimensions(ni=ni, nj=nj, nk=nk,
-                                    nx=nx, ny=ny, nz=nz)
-    n = nx * ny
+    ni, nj, nk = resolve_dimensions(ni, nj, nk)
+    n = ni * nj
     payload = 8 * n
     rec = 8 + payload
-    nbytes = 3 * nz * rec
+    nbytes = 3 * nk * rec
     import os
     size = os.path.getsize(path)
     if size != nbytes:
         raise ValueError(
-            f"{path} 大小 {size} 与 nx,ny,nz=({nx},{ny},{nz}) 推出的 {nbytes} 不符"
+            f"{path} 大小 {size} 与 ni,nj,nk=({ni},{nj},{nk}) 推出的 {nbytes} 不符"
             f"（每面 {rec} 字节 = 2×int32 + {n}×float64）——in 文件的 GRID_3D 与"
             f"网格文件不是同一套，或该目录的 Mesh.dat 是空文件（0 字节）")
     buf = np.fromfile(path, dtype=np.uint8)
     out = {}
     for f, key in enumerate(("Axx", "Ayy", "Azz")):
-        blk = buf[f * nz * rec:(f + 1) * nz * rec].reshape(nz, rec)
+        blk = buf[f * nk * rec:(f + 1) * nk * rec].reshape(nk, rec)
         head = blk[:, :4].copy().view("<i4").ravel()
         tail = blk[:, 4 + payload:].copy().view("<i4").ravel()
         if not np.all(head == payload) or not np.all(tail == payload):
             raise ValueError(f"{path} 记录标记不是 {payload}，不是原码网格格式")
-        arr = blk[:, 4:4 + payload].copy().view("<f8").reshape(nz, ny, nx)
+        arr = blk[:, 4:4 + payload].copy().view("<f8").reshape(nk, nj, ni)
         out[key] = arr
     return out
 
@@ -195,27 +192,24 @@ def pad_to_lap(arr):
     return np.pad(arr, ((LAP, LAP), (LAP, LAP), (LAP, LAP)), mode="edge")
 
 
-def read_ocfd_field(path, nx=MISSING, ny=MISSING, nz=MISSING, nvars=5, *,
-                    ni=MISSING, nj=MISSING, nk=MISSING):
+def read_ocfd_field(path, ni, nj, nk, nvars=5):
     """读原码的场文件（`opencfd.dat` / `OCFD00056000.dat`），返回内区数组列表。
 
-    新旧尺寸关键字与 `read_ocfd_mesh` 相同。格式（OCFD_IO.c read_file +
-    gen_case.py write）：
+    尺寸参数只接受规范 ``ni/nj/nk``。格式（OCFD_IO.c read_file + gen_case.py write）：
       - 文件头 20 字节：`int32(12) + int32(Istep) + float64(tt) + int32(12)`；
       - 之后 nvars 个场依次排列，每个场按 k 面一条记录
-        `int32 长度标记 + nx*ny float64 + int32 长度标记`；
+        `int32 长度标记 + ni*nj float64 + int32 长度标记`；
       - 场顺序 **rho, U, V, W, T**（原始变量）。
     """
-    nx, ny, nz = resolve_dimensions(ni=ni, nj=nj, nk=nk,
-                                    nx=nx, ny=ny, nz=nz)
     import os
-    payload = 8 * nx * ny
+    ni, nj, nk = resolve_dimensions(ni, nj, nk)
+    payload = 8 * ni * nj
     rec = 8 + payload
     size = os.path.getsize(path)
-    nbytes = 20 + nvars * nz * rec
+    nbytes = 20 + nvars * nk * rec
     if size != nbytes:
         raise ValueError(
-            f"{path} 大小 {size} 与 nx,ny,nz=({nx},{ny},{nz})、{nvars} 个场的"
+            f"{path} 大小 {size} 与 ni,nj,nk=({ni},{nj},{nk})、{nvars} 个场的"
             f" {nbytes} 不符（每面 {rec} 字节 + 20 字节文件头）")
     buf = np.fromfile(path, dtype=np.uint8)
     head = buf[:20].copy().view("<i4")
@@ -223,11 +217,11 @@ def read_ocfd_field(path, nx=MISSING, ny=MISSING, nz=MISSING, nvars=5, *,
         raise ValueError(f"{path} 文件头标记不是 12/12（不是原码场文件）")
     out = []
     for f in range(nvars):
-        blk = buf[20 + f * nz * rec:20 + (f + 1) * nz * rec].reshape(nz, rec)
+        blk = buf[20 + f * nk * rec:20 + (f + 1) * nk * rec].reshape(nk, rec)
         marks = blk[:, :4].copy().view("<i4").ravel()
         if not np.all(marks == payload):
             raise ValueError(f"{path} 第 {f} 个场的记录标记不是 {payload}")
-        out.append(blk[:, 4:4 + payload].copy().view("<f8").reshape(nz, ny, nx))
+        out.append(blk[:, 4:4 + payload].copy().view("<f8").reshape(nk, nj, ni))
     return out
 
 

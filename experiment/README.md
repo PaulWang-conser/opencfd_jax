@@ -138,11 +138,9 @@ cd D:\Desktop\ocfd2jax\opencfd_jax
 python -m pytest experiment/test_step1_mesh.py -q
 ```
 
-仓库现有的 `tests/` 仍按 `opencfd_jax = opencfd_jax.src` 的旧别名导入（`pytest.ini`
-的 `pythonpath` 指向不存在的 `../src`），所以直接跑全量 `python -m pytest` 会有
-collection error；本文件自带仓库根路径插入，可单独运行。全量套件需要一个把
-`opencfd_jax` 指向 `opencfd_jax.src` 的别名启动器（本机临时使用、未入库），本步
-没有改 `tests/` 的导入方式。真网格用例依赖 `channel_case_iiA/quick` 的本地数据，
+仓库现有的 `tests/` 已迁移为从 `opencfd_jax.src.*` 导入，不再依赖
+`opencfd_jax = opencfd_jax.src` 的旧包别名；各测试文件自身插入仓库根路径，
+可直接从仓库根目录运行。真网格用例依赖 `channel_case_iiA/quick` 的本地数据，
 换机缺文件时只跳过该条。
 
 ## 第 2 步验收：统一边界与执行配置
@@ -202,23 +200,27 @@ python opencfd_jax\experiment\check_step0.py --candidate opencfd_jax\experiment\
 同时解析旧 `_stepNNNNNN` 和新 `-istep-NNNNNNNN`，按步号与基准一对一映射，
 基准文件未改名、未重写。
 
-## 第 3.5 步验收：计算方向命名与兼容迁移
+## 第 3.5 步验收：计算方向命名
 
 `test_step3_5_axes.py` 覆盖：
 
-- `i/j/k`、`x/y/z`、`0/1/2` 与六侧 `i±/j±/k±`、`x±/y±/z±` 的唯一映射；
-- `Grid` 的新关键字、旧关键字、旧位置参数、同值共存和冲突/缺失报错；
-- `FaceBoundary` 构造时把旧面名规范为 `i±...`，`BlockMesh.face("x-")`
-  与 `face("i-")` 返回同一对象；
-- `fill_halos_i/j/k`、`fill_wall_j`、`fill_ev_wall_j`/`fill_ev_plate_j`
-  与旧名为同一函数对象，旧导入身份断言仍成立；
-- `infile.grid_dims_ijk` 与 `grid_dims` 对同一 `.in` 返回相同值；
+- `i/j/k`、`0/1/2` 与六侧 `i±/j±/k±` 的规范映射；旧轴名/面名被拒绝；
+- `Grid` 只接受 `ni/nj/nk`；旧 `nx/ny/nz` 关键字、属性和只读视图已移除；
+- `FaceBoundary` 只接受规范面名，`BlockMesh.face("x-")` 直接报错；
+- 只保留 `fill_halos_i/j/k`、`fill_wall_j`、`fill_ev_wall_j`/`fill_ev_plate_j`；
+  旧填充函数名和 `spatial_array_axis` 不再导出；
+- `infile.grid_dims_ijk` 是唯一的网格尺寸读取入口；
 - CLI `--ni/--nj/--nk` 入口；旧 `--N/--ny/--nz` 已移除。
 
 ```powershell
 cd D:\Desktop\ocfd2jax\opencfd_jax
 python -m pytest experiment/test_step3_5_axes.py -q
 ```
+
+验收结果（2026-11-17，本机）：`test_step3_5_axes.py` 12 passed；
+`test_step1_mesh.py + test_step2_boundary.py + test_step3_5_axes.py` 共 57 passed；
+仓库 `tests/` 全量 99 passed、2 skipped、1 xfailed。`tests/` 目录按 `.gitignore`
+不入库，导入迁移只保留在本地工作区。
 
 新入口尺寸验证：
 

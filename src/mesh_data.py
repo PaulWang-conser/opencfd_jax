@@ -18,9 +18,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping, Optional, Tuple
 
-from .axes import (AXIS_NAMES, DIMENSION_NAMES, LEGACY_AXIS_NAMES,
-                   LEGACY_DIMENSION_NAMES, LEGACY_SIDES, SIDES, grid_extent,
-                   legacy_side, normalize_side, side_axis)
+from .axes import (AXIS_NAMES, DIMENSION_NAMES, SIDES, grid_extent,
+                   normalize_side, side_axis)
 from .fields import INFLOW, LAP, OUTFLOW, PERIODIC, PLATE, WALL, Grid
 from .boundary import validate_special_sides
 from .mesh import METRIC_KEYS
@@ -41,8 +40,7 @@ _COORD_KEYS = ("Axx", "Ayy", "Azz")
 class FaceBoundary:
     """单块的一个面侧。
 
-    side: 规范六侧 ``"i-"``/``"i+"``/``"j-"``/``"j+"``/``"k-"``/``"k+"``；
-        构造时也接受旧 ``x±/y±/z±`` 标签。
+    side: 规范六侧 ``"i-"``/``"i+"``/``"j-"``/``"j+"``/``"k-"``/``"k+"``。
     axis: 计算方向 0/1/2，即 i/j/k（ξ/η/ζ）。
     kind: 该侧语义（periodic/outflow/wall/inflow/plate/farfield）。
     executor: 当前执行来源，``halo`` = 既有鬼胞填充，``callback`` = 算例
@@ -79,11 +77,6 @@ class FaceBoundary:
         object.__setattr__(self, "params",
                            MappingProxyType(dict(self.params)))
 
-    @property
-    def legacy_side(self) -> str:
-        """兼容期旧标签 x±/y±/z±。"""
-        return legacy_side(self.side)
-
 
 @dataclass(frozen=True)
 class BlockMesh:
@@ -105,7 +98,7 @@ class BlockMesh:
             raise ValueError(f"faces 必须按 {SIDES} 顺序给出六侧")
 
     def face(self, side: str) -> FaceBoundary:
-        """按规范或旧面名取单侧面描述。"""
+        """按规范面名取单侧面描述。"""
         wanted = normalize_side(side)
         for item in self.faces:
             if item.side == wanted:
@@ -270,17 +263,14 @@ def from_case(case: Mapping) -> BlockMesh:
         raise ValueError("case 必须是映射（现有算例字典）")
 
     grid = case.get("grid")
-    # 仓库现有的包别名跑法会同时存在 opencfd_jax.fields 与 opencfd_jax.src.fields
-    # 两份模块，Grid 类身份不同；这里按结构校验，避免把同一套网格判成非法。
+    # 按结构校验网格对象的 ni/nj/nk、inner 与 alloc，避免依赖具体 Grid 类身份。
     dimension_names = DIMENSION_NAMES
-    legacy_dimension_names = LEGACY_DIMENSION_NAMES
-    has_dimensions = all(hasattr(grid, name) for name in dimension_names) \
-        or all(hasattr(grid, name) for name in legacy_dimension_names)
+    has_dimensions = all(hasattr(grid, name) for name in dimension_names)
     if grid is None or not (has_dimensions and hasattr(grid, "inner")
                             and hasattr(grid, "alloc")):
         raise ValueError(
             "case['grid'] 必须是 fields.Grid 兼容对象"
-            "（有 ni/nj/nk 或 nx/ny/nz，以及 inner/alloc）")
+            "（有 ni/nj/nk，以及 inner/alloc）")
 
     dxs = _as_floats(case.get("dxs"), "dxs")
     raw_axes = case.get("axes")

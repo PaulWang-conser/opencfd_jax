@@ -57,24 +57,18 @@ def as_str(val):
     return _words(val)[0]
 
 
-def grid_dims(inp):
-    """GRID_3D / PARALLEL_3D → (nx, ny, nz, (npx, npy, npz))，并校验整除。"""
+def grid_dims_ijk(inp):
+    """GRID_3D / PARALLEL_3D → (ni, nj, nk, (npi, npj, npk))，并校验整除。"""
     dims = as_ints(inp["GRID_3D"])
     if len(dims) != 3:
         raise ValueError(f"GRID_3D 需要 3 个整数，得到 {dims}")
-    npx, npy, npz = (as_ints(inp["PARALLEL_3D"])
+    npi, npj, npk = (as_ints(inp["PARALLEL_3D"])
                      if "PARALLEL_3D" in inp else [1, 1, 1])
-    nx, ny, nz = dims
-    if nx % npx or ny % npy or nz % npz:
+    ni, nj, nk = dims
+    if ni % npi or nj % npj or nk % npk:
         raise ValueError(
-            f"GRID_3D={dims} 不能被 PARALLEL_3D={[npx, npy, npz]} 整除")
-    return nx, ny, nz, (npx, npy, npz)
-
-
-def grid_dims_ijk(inp):
-    """与 grid_dims 读取同一组值，但以计算 i/j/k 名称返回。"""
-    ni, nj, nk, parts = grid_dims(inp)
-    return ni, nj, nk, parts
+            f"GRID_3D={dims} 不能被 PARALLEL_3D={[npi, npj, npk]} 整除")
+    return ni, nj, nk, (npi, npj, npk)
 
 
 def summarize(inp):

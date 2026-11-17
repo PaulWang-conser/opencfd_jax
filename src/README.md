@@ -152,8 +152,8 @@ JSON 只分六组，外加顶层 `precision`：
 
 
 * 计算坐标为 `(i, j, k) = (ξ, η, ζ)`，空间数组轴顺序是 `(k, j, i)`。
-  规范尺寸名是 `ni/nj/nk`；`nx/ny/nz` 是兼容只读别名，旧位置参数仍按
-  计算 `i/j/k` 顺序解释。物理笛卡尔坐标 `x/y/z` 与计算坐标通过网格度量联系。
+  尺寸只使用 `ni/nj/nk`；旧 `nx/ny/nz` 构造/属性不再提供。物理笛卡尔坐标
+  `x/y/z` 与计算坐标通过网格度量联系。
 * 原码度量键 `Akx/Aky/Akz`、`Aix/Aiy/Aiz`、`Asx/Asy/Asz` 分别属于
   计算 `i/j/k` 方向；键末尾的 `x/y/z` 表示物理坐标分量，不是计算轴名。
 
@@ -164,7 +164,7 @@ JSON 只分六组，外加顶层 `precision`：
 * 诊断和无粘 / 粘性右端项可以操作完整数组，但最终存盘只保存 `(nk, nj, ni)` 内区。
 
 `boundary.py` 负责周期环绕、零梯度出流、壁面镜像和 Ev 等通用填充；`fields.py`
-只保留数组布局、`Grid` 和旧导入入口的兼容层。平板的专用入口、壁面和顶部条件仍由
+只保留数组布局、`Grid` 和 canonical 填充入口的重新导出。平板的专用入口、壁面和顶部条件仍由
 `plate.py` 写入，槽道双壁由 `channel.py` 写入。
 
 
@@ -316,8 +316,8 @@ du = -(F_right - F_left) / h
 
 
 
-* `boundary.py` 提供周期、出流、壁面镜像和 Ev 鬼胞；`fields.py` 只重导出这些
-  兼容入口，实际实现只在 `boundary.py` 一处。
+* `boundary.py` 提供周期、出流、壁面镜像和 Ev 鬼胞；`fields.py` 只重新导出这些
+  canonical 入口，实际实现只在 `boundary.py` 一处。
 
 * `schemes.py::flux_band_faces()` 根据 `DIF_BOUND` 在指定边界带改用原码单侧 / 降阶面通量公式。
   各格式分别声明原码 P/M 内核的 `(ka1, kb1)` 模板范围；新增格式可使用
@@ -405,7 +405,7 @@ du = -(F_right - F_left) / h
 文件：`boundary.py`、`mesh_data.py`、`run.py`。
 
 通用边界（周期、出流、计算 j 方向壁面镜像、非周期鬼层清零）只在 `boundary.py` 实现；
-`fields.py` 只重导出旧名，`channel.py` / `plate.py` 保留壁面和回调的兼容入口，
+`fields.py` 只重新导出 canonical 名，`channel.py` / `plate.py` 保留壁面和回调的兼容入口，
 壁面及平板的已有状态赋值公式由 `boundary.py` 提供。`build_execution(case, desc=None)` 在 JIT 前完成：
 
 * 校验 `case["bcs"]`、六侧 `FaceBoundary` 与 `bc_apply` 是否同源；
@@ -591,8 +591,8 @@ python -m opencfd_jax.src.run --case plate `
 | `run.py`           | 命令行、正式主循环、RHS 总装、滤波 / 诊断 / 存盘节奏   |
 | `runtime_config.py`| `input.json` 读取 / 校验 / 合并 / 输出前缀（第 3 步） |
 | `cases.py`         | 五种算例的网格、物性、初值、边界与通用体积力            |
-| `fields.py`        | 守恒量数组布局、`Grid`、旧边界导入兼容层          |
-| `axes.py`          | 计算 i/j/k 与旧 x/y/z 的唯一词表和尺寸/面标签映射      |
+| `fields.py`        | 守恒量数组布局、`Grid`、canonical 边界入口重新导出          |
+| `axes.py`          | 计算 i/j/k 词表、尺寸和六侧标签工具                  |
 | `boundary.py`      | 通用鬼胞填充、壁面镜像、Ev 与统一边界执行配置       |
 | `solver.py`        | 单方向 / 多方向无粘 RHS、声速、CFL 步长、SSP-RK3 |
 | `schemes.py`       | Steger–Warming 分裂、各对流格式、边界面通量带    |

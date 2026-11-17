@@ -28,14 +28,10 @@
 import jax.numpy as jnp
 
 from .boundary import (LAP, PLATE, WALL, _EV_WALL_SIGNS,
-                       _fill_axis, _fill_ev_plate_j, _fill_ev_wall_j,
+                       fill_ev_axis, fill_ev_plate_j, fill_ev_wall_j,
                        fill_halos_i, fill_halos_j, fill_halos_k,
                        fill_wall_j, zero_nonperiodic_ghosts)
-from .fields import spatial_array_axis
-
-# 历史测试和旧调用方仍用旧内部名；与 canonical 函数同一对象。
-_fill_ev_wall_y = _fill_ev_wall_j
-_fill_ev_plate_y = _fill_ev_plate_j
+from .fields import array_axis
 
 _CD6_A = (45.0, -9.0, 1.0)
 _CD6_DEN = 60.0
@@ -196,7 +192,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
         h = dxs[axis]
         if h <= 0.0:
             return jnp.zeros_like(g)
-        return cd_along_axis(g, spatial_array_axis(axis), h, order,
+        return cd_along_axis(g, array_axis(axis), h, order,
                              bound=dif_bound_for_axis(dif_bound, axis, dif_axis_map))
 
     if metrics is None:
@@ -283,7 +279,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
         if mixed_axis:
             Ev_stack = boundary_execution.fill_mixed_outflow(Ev_stack, axis)
         else:
-            Ev_stack = _fill_axis(Ev_stack, axis, bcs[axis], nxi_by_axis[axis],
+            Ev_stack = fill_ev_axis(Ev_stack, axis, bcs[axis], nxi_by_axis[axis],
                                   is_ev=True)
         if zero_state_ghosts:
             # 原码粘性通量 kernel 同样只跑内区，Ev 鬼层没被算过（是 0）；
@@ -295,7 +291,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
                 continue                           # 该方向不求解
             # 原码 du_viscous_Jacobian3d_y_final（OCFD_NS_Jacobian3d.cu:363-366）
             # 的 Ev 求导同样带 D0_bound[2i]/[2i+1]：边界带换单侧
-            dEv = cd_along_axis(Ev_stack[i], spatial_array_axis(axis), dxs[axis], order,
+            dEv = cd_along_axis(Ev_stack[i], array_axis(axis), dxs[axis], order,
                                 bound=dif_bound_for_axis(dif_bound, axis, dif_axis_map))
             add = dEv[sl_inner[1:]]                # 内区（3 维）
             du = du.at[(var,) + sl_inner[1:]].add(add)

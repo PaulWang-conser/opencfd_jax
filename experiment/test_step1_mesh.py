@@ -18,13 +18,9 @@ _REPO_TAX = Path(__file__).resolve().parents[2]
 if str(_REPO_TAX) not in sys.path:
     sys.path.insert(0, str(_REPO_TAX))
 
-try:  # 正常包路径（python -m pytest 从仓库根跑）
-    from opencfd_jax.src import cases, mesh_data, run
-    from opencfd_jax.src.fields import (INFLOW, OUTFLOW, PERIODIC, PLATE,
-                                        WALL, Grid)
-except ModuleNotFoundError:  # 兼容仓库现有的 opencfd_jax = src 别名跑法
-    from opencfd_jax import cases, mesh_data, run
-    from opencfd_jax.fields import INFLOW, OUTFLOW, PERIODIC, PLATE, WALL, Grid
+from opencfd_jax.src import cases, mesh_data, run
+from opencfd_jax.src.fields import (INFLOW, OUTFLOW, PERIODIC, PLATE,
+                                    WALL, Grid)
 
 
 def _ns(**kw):

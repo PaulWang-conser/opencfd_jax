@@ -19,7 +19,7 @@ import jax.numpy as jnp
 from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, WALL, fill_halos_i,
                        fill_halos_j, fill_halos_k, fill_wall_j,
                        zero_nonperiodic_ghosts)
-from .fields import spatial_array_axis
+from .fields import array_axis
 from .schemes import (SOLVE_SCHEMES, steger_warming, up7_rhs_along_last_axis,
                     weno7_symbo_rhs_along_last_axis)
 from .viscous import dif_bound_for_axis
@@ -69,13 +69,13 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
     if zero_state_ghosts:
         # 当前单块平板口径：保留入口状态，清零其余非周期状态鬼层。
         cons = zero_nonperiodic_ghosts(cons, bcs, preserve_inflow=True)
-    moved = jnp.moveaxis(cons, 1 + spatial_array_axis(axis), -1)
+    moved = jnp.moveaxis(cons, 1 + array_axis(axis), -1)
     nxi = (grid.ni, grid.nj, grid.nk)[axis]
 
     moved_metric = None
     if metric is not None:
         # metric 是 3 维标量场（计算轴序 (k,j,i)，无变量轴）；2-axis 是数组轴
-        moved_metric = tuple(jnp.moveaxis(m, spatial_array_axis(axis), -1) for m in metric)
+        moved_metric = tuple(jnp.moveaxis(m, array_axis(axis), -1) for m in metric)
     fp, fm = steger_warming(moved, gamma, epsl_sw, axis, metric=moved_metric)
 
     # 仅供诊断：原码不会在分裂后统一清零非周期方向的通量鬼层。
@@ -104,7 +104,7 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
 
     # 只返回内区（轴序已还原），由调用方 .at[inner].add 累加：
     # 原先每轴"zeros(全场)+set+add"要 3 次全场写，现在只写内区 3 次。
-    return jnp.moveaxis(du_moved_inner, -1, 1 + spatial_array_axis(axis))
+    return jnp.moveaxis(du_moved_inner, -1, 1 + array_axis(axis))
 
 
 def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=None,

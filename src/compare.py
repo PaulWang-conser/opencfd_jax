@@ -127,13 +127,13 @@ def cmd_dat2npz(args):
 def cmd_jax_run(args):
     """从原版 step0 初值出发执行 JAX 对拍，并逐 RK 子步保存 du、逐步保存守恒量。"""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from opencfd_jax import config
+    from . import config
     config.enable_x64()
     import jax
     import jax.numpy as jnp
-    from opencfd_jax.cases import apply_forcing, build_case
-    from opencfd_jax.solver import inviscid_rhs, rk3_step_stages
-    from opencfd_jax.viscous import viscous_rhs
+    from .cases import apply_forcing, build_case
+    from .solver import inviscid_rhs, rk3_step_stages
+    from .viscous import viscous_rhs
 
     args_case = argparse.Namespace(case=args.case, ni=args.ni, nj=args.nj,
                                    Re=args.Re, Ama=args.Ama,

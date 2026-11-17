@@ -1,11 +1,11 @@
-"""Step 3.5 计算方向命名与兼容迁移的验收测试。
+"""Step 3.5 计算方向命名的验收测试。
 
-覆盖：i/j/k 与旧 x/y/z 的词表映射、Grid 新旧构造入口、FaceBoundary/
-BlockMesh 的规范面名与旧名查找、boundary 填充别名、`infile.grid_dims_ijk`
-及 CLI `--ni/--nj/--nk` 入口。
+覆盖：i/j/k 词表、Grid 的 canonical 构造、FaceBoundary/BlockMesh 的规范
+面名、boundary/fields 的 canonical 填充入口、`infile.grid_dims_ijk` 及
+CLI `--ni/--nj/--nk` 入口。旧 x/y/z 面名、nx/ny/nz 尺寸名和旧填充别名
+均视为已移除，测试只断言它们不可用。
 """
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -43,18 +43,13 @@ def _resolve(argv):
 
 def test_axis_vocabulary_and_mappings():
     assert axes.AXIS_NAMES == ("i", "j", "k")
+    assert axes.DIMENSION_NAMES == ("ni", "nj", "nk")
     assert axes.SIDES == ("i-", "i+", "j-", "j+", "k-", "k+")
-    assert axes.LEGACY_AXIS_NAMES == ("x", "y", "z")
-    assert axes.LEGACY_SIDES == ("x-", "x+", "y-", "y+", "z-", "z+")
     assert axes.normalize_axis(0) == 0
     assert axes.normalize_axis("i") == 0
-    assert axes.normalize_axis("x") == 0
     assert axes.normalize_axis("j") == 1
     assert axes.normalize_side("i-") == "i-"
-    assert axes.normalize_side("x-") == "i-"
-    assert axes.normalize_side("y+") == "j+"
-    assert axes.legacy_side("i-") == "x-"
-    assert axes.legacy_side("k+") == "z+"
+    assert axes.normalize_side("j+") == "j+"
     assert axes.side_axis("j-") == 1
     assert axes.side_sign("i-") == 0
     assert axes.side_sign("k+") == 1
@@ -62,52 +57,56 @@ def test_axis_vocabulary_and_mappings():
     assert axes.array_axis("j") == 1
     assert axes.array_axis("k") == 0
     with pytest.raises(ValueError):
-        axes.normalize_side("q+")
+        axes.normalize_axis("x")
+    with pytest.raises(ValueError):
+        axes.normalize_side("x-")
+    assert not hasattr(axes, "LEGACY_SIDES")
+    assert not hasattr(axes, "legacy_side")
 
 
-def test_grid_new_and_legacy_construction():
+def test_grid_canonical_construction():
     new = Grid(ni=8, nj=7, nk=6)
-    old = Grid(8, 7, 6)
-    legacy_kw = Grid(nx=8, ny=7, nz=6)
-    for grid in (new, old, legacy_kw):
+    positional = Grid(8, 7, 6)
+    for grid in (new, positional):
         assert (grid.ni, grid.nj, grid.nk) == (8, 7, 6)
-        assert (grid.nx, grid.ny, grid.nz) == (8, 7, 6)
         assert grid.n_inner == (6, 7, 8)
         assert grid.shape == (5, 14, 15, 16)
         assert grid.alloc().shape == grid.shape
+        assert not hasattr(grid, "nx")
+        assert not hasattr(grid, "ny")
+        assert not hasattr(grid, "nz")
 
 
-def test_grid_rejects_conflict_and_missing_dimensions():
-    same = Grid(ni=8, nj=7, nk=6, nx=8, ny=7, nz=6)
-    assert (same.ni, same.nj, same.nk) == (8, 7, 6)
-    with pytest.raises(ValueError, match="冲突"):
-        Grid(ni=8, nj=7, nk=6, nx=9)
+def test_grid_rejects_missing_or_legacy_dimensions():
     with pytest.raises(ValueError, match="缺少网格尺寸"):
         Grid()
-    with pytest.raises(AttributeError):
-        Grid(ni=8, nj=7, nk=6).nx = 9
+    with pytest.raises(TypeError):
+        Grid(ni=8, nj=7, nk=6, nx=9)
+    with pytest.raises(ValueError, match="正整数"):
+        Grid(ni=8, nj=7, nk=0)
 
 
 # ---------------------------------------------------------- 面名与填充入口
 
-def test_face_boundary_normalizes_legacy_side():
-    face = mesh_data.FaceBoundary("x-", 0, boundary.PERIODIC, "halo", False)
+def test_face_boundary_rejects_legacy_side():
+    face = mesh_data.FaceBoundary("i-", 0, boundary.PERIODIC, "halo", False)
     assert face.side == "i-"
-    assert face.legacy_side == "x-"
-    with pytest.raises(ValueError, match="不一致"):
-        mesh_data.FaceBoundary("x-", 1, boundary.PERIODIC, "halo", False)
+    assert not hasattr(face, "legacy_side")
+    with pytest.raises(ValueError):
+        mesh_data.FaceBoundary("x-", 0, boundary.PERIODIC, "halo", False)
 
 
-def test_blockmesh_faces_are_canonical_and_legacy_lookup_works():
+def test_blockmesh_faces_are_canonical_only():
     desc = mesh_data.from_case(_base_case())
     assert tuple(f.side for f in desc.faces) == axes.SIDES
-    assert desc.face("i-") is desc.face("x-")
-    assert desc.face("k+") is desc.face("z+")
+    assert desc.face("i-") is desc.face("i-")
+    with pytest.raises(ValueError):
+        desc.face("x-")
     assert desc.inner_shape == (4, 4, 4)
 
 
-def test_legacy_only_grid_is_accepted_and_conflicting_views_rejected():
-    class LegacyGrid:
+def test_from_case_requires_canonical_grid():
+    class LegacyOnlyGrid:
         nx, ny, nz = 4, 4, 4
 
         def inner(self):
@@ -116,67 +115,66 @@ def test_legacy_only_grid_is_accepted_and_conflicting_views_rejected():
         def alloc(self):
             return None
 
-    desc = mesh_data.from_case(_base_case(grid=LegacyGrid()))
-    assert desc.inner_shape == (4, 4, 4)
-
-    class ConflictingGrid(LegacyGrid):
-        ni, nj, nk = 5, 4, 4
-
-    with pytest.raises(ValueError, match="冲突"):
-        mesh_data.from_case(_base_case(grid=ConflictingGrid()))
+    with pytest.raises(ValueError, match="ni/nj/nk"):
+        mesh_data.from_case(_base_case(grid=LegacyOnlyGrid()))
 
 
-def test_boundary_canonical_aliases_are_same_objects():
-    assert boundary.fill_halos_i is boundary.fill_halos_x
-    assert boundary.fill_halos_j is boundary.fill_halos_y
-    assert boundary.fill_halos_k is boundary.fill_halos_z
-    assert boundary.fill_wall_j is boundary.fill_wall_y
-    assert boundary.fill_ev_wall_j is boundary.fill_ev_wall_y
-    assert boundary.fill_ev_plate_j is boundary.fill_ev_plate_y
+def test_boundary_and_fields_legacy_aliases_are_gone():
     assert fields.fill_halos_i is boundary.fill_halos_i
-    assert fields.fill_halos_x is boundary.fill_halos_x
-    assert fields.fill_wall_y is boundary.fill_wall_y
+    assert fields.fill_halos_j is boundary.fill_halos_j
+    assert fields.fill_halos_k is boundary.fill_halos_k
+    assert fields.fill_wall_j is boundary.fill_wall_j
+    assert fields.zero_nonperiodic_ghosts is boundary.zero_nonperiodic_ghosts
+    assert fields.array_axis is not None
+    for name in ("fill_halos_x", "fill_halos_y", "fill_halos_z",
+                 "fill_wall_y", "fill_ev_wall_y", "fill_ev_plate_y",
+                 "_fill_ev_wall_y", "_fill_ev_plate_y", "_fill_axis"):
+        assert not hasattr(boundary, name), name
+    for name in ("fill_halos_x", "fill_halos_y", "fill_halos_z",
+                 "fill_wall_y", "spatial_array_axis"):
+        assert not hasattr(fields, name), name
 
 
-def test_infile_grid_dims_ijk_matches_legacy():
+def test_infile_grid_dims_ijk_is_only_dimension_api():
     path = _REPO / "opencfd_jax" / "experiment" / "cases" / "channel_small.in"
     inp = infile.read_ocfd_in(str(path))
-    legacy = infile.grid_dims(inp)
-    canonical = infile.grid_dims_ijk(inp)
-    assert canonical == legacy
-    assert legacy[:3] == (24, 25, 16)
+    dims = infile.grid_dims_ijk(inp)
+    assert dims[:3] == (24, 25, 16)
+    assert not hasattr(infile, "grid_dims")
 
 
 @pytest.mark.skipif(
     not (_REPO / "channel_case_iiA" / "quick" / "OCFD3d-Mesh.dat").exists(),
     reason="缺少 channel_case_iiA/quick/OCFD3d-Mesh.dat")
-def test_mesh_reader_new_and_old_dimensions_agree():
+def test_mesh_reader_canonical_dimensions_only():
     from opencfd_jax.src import mesh
 
     path = _REPO / "channel_case_iiA" / "quick" / "OCFD3d-Mesh.dat"
-    old = mesh.read_ocfd_mesh(str(path), 96, 97, 64)
-    legacy_kw = mesh.read_ocfd_mesh(str(path), nx=96, ny=97, nz=64)
-    new = mesh.read_ocfd_mesh(str(path), ni=96, nj=97, nk=64)
-    for key in old:
-        assert old[key].shape == (64, 97, 96)
-        assert old[key].dtype == new[key].dtype
-        assert (old[key] == legacy_kw[key]).all()
-        assert (old[key] == new[key]).all()
+    positional = mesh.read_ocfd_mesh(str(path), 96, 97, 64)
+    keyword = mesh.read_ocfd_mesh(str(path), ni=96, nj=97, nk=64)
+    for key in positional:
+        assert positional[key].shape == (64, 97, 96)
+        assert keyword[key].dtype == positional[key].dtype
+        assert (positional[key] == keyword[key]).all()
+    with pytest.raises(TypeError):
+        mesh.read_ocfd_mesh(str(path), nx=96, ny=97, nz=64)
 
 
 @pytest.mark.skipif(
     not (_REPO / "channel_case_iiA" / "quick" / "opencfd.dat").exists(),
     reason="缺少 channel_case_iiA/quick/opencfd.dat")
-def test_field_reader_new_and_old_dimensions_agree():
+def test_field_reader_canonical_dimensions_only():
     from opencfd_jax.src import mesh
 
     path = _REPO / "channel_case_iiA" / "quick" / "opencfd.dat"
-    old = mesh.read_ocfd_field(str(path), 96, 97, 64)
-    new = mesh.read_ocfd_field(str(path), ni=96, nj=97, nk=64)
-    assert len(old) == len(new) == 5
-    for a, b in zip(old, new):
+    positional = mesh.read_ocfd_field(str(path), 96, 97, 64)
+    keyword = mesh.read_ocfd_field(str(path), ni=96, nj=97, nk=64)
+    assert len(positional) == len(keyword) == 5
+    for a, b in zip(positional, keyword):
         assert a.shape == (64, 97, 96)
         assert (a == b).all()
+    with pytest.raises(TypeError):
+        mesh.read_ocfd_field(str(path), nx=96, ny=97, nz=64)
 
 
 # --------------------------------------------------------------------- CLI
