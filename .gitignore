@@ -26,3 +26,6 @@ experiment/ocfd/**/dump/
 experiment/ocfd/**/*.dat
 outputest/*.plt
 outputest/*.tec
+
+# CGNS 官方样例网格：由 Grid/download_cgns_samples.py 重新下载，二进制不入库
+Grid/samples/
