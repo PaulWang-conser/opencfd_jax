@@ -12,7 +12,7 @@ execution: code
 
 ## 实施进度（2026-11-18）
 
-通用 `FARFIELD`（R1–R4 的边界填充、状态校验、`Ev` 零梯度）与 CGNS `BCFarfield` 到通用远场的适配已实现并有回归测试；R5–R20 的四阶段 `prepare`、`specificboundary` 顶层入口和 `main.py` 错误分层仍未实现。本计划其余内容保持为待实施设计。
+通用 `FARFIELD`（R1–R4 的边界填充、状态校验、`Ev` 零梯度）、CGNS `BCFarfield` 的**单面**适配、默认 +x 来流、`prepare` 的“常规 halo → 特殊回调覆盖”、`main.py` 错误分层（R17/R18/R20 已落地；R19 覆盖 RHS 装配/预热/时间推进/滤波，存盘等尾部阶段仍裸抛）和 `--filter` 拒绝已实现并有回归测试。R5 的旧“四阶段 + 角点清理”已被本轮确认的两阶段口径取代；`specificboundary` 顶层入口（R10–R13）仍未实现。已知 `plate_1step` 旧基准与新“特殊覆盖”口径不再逐位一致：旧链在回调后清零非周期鬼层，新链在清零后由特殊回调写壁面/顶部鬼层；差异尚未通过更新基准或调整特殊脚本解决。本计划其余内容保持为待实施设计。
 
 ## Goal Capsule
 
@@ -55,7 +55,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 **执行顺序**
 
-- R5. `BoundaryExecution` 提供唯一的 `prepare(q)`，顺序固定为：常规 `executor="halo"` 面填充 → 特殊回调 → `executor="callback+halo"` 面填充 → 常规面角点清理。
+- R5. `BoundaryExecution` 提供唯一的 `prepare(q)`，顺序固定为：按六侧 `kind` 填常规 halo（`callback` / `callback+halo` 面也先填普通值）→ 特殊回调覆盖。特殊脚本决定覆盖哪些鬼胞、覆盖成什么值；常规填充不得在回调后重写特殊值。旧计划的“第三阶段 `callback+halo` + 第四阶段角点清理”不作为本步口径。
 - R6. `prepare` 的常规填充按 `FaceBoundary` 的 side/axis 执行，不再依赖轴级 `fill_halos_i/j/k` 对整轴同时生效；同一轴一侧特殊、另一侧 `OUTFLOW` 的组合必须能正确表达。
 - R7. `rhs` 在每次计算 `du` 前调用一次 `prepare`；`rk3_step` / `rk3_step_stages` 不再接收或调用 `bc_apply`，所有仓库内消费者（含 `src/compare.py`）迁移到新口径。
 - R8. `inviscid_rhs` 与 `viscous_rhs` 增加“状态已准备”的入口，跳过内部状态 halo 填充；`zero_state_ghosts` 仍在准备之后按现有语义执行。粘性 `Ev` 鬼层继续使用现有 `fill_ev_axis` / `fill_ev_plate_j` / `fill_ev_wall_j` 语义，只为通用 `FARFIELD` 增加零梯度分支；不在本步重写其他公式。
@@ -94,7 +94,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 **Deferred to follow-up work**
 
-- CGNS `BCFarfield` 的 `BCDataSet` 读取和来流参数来源；CGNS patch 到通用远场的类型映射已实现，但不解析 `BCDataSet`，默认状态由 `poiseuille` 从初场内区两端平均得到。
+- CGNS `BCFarfield` 的 `BCDataSet` 读取和来流参数来源；CGNS patch 到通用远场的类型映射已实现，但不解析 `BCDataSet`，缺省状态由 `poiseuille` 设为物理 +x 方向 `(rho=1, rho*u=1, v=w=0, T=1)`。
 - 把 `src/` 下所有底层 `ValueError` 改造成完整的自定义异常层级；本步只建立主入口的 `SetupError` / `RuntimeExecutionError` 分界。
 - 运行期异常的结构化日志、JSON 错误报告和自动复现包；本步保留 traceback 并加运行位置上下文。
 - 同侧多个 farfield patch、每面不同来流状态、子区远场。
@@ -113,8 +113,9 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 ### Acceptance Examples
 
 - AE1. 构造 `bcs=(PERIODIC, FARFIELD, PERIODIC)` 的小网格，给出 `case["farfield"]`；`prepare` 后 `j-`/`j+` 的边界层内点与 `2*LAP` 鬼层都等于该守恒量，`i`/`k` 周期鬼层仍按周期值填充。
+- AE1b. 构造 `Jlo=BCWall`、`Jhi=BCFarfield` 的 CGNS 单面 fixture；`to_block_mesh` 的 `block.bcs` 低侧代表值为 `WALL`，`faces` 中只有 `j+` 是 `FARFIELD`；`prepare` 后只有 `j+` 被远场覆盖，`j-` 仍是壁面镜像。
 - AE2. 构造 i- 特殊回调、i+ 普通出流的 custom case；回调执行时 i+ 出流鬼层已经被常规填充；回调只改 i-；`prepare` 结束后 i- 保持特殊值、i+ 保持出流值、j/k 角点回到周期值。
-- AE3. `plate` 与 `channel` 的一步 `cons`、三个子步 `du` 与改动前 NPZ 逐位一致；若不能逐位一致，必须把差异定位到具体鬼层/角点并报告，不能放宽断言掩盖。
+- AE3. `poiseuille_5step`、`sod_1step`、`tg_10step` 的一步/多步结果与改动前 NPZ 逐位一致；`plate_1step` 因“旧链在回调后清零非周期鬼层、新链在清零后由特殊回调写壁面/顶部鬼层”会出现预期差异，必须记录差异位置并单独确认是否更新基准，不能把旧基准 PASS 当成新口径的证明。
 - AE4. 合法 `specificboundary` 脚本名被加载并挂到 case；脚本不存在、名字含路径、带其他后缀、缺少 `build_special_boundary(case)`、返回对象缺 `apply`、与 `plate`/`channel` 冲突分别在 JIT 前报错。
 - AE5. `specificboundary` 与另一轴通用 `FARFIELD` 同时存在时能通过 `from_case` 和 `prepare`，且回调次数不再是每步 7 次。
 - AE6. 显式 `--ni` 与 CGNS `VertexSize` 冲突时，`main.py` 输出 `初始化错误：...` 和原始异常类型，退出码为 2，不打印误导性的 `运行参数错误`；非启动路径缺 `--mesh` 仍由 `_validate_input_paths` 报启动错误。
@@ -127,10 +128,10 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 ### Key Technical Decisions
 
 - KTD1. **按面填充替代轴级整轴填充.** `FaceBoundary` 已经保存 `side/axis/kind/executor`，执行层应按面生成填充计划。轴级 `bcs` 继续作为兼容与校验字段保留，但不再直接决定整轴 `fill_halos_i/j/k` 的行为。这样同一轴一侧特殊、另一侧出流才能在不靠 `mixed_outflow` 的情况下表达。
-- KTD2. **四阶段 `prepare`.** 顺序是常规 halo → 特殊回调 → `callback+halo` → 常规角点清理。第三阶段保留壁面镜像等“回调后仍需常规填充”的面；第四阶段只在 `executor="halo"` 的面上重跑，用于恢复被特殊回调跨轴写到的周期角点。平板/槽道的现有最终状态因此可以保持。
+- KTD2. **两阶段 `prepare`.** 顺序是“按面常规填充（所有面，包括 `callback` / `callback+halo` 的普通值）→ 特殊回调覆盖”。特殊回调是最后写入者；常规填充不再在回调后重跑，也不做单独的角点清理阶段。若某个特殊脚本需要恢复角点，由脚本自己负责。
 - KTD3. **`rhs` 是唯一状态准备点.** `build_rhs` 内部调用 `execution.prepare(q)`，然后以“状态已准备”模式调用无粘/粘性 RHS。`rk3_step` / `rk3_step_stages` 删除 `bc_apply` 参数；`main.run` 在整步 JIT 的外层再调用一次 `execution.prepare`，保证输出状态也带边界层。编译图中每步状态准备从约 7 次降到 3 次 RHS + 1 次最终准备；Python 侧具体可见次数由测试用 `jax.disable_jit()` 固定。
 - KTD4. **通用远场采用均匀 Dirichlet.** 不把平板顶部的“顶部来流”语义抽象成特征边界；通用 `FARFIELD` 只做“把给定守恒量写到该侧边界层+鬼层”。这与当前平板顶部 `far_state` 的赋值口径一致，也避免在 Step 4.n 引入未验证的无反射公式。
-- KTD5. **远场状态由 case 提供.** `BoundaryExecution` 从 `case["farfield"]` 读取 5 分量守恒量；本步不把远场参数塞进 `physics` JSON，也不从 CGNS `BCDataSet` 推断。CGNS 适配和 JSON 暴露留给后续计划。
+- KTD5. **远场状态由 case 提供.** `BoundaryExecution` 从 `case["farfield"]` 读取 5 分量守恒量；本步不把远场参数塞进 `physics` JSON，也不从 CGNS `BCDataSet` 推断。CGNS 缺省状态为物理 +x 均匀来流；适配和 JSON 暴露留给后续计划。
 - KTD6. **`specificboundary` 只放脚本名.** JSON 值是一个脚本名（可带 `.py`），目录、入口函数和对象形状由加载器约定；脚本负责构造六侧 `FaceBoundary` 与 `apply`。加载器不执行任意表达式，不做动态注册，不把 I/O 放进 JIT。参数化留给后续，不在本步给 JSON 增加第二个键。
 - KTD7. **固定脚本目录.** 本步只允许 `src/special_boundaries/` 下的 `.py` 脚本，避免 `input.json` 变成任意代码执行入口。路径式脚本加载、跨仓库脚本和脚本参数化留给后续；如果用户需要仓库外脚本，必须先扩展这一层并单独评审。
 - KTD8. **`fill_mixed_outflow` 只保留给 Ev.** 状态路径由按面常规填充解决；粘性 `Ev` 仍按现有混合出流侧补零梯度，并为通用 `FARFIELD` 增加零梯度分支。其他 `Ev` 公式不重写。
@@ -147,7 +148,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 ### Risks & Dependencies
 
-- **角点顺序风险.** 平板和槽道回调会跨 k 写鬼层；如果第四阶段清理不覆盖这些角点，`plate`/`channel` 结果会漂移。缓解：AE3 逐位对比；U2 先写顺序测试再迁移主链。
+- **角点顺序风险.** 平板和槽道回调会跨 k 写鬼层；两阶段口径下特殊回调是最后写入者，不再由常规角点清理覆盖。若某个回调需要把跨轴角点恢复为周期值，必须在回调内部自己处理。缓解：AE3 逐位对比；U2 先写顺序测试再迁移主链。
 - **`zero_state_ghosts` 交互风险.** 平板历史口径会在准备后清零非周期鬼层；通用远场如果误用同一开关，会把 Dirichlet 鬼层清掉。缓解：R4 明确组合语义，U1 加显式断言。
 - **脚本加载安全风险.** 裸文件名如果拼接成路径，可能跳出固定目录。缓解：KTD7 的目录与文件名校验；错误信息只打印文件名，不执行目录扫描。
 - **签名迁移风险.** 删除 `rk3_step(_stages)` 的 `bc_apply` 会影响 `experiment/compare_ocfd_jax.py` 与旧测试。缓解：U2 一次性迁移所有仓库内调用，并用 `rg` 复核无残留。
@@ -184,7 +185,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 **Test Scenarios.**
 
 - `FARFIELD` 在 `GENERIC_KINDS` 中，`_generic_faces` 生成六侧 `executor="halo"`。
-- `fill_face_halo` 对 j-/j+ farfield 写入 1 个边界内点 + `2*LAP` 鬼层；i/k 周期不受影响。
+- `fill_faces` 对 j-/j+ farfield 写入 1 个边界内点 + `2*LAP` 鬼层；单面 farfield 不影响对侧；i/k 周期不受影响。
 - `fill_ev_axis` 对 `FARFIELD` 侧做零梯度复制；`plate`/`channel`/`OUTFLOW` 的 Ev 结果不变。
 - 缺少 `case["farfield"]`、形状不是 `(5,)`、含 NaN/inf、密度 <= 0 时 `build_execution` 报错。
 - `zero_state_ghosts=True` + farfield 的行为与文档一致；测试显式断言鬼层被清零，防止误以为仍保留 Dirichlet。
@@ -194,15 +195,15 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 ### U2. 四阶段 `prepare` 与 RHS/RK 迁移
 
-**Goal.** 把状态边界执行统一到 `BoundaryExecution.prepare`，实现“常规 → 特殊 → callback+halo → 角点清理”，并去掉重复回调。
+**Goal.** 把状态边界执行统一到 `BoundaryExecution.prepare`，实现“常规 → 特殊覆盖”，并去掉 RK 子步前后的重复回调。
 
 **Requirements.** R5, R6, R7, R8, R9, AE2, AE3.
 
 **Dependencies.** U1.
 
-**Files.** `src/boundary.py`; `src/main.py`; `src/compare.py`; `src/solver.py`; `src/viscous.py`; `experiment/compare_ocfd_jax.py`; `experiment/test_step2_boundary.py`; `experiment/test_step4n_boundary.py`.
+**Files.** `src/boundary.py`; `src/main.py`; `src/compare.py`; `src/solver.py`; `src/viscous.py`; `experiment/compare_ocfd_jax.py`; `experiment/test_step2_boundary.py`; `experiment/test_step4n_farfield.py`.
 
-**Approach.** `BoundaryExecution.prepare(q)` 按 KTD2 四阶段执行；删除只做回调的公开 `apply`，特殊回调只作为 `prepare` 的第二阶段内部调用，避免再出现“只叠回调不填常规”的旧入口。`src/main.py::build_rhs` 改为 `q = execution.prepare(q)`，并向 `inviscid_rhs` / `viscous_rhs` 传 `fill_state_halos=False`。`src/solver.py::_rhs_along_axis` 与 `inviscid_rhs` 增加 `fill_state_halos=True` 关键字；为 False 时跳过 `fill_halos_i/j/k` 和 `fill_wall_j`，但仍执行 `zero_state_ghosts`。`src/viscous.py::viscous_rhs` 增加同样关键字，跳过状态 halo，保留派生温度与 Ev 的现有处理。`rk3_step` / `rk3_step_stages` 删除 `bc_apply` 参数；`src/main.py::run` 的 `step_jit` 改为 `execution.prepare(rk3_step(q, dt_, rhs))`；`experiment/compare_ocfd_jax.py` 在 `rk3_step_stages` 后对 `q1` 调一次 `execution.prepare`；`src/compare.py::rhs` 同样改为 `execution.prepare` 后调用 `fill_state_halos=False` 的无粘/粘性 RHS。`experiment/test_step2_boundary.py` 的回调计数断言更新为新口径。
+**Approach.** `BoundaryExecution.prepare(q, zero_state_ghosts=False)` 先按六侧 `FaceBoundary.kind` 填常规状态鬼层（`callback` / `callback+halo` 面也填普通值），再执行特殊回调；特殊回调是最后写入者。`src/main.py::build_rhs` 改为 `q = execution.prepare(q, zero_state_ghosts=plate_ghosts)`，并向 `inviscid_rhs` / `viscous_rhs` 传 `fill_state_halos=False`。`src/solver.py::_rhs_along_axis` 与 `inviscid_rhs` 增加 `fill_state_halos=True` 关键字；为 False 时跳过 `fill_halos_i/j/k`。`src/viscous.py::viscous_rhs` 增加同样关键字，并按 `faces` 填 Ev；`main.run` 的 `step_jit` 改为 `execution.prepare(rk3_step(q, dt_, rhs))`。`src/compare.py::rhs` 同样改为 `execution.prepare` 后调用 `fill_state_halos=False` 的无粘/粘性 RHS。`experiment/test_step2_boundary.py` 的回调计数断言更新为新口径。
 
 **Patterns to follow.** `src/main.py::build_rhs` 的现有组合顺序；`src/solver.py::_rhs_along_axis` 的单轴填充位置；`src/viscous.py::viscous_rhs` 的 `mixed_axis` 分支；`src/boundary.py::validate_special_sides` 的 callback/halo 分类。
 
@@ -210,7 +211,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 - custom case：i- 回调、i+ 出流；回调执行前 i+ 鬼层已填充，回调后 i- 保持特殊值，j/k 角点回到周期值。
 - `plate` / `channel` 的一步 `cons` 与三个 `du` 和改动前 NPZ 逐位一致；若不一致，测试输出差异位置并失败。
-- `build_rhs` 每次调用只触发一次 `prepare`；`rk3_step_stages` 不再调用 `bc_apply`；在 `jax.disable_jit()` 下整步状态准备次数为 3 次 RHS + 1 次最终 prepare = 4 次，JIT 下不再出现旧的 RK 外层重复调用。
+- `build_rhs` 每次调用只触发一次 `prepare`；`rk3_step_stages` 不再调用 `bc_apply`；在 `jax.disable_jit()` 下整步状态准备次数为 3 次 RHS，`main.run` 的整步 JIT 外层另有 1 次最终 `prepare`。
 - `fill_state_halos=False` 时 `inviscid_rhs` 不再重填状态鬼层；`zero_state_ghosts=True` 仍清零非周期鬼层。
 - `experiment/compare_ocfd_jax.py` 的 `q1` 在比较前已准备边界层，且不重复回调。
 - `src/compare.py::rhs` 与 `src/main.py::build_rhs` 使用同一 `execution.prepare` 和 `fill_state_halos=False` 口径；一步结果一致。

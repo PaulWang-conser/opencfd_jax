@@ -187,11 +187,16 @@ CGNS 路径只适用于 `poiseuille`：`mesh.file` 指向 HDF5/CGNS 文件，`me
 | 3  | 读取外部网格（仅 CGNS 需要时） | `mesh_cgns.py` | `poiseuille` 读 CGNS/HDF5，补鬼胞坐标并算曲线度量；旧 `.in`/场/OCFD 网格入口已删除 |
 | 4  | 组装单个 RK 子步的右端项  | `main.py::build_rhs`                | 形成 JIT 函数 `rhs(q)`，组合边界、无粘、粘性和源项；滤波不放入其中        |
 | 5  | 确定时间步长          | `main.py::run`                    | 只接受显式固定 `dt`；不再有 CFL 自适应或 `compute_dt` |
-| 6  | 执行一个 SSP-RK3 整步 | `solver.py::rk3_step_stages`       | 三次计算右端项，三次组合状态；每个子步都重新施加专用物理边界                  |
+| 6  | 执行一个 SSP-RK3 整步 | `solver.py::rk3_step_stages`       | 三次计算右端项，三次组合状态；每个子步的 `rhs` 先 `execution.prepare`，再算 RHS |
 | 7  | 可选激波滤波          | `filtering.py::shock_filter`       | 每个 `nstep_filter` 整步执行一次，不在 RK 子步内执行            |
 | 8  | 打印诊断            | `ana.py::diagnostic_line`          | 输出时间、步数、耗时、内区平均 `rho*E` 和全场 NaN 标志              |
 | 9  | 保存结果            | `io.py::save_npz`                  | 将五个内区分量及时间、步数、格式和物性元信息写入 NPZ                    |
 | 10 | 重复推进            | `main.py::run`                     | 回到步骤 5，直到达到终止时间或最大步数                            |
+
+错误分层：配置解析错误由 `runtime_config.ConfigError` 转成 `配置错误`；`init.prepare`
+的失败在 `run` 边界包装成 `errors.SetupError`，由 `main` 转成 `初始化错误` 并
+`parser.error`；时间推进中的异常包装成 `errors.RuntimeExecutionError`，保留原始
+异常链与 `case/step/t/dt/grid` 上下文，不再被转成启动参数错误。
 
 下面展开最耗计算量的第 5～7 步。
 
@@ -404,9 +409,11 @@ LAP 鬼胞坐标并计算 CD6 度量。
 当前执行子集：三维 `Structured`、`Vertex` 坐标、整面 `BC`、同块 identity 1to1；
 `BCWall` 只映射 `WALL`，同一轴两侧整面 `BCSymmetryPlane` 才近似 `PERIODIC`，单侧
 对称面拒绝；`BCExtrapolate/BCOutflow*` 映射 `OUTFLOW`，`BCFarfield` 映射通用
-`FARFIELD`。`BCWallViscous*`、`BCInflow*` 只读不执行。CGNS 文件不解析
-`BCDataSet`；`BCFarfield` 的来流状态由算例侧提供（当前 `poiseuille` 从初场内区
-两端平均出默认状态）。`validate=False` 保留所有原始 `BCType` 供诊断，但仍拒绝
+`FARFIELD`。`BCWallViscous*`、`BCInflow*` 只读不执行。CGNS 不解析
+`BCDataSet`；CGNS 的 `BCFarfield` 是**单面**执行：只有被标记为 `BCFarfield` 的那个面
+是远场，不要求同轴对侧也是远场。缺省来流由算例侧提供为
+`(rho=1, rho*u=1, rho*v=0, rho*w=0, rho*E=Cv*T+0.5)`，即物理 +x 方向均匀来流。
+`validate=False` 保留所有原始 `BCType` 供诊断，但仍拒绝
 `CellCenter`、`Rind>0`、`PointList`、`Periodic_t` 和二维 zone。
 
 ### 7.2 统一边界执行与扩展入口（第 2 步）
@@ -425,9 +432,11 @@ LAP 鬼胞坐标并计算 CD6 度量。
 
 **新增通用边界**：在 `boundary.py` 的 `_GENERIC_AXIS_FILLERS` 注册填充函数并加入
 `GENERIC_KINDS`，再让 `mesh_data._generic_faces` 能描述对应语义。通用 WALL 目前仅
-支持计算 j 方向；通用 FARFIELD 把边界内点和两侧 2*LAP 鬼层写成同一个来流状态，
-粘性 Ev 鬼层按零梯度复制。`filtering.py` 的滤波尚未接入 FARFIELD，`main.build_rhs`
-在启用 `--filter` 时对远场算例直接报错。
+支持计算 j 方向；通用 `FARFIELD` 只写被标记的那个面，把该侧边界第一层内点和
+`2*LAP` 鬼层写成同一个来流状态，粘性 Ev 鬼层按零梯度复制。执行顺序由
+`BoundaryExecution.prepare(q)` 统一：先按六侧 `executor` 填常规 halo，再调用特殊回调；
+特殊回调最后写入的鬼胞不会被常规填充再次覆盖。`filtering.py` 的滤波尚未接入
+`FARFIELD`，`main.build_rhs` 在启用 `--filter` 时对远场算例直接报错。
 
 **新增 case 特殊边界**：case 侧显式提供一个对象，并同时把它的 `apply` 设为
 `case["bc_apply"]`：
@@ -445,9 +454,9 @@ case["bc_apply"] = special.apply
 ```
 
 约束：回调面所在轴的轴级 `bcs` 必须是 `INFLOW`/`PLATE`（no-op 占位）；同轴另一侧
-可设为 `OUTFLOW` halo，回调后由执行配置填充该侧状态鬼层，并在粘性通量阶段
-填充对应出流侧的 Ev 鬼层；特殊侧的 Ev 暂时保留原值，其他物理条件需另行实现和验证。没有回调的轴只能是
-`PERIODIC`/`OUTFLOW`/`FARFIELD`，其 halo 面的 `kind` 必须等于轴级 `bcs`；
+可设为 `OUTFLOW` halo，常规填充先填两侧，特殊回调最后覆盖它接管的鬼胞；粘性
+通量阶段按面填对应出流侧的 Ev 鬼层，特殊侧的 Ev 暂时保留原值。没有回调的轴只能是
+`PERIODIC`/`OUTFLOW`/`WALL`/`FARFIELD`，其 halo 面的 `kind` 必须等于轴级 `bcs`；
 `WALL` 仍只允许计算 j 方向。`special_boundary` 不能与 `plate`/`channel_bc` 同时出现。
 当前这是**显式导入**入口，不做动态注册；回调只允许数组运算，不得把 I/O 放进 JIT。
 槽道三点压力外推和平板两点外推在 `boundary.py` 中分别保留原有公式。

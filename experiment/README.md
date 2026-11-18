@@ -254,13 +254,17 @@ python -m pytest opencfd_jax/experiment/test_step4_cgns_reader.py `
   opencfd_jax/experiment/test_step4n_farfield.py -q
 ```
 
-验收结果（2026-11-18，本机）：Step 4 四个文件 18 passed；`experiment/` 全量
-106 passed。CGNS 一步与内置一步的逐分量最大绝对差在 `2.27e-13` 以内；两边 `_meta`
+验收结果（2026-11-18，本机）：Step 4 + 4.n 四个文件 22 passed；`experiment/` 全量
+110 passed。CGNS 一步与内置一步的逐分量最大绝对差在 `2.27e-13` 以内；两边 `_meta`
 同为 `N=16`、`dt=0.001`、`step=1`。
 
 当前未覆盖：非均匀 CGNS 的 `poiseuille` 解析初值、`BCInflow*`/粘性壁面的执行、
 CGNS `BCFarfield` 的 `BCDataSet` 来流参数、多块连接与翻转/轴交换、二维 zone、
 `Rind`/`PointList`、以及仓库级 `tests/` 全量套件。
+已知回归差异：`plate_1step` 的旧基准仍按“特殊回调后清零非周期鬼层”生成，新
+“特殊回调最后覆盖”口径下 `check_step0 --only plate_1step` 为 FAIL（最坏
+`cons_4 max=2.61e1`）；`poiseuille_5step`、`sod_1step`、`tg_10step` 仍逐位 PASS。
+仓库级 `tests/` 仍有 8 个 collection error，均为旧测试导入 `solver.compute_dt`。
 `Grid/samples/` 被 `.gitignore` 排除，真实样例测试在缺文件时自动 skip。
 
 ## 目录结构
@@ -277,6 +281,7 @@ experiment/
   test_step4_cgns_reader.py  第 4 步 CGNS reader 验收测试
   test_step4_cgns_adapter.py 第 4 步 CGNS -> BlockMesh 适配/度量测试
   test_step4_cgns_run.py     第 4 步 CGNS 与内置 Poiseuille 一步 NPZ 对齐
+  test_step4n_farfield.py    第 4.n 步通用远场/单面 BCFarfield/特殊覆盖顺序
   compare_ocfd_jax.py     原码 dump vs JAX 的单步对拍（--dir/--scheme 可换口径）
   cases/channel_small.in  小网格槽道 in 文件（历史遗留，当前入口不再读取）
   cases/*.json            七条历史 Step 0 JSON；当前清单只引用 4 条

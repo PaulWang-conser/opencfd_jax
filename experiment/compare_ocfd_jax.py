@@ -98,6 +98,7 @@ def main():
     import jax
     import jax.numpy as jnp
     from types import SimpleNamespace
+    from opencfd_jax.src.boundary import build_execution
     from opencfd_jax.src.cases import build_case
     from opencfd_jax.src.main import build_rhs
     from opencfd_jax.src.solver import rk3_step_stages
@@ -111,8 +112,8 @@ def main():
         mesh=str(run_dir / "OCFD3d-Mesh.dat"))
     case = build_case(ns)
     grid = case["grid"]
-    rhs = build_rhs(case, ns)
-    bc = case.get("bc_apply")
+    execution = build_execution(case)
+    rhs = build_rhs(case, ns, execution=execution)
 
     # 初值一致性：JAX 从 opencfd.dat 造的 cons0 vs 原码 init 后的 step0
     cons_jax0 = np.asarray(case["cons0"][grid.inner()])
@@ -123,7 +124,8 @@ def main():
     q = grid.alloc()
     for v, tag in enumerate(CONS):
         q = q.at[(v,) + grid.inner()[1:]].set(jnp.asarray(fields[f"cons_{tag}_step000000"]))
-    q1, dus = rk3_step_stages(q, args.dt, rhs, bc_apply=bc)
+    q1, dus = rk3_step_stages(q, args.dt, rhs)
+    q1 = execution.prepare(q1)
 
     rows = []
     print(f"\n初值（原码 step0 vs JAX 由 opencfd.dat 构造）")

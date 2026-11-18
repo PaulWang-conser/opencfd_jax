@@ -181,12 +181,15 @@ def cmd_jax_run(args):
     def rhs(q):
         """按原版 du_comput 的口径组合无粘、粘性和体积力右端项。"""
         # 原码 du_comput 恒算无粘 + 粘性，这里不加 --viscous 条件
+        q = execution.prepare(q)
         du = inviscid_rhs(q, grid, gamma=gamma, bcs=bcs,
                           axes=desc.axes, dx=dxs, scheme=args.scheme,
-                          metrics=metrics, farfield=execution.farfield)
+                          metrics=metrics, farfield=execution.farfield,
+                          faces=execution.faces, fill_state_halos=False)
         du = du + viscous_rhs(q, grid, params, bcs, axes=desc.axes,
                               dx=dxs, order=vis_order, metrics=metrics,
-                              farfield=execution.farfield)
+                              farfield=execution.farfield,
+                              faces=execution.faces, fill_state_halos=False)
         du = du + apply_forcing(case, q)
         return du
 

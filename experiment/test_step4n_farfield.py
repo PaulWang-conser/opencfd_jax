@@ -10,25 +10,27 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from opencfd_jax.src.boundary import (FARFIELD, LAP, PERIODIC, fill_ev_axis,
-                                      fill_halos, build_execution,
+from opencfd_jax.src.boundary import (FARFIELD, LAP, PERIODIC, WALL,
+                                      BoundaryExecution, build_execution,
+                                      fill_ev_axis, fill_faces, fill_halos,
                                       zero_nonperiodic_ghosts)
 from opencfd_jax.src.cases import build_case
 from opencfd_jax.src.fields import Grid
 from opencfd_jax.src.mesh_cgns import CgnsBC, read_cgns_zone, to_block_mesh
+from opencfd_jax.src.mesh_data import FaceBoundary
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURE = REPO / "Grid" / "fixtures" / "poiseuille_box.cgns"
 FAR = jnp.array([1.0, 0.1, 0.2, 0.3, 2.5])
 
 
-def _make_farfield_fixture(tmp_path):
-    """复制 Step 4 fixture，把 j 双壁改成 BCFarfield。"""
+def _make_farfield_fixture(tmp_path, sides=("Jlo", "Jhi")):
+    """复制 Step 4 fixture，把指定 j 侧改成 BCFarfield。"""
     dst = tmp_path / "poiseuille_farfield.cgns"
     shutil.copyfile(FIXTURE, dst)
     with h5py.File(dst, "r+") as f:
         bcnode = f["Base"]["Zone 1"]["ZoneBC"]
-        for name in ("Jlo", "Jhi"):
+        for name in sides:
             node = bcnode[name]
             del node[" data"]
             node.create_dataset(
@@ -99,6 +101,93 @@ def test_cgns_bcfarfield_maps_to_generic_farfield():
     assert execution.mode == "generic"
     assert execution.farfield is not None
     assert tuple(execution.farfield.shape) == (5,)
+
+
+def test_single_sided_cgns_farfield_does_not_require_opposite_face():
+    """CGNS 只有 j+ 是 BCFarfield；j- 仍是壁面，不能被轴级 bcs 带成远场。"""
+    zone = read_cgns_zone(FIXTURE)
+    bcs = tuple(
+        CgnsBC(name=b.name,
+               bc_type="BCFarfield" if b.name == "Jhi" else b.bc_type,
+               point_range=b.point_range)
+        for b in zone.bcs)
+    far_zone = replace(zone, bcs=bcs)
+    block = to_block_mesh(far_zone, axes=(0, 1))
+    assert block.bcs == (PERIODIC, WALL, PERIODIC)
+    kinds = [f.kind for f in block.faces]
+    assert kinds == [PERIODIC, PERIODIC, WALL, FARFIELD, PERIODIC, PERIODIC]
+    execution = build_execution(
+        dict(grid=block.grid, bcs=block.bcs, dxs=block.dxs,
+             axes=block.axes, farfield=FAR), block)
+    q = block.grid.alloc().at[:, :, LAP, :].set(10.0)
+    q = execution.prepare(q)
+    layer = FAR.astype(q.dtype).reshape(5, 1, 1, 1)
+    assert jnp.all(q[:, :, LAP + block.grid.nj - 1:, :] == layer)
+    # j- 边界内点没有被远场覆盖，说明只填了 j+ 这一面。
+    assert jnp.all(q[:, :, LAP, :] == 10.0)
+
+
+def test_default_cgns_farfield_is_plus_x_free_stream(tmp_path):
+    mesh = _make_farfield_fixture(tmp_path, sides=("Jhi",))
+    args = argparse.Namespace(
+        case="poiseuille", mesh_format="cgns", mesh=str(mesh), cgns_zone=None,
+        config_sources={}, ni=None, nj=None, nk=None, p_grad=1.0,
+        forcing_work=True, Re=1000.0, Ama=0.1, ref_t=288.15, pr=0.7)
+    case = build_case(args)
+    expected = jnp.array([1.0, 1.0, 0.0, 0.0,
+                          1.0 * case["params"].Cv + 0.5])
+    np.testing.assert_allclose(np.asarray(case["farfield"]),
+                               np.asarray(expected), rtol=1e-14, atol=0.0)
+
+
+def test_prepare_runs_special_boundary_after_general_ghosts():
+    grid = Grid(4, 5, 6)
+    faces = (
+        FaceBoundary("i-", 0, PERIODIC, "halo", False),
+        FaceBoundary("i+", 0, PERIODIC, "halo", False),
+        FaceBoundary("j-", 1, WALL, "halo", False),
+        FaceBoundary("j+", 1, FARFIELD, "halo", False),
+        FaceBoundary("k-", 2, PERIODIC, "halo", False),
+        FaceBoundary("k+", 2, PERIODIC, "halo", False),
+    )
+    seen = []
+
+    def special(q):
+        seen.append(float(np.asarray(q[0, 0, LAP + grid.nj, 0])))
+        return q.at[..., LAP + grid.nj:, :].set(99.0)
+
+    execution = BoundaryExecution("custom", (PERIODIC, WALL, PERIODIC),
+                                  special, faces, grid=grid, farfield=FAR)
+    q = execution.prepare(grid.alloc())
+    assert seen == [float(FAR[0])]   # 回调执行时常规远场鬼层已经填好
+    assert jnp.all(q[..., LAP + grid.nj:, :] == 99.0)
+    assert jnp.all(q[..., LAP + grid.nj - 1, :] == FAR.reshape(5, 1, 1))
+
+
+def test_callback_face_gets_general_outflow_before_special():
+    """callback 面也先按 kind 填普通鬼层，再由特殊回调覆盖。"""
+    grid = Grid(4, 5, 6)
+    faces = (
+        FaceBoundary("i-", 0, "outflow", "callback", False),
+        FaceBoundary("i+", 0, "outflow", "halo", False),
+        FaceBoundary("j-", 1, PERIODIC, "halo", False),
+        FaceBoundary("j+", 1, PERIODIC, "halo", False),
+        FaceBoundary("k-", 2, PERIODIC, "halo", False),
+        FaceBoundary("k+", 2, PERIODIC, "halo", False),
+    )
+    seen = []
+
+    def special(q):
+        seen.append(float(np.asarray(q[0, 0, 0, LAP - 1])))
+        return q.at[..., :LAP].set(88.0)
+
+    execution = BoundaryExecution("custom", ("outflow", PERIODIC, PERIODIC),
+                                  special, faces, grid=grid)
+    q = grid.alloc().at[:, :, :, LAP].set(7.0)
+    q = execution.prepare(q)
+    assert seen == [7.0]
+    assert jnp.all(q[..., LAP] == 7.0)
+    assert jnp.all(q[..., :LAP] == 88.0)
 
 
 def test_poiseuille_cgns_bcfarfield_builds_a_farfield_state(tmp_path):

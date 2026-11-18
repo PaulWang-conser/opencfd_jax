@@ -22,6 +22,7 @@ import numpy as np
 from . import boundary, config, init, io, runtime_config
 from .ana import check_nan, diagnostic_line
 from .cases import apply_forcing
+from .errors import RuntimeExecutionError, SetupError
 from .mesh_data import from_case
 from .solver import inviscid_rhs, rk3_step
 from .viscous import viscous_rhs
@@ -55,24 +56,30 @@ def build_rhs(case, args, execution=None):
     dif_axis_map = desc.dif_axis_map
     plate_ghosts = args.case == "plate"
     farfield = execution.farfield
+    faces = execution.faces
     if getattr(args, "filter", False) and farfield is not None:
         raise ValueError(
             "--filter 尚未接入通用 FARFIELD；请关闭滤波后再运行远场边界算例")
 
     def rhs(q):
         """计算当前 RK 子步状态 ``q`` 的总右端项 ``du = L(q)``。"""
-        q = execution.apply(q)   # 与原码 OCFD_bc 同位置：每子步算 du 前先上壁面条件
+        # 常规 halo 先填；特殊回调随后覆盖它接管的鬼胞。RHS 不再重复填状态。
+        q = execution.prepare(q, zero_state_ghosts=plate_ghosts)
         du = inviscid_rhs(q, grid, gamma=gamma, bcs=bcs, axes=axes, dx=dxs,
                           scheme=args.scheme, weno_tv=weno_tv, metrics=metrics,
-                          dif_bound=dif_bound, zero_state_ghosts=plate_ghosts,
-                          dif_axis_map=dif_axis_map, farfield=farfield)
+                          dif_bound=dif_bound, zero_state_ghosts=False,
+                          dif_axis_map=dif_axis_map, farfield=farfield,
+                          faces=faces, fill_state_halos=False)
         if args.viscous or args.case in ("poiseuille", "channel"):
             # viscous 的 dxs 是导数步长，必须全部合法
             du = du + viscous_rhs(q, grid, params, bcs, axes=axes, dx=dxs,
                                   order=vis_order, metrics=metrics,
-                                  dif_bound=dif_bound, zero_state_ghosts=plate_ghosts,
-                                  dif_axis_map=dif_axis_map, boundary_execution=execution,
-                                  farfield=farfield)
+                                  dif_bound=dif_bound,
+                                  zero_state_ghosts=plate_ghosts,
+                                  dif_axis_map=dif_axis_map,
+                                  boundary_execution=execution,
+                                  farfield=farfield, faces=faces,
+                                  fill_state_halos=False)
         du = du + apply_forcing(case, q)
         if src is not None:
             du = du + src(q)         # IBC=200 体积力（channel_body_force_kernel）
@@ -188,7 +195,15 @@ def run(args):
     ``args`` 通常由 :func:`main` 的命令行解析器生成；计算到 ``end_time`` 或
     ``end_step`` 中任一条件满足时停止。输出只写物理内区，不包含鬼胞。
     """
-    state = init.prepare(args)
+    try:
+        state = init.prepare(args)
+    except (ValueError, OSError) as exc:
+        raise SetupError(
+            "初始化失败："
+            f"case={args.case} "
+            f"mesh_format={getattr(args, 'mesh_format', None)} "
+            f"mesh={getattr(args, 'mesh', None)} "
+            f"原始异常={type(exc).__name__}: {exc}") from exc
     case = state.case
     desc = state.desc
     execution = state.execution
@@ -197,14 +212,27 @@ def run(args):
     grid = desc.grid
     params = case["params"]
 
-    rhs = build_rhs(case, args, execution=execution)
+    try:
+        rhs = build_rhs(case, args, execution=execution)
+    except Exception as exc:
+        raise RuntimeExecutionError(
+            "运行期错误（装配 RHS）："
+            f"case={args.case} step=0 t=0 dt={args.dt} "
+            f"grid={grid.ni}x{grid.nj}x{grid.nk} "
+            f"原始异常={type(exc).__name__}: {exc}") from exc
     bcs = execution.bcs
-    bc_apply = execution.callback
 
     if args.dt is None or not (np.isfinite(args.dt) and args.dt > 0.0):
         raise ValueError("固定 dt 必须显式给出，且为正的有限数")
     dt_mode = f"fixed({args.dt})"
-    rhs(cons)
+    try:
+        rhs(cons)
+    except Exception as exc:
+        raise RuntimeExecutionError(
+            "运行期错误（RHS 预热）："
+            f"case={args.case} step=0 t=0 dt={args.dt} "
+            f"grid={grid.ni}x{grid.nj}x{grid.nk} "
+            f"原始异常={type(exc).__name__}: {exc}") from exc
 
     prefix = getattr(args, "out_prefix", None) or args.case
     print(f"case={args.case} grid={grid.ni}x{grid.nj}x{grid.nk} "
@@ -232,20 +260,35 @@ def run(args):
     step = 0
     # 定 dt 时可以 jit 整步 + donate 输入缓冲（省一次全场分配，也把 3 次 RHS
     # dispatch 合成 1 次）。变 dt 时 dt 是参数，仍走同一编译体（不重新编译）。
-    step_jit = jax.jit(lambda q, dt_: rk3_step(q, dt_, rhs, bc_apply=bc_apply),
-                       donate_argnums=(0,))
+    step_jit = jax.jit(
+        lambda q, dt_: execution.prepare(rk3_step(q, dt_, rhs)),
+        donate_argnums=(0,))
     while t < args.end_time and step < args.end_step:
         dt = min(args.dt, args.end_time - t)
-        cons = step_jit(cons, dt)
+        try:
+            cons = step_jit(cons, dt)
+        except Exception as exc:
+            raise RuntimeExecutionError(
+                "运行期错误（时间推进）："
+                f"case={args.case} step={step + 1} t={t} dt={dt} "
+                f"grid={grid.ni}x{grid.nj}x{grid.nk} "
+                f"原始异常={type(exc).__name__}: {exc}") from exc
         t += dt
         step += 1
         if args.filter and step % args.nstep_filter == 0:
-            d_ = cons[0]
-            kin = 0.5 * (cons[1] ** 2 + cons[2] ** 2 + cons[3] ** 2) / d_
-            p_ = (gamma - 1.0) * (cons[4] - kin)          # 压力标量场（3 维）
-            cons = shock_filter(cons, p_, grid, s0=args.filter_s0,
-                                rth=args.filter_rth, bcs=bcs,
-                                axes=desc.axes)
+            try:
+                d_ = cons[0]
+                kin = 0.5 * (cons[1] ** 2 + cons[2] ** 2 + cons[3] ** 2) / d_
+                p_ = (gamma - 1.0) * (cons[4] - kin)      # 压力标量场（3 维）
+                cons = shock_filter(cons, p_, grid, s0=args.filter_s0,
+                                    rth=args.filter_rth, bcs=bcs,
+                                    axes=desc.axes)
+            except Exception as exc:
+                raise RuntimeExecutionError(
+                    "运行期错误（激波滤波）："
+                    f"case={args.case} step={step} t={t} dt={dt} "
+                    f"grid={grid.ni}x{grid.nj}x{grid.nk} "
+                    f"原始异常={type(exc).__name__}: {exc}") from exc
         if step % args.kstep_show == 0:
             print(diagnostic_line(cons, grid, t, step, time.time() - t0))
         if step % args.kstep_save == 0 or t >= args.end_time:
@@ -290,8 +333,9 @@ def main(argv=None):
     os.makedirs(args.out_dir, exist_ok=True)
     try:
         run(args)
-    except ValueError as exc:
-        explicit_parser.error(f"运行参数错误：{exc}")
+    except SetupError as exc:
+        explicit_parser.error(f"初始化错误：{exc}")
+    # 运行期异常（含 RuntimeExecutionError）不在这里捕获，保留原始类型和 traceback。
 
 
 if __name__ == "__main__":

@@ -28,9 +28,9 @@
 import jax.numpy as jnp
 
 from .boundary import (LAP, PLATE, WALL, _EV_WALL_SIGNS,
-                       fill_ev_axis, fill_ev_plate_j, fill_ev_wall_j,
-                       fill_halos_i, fill_halos_j, fill_halos_k,
-                       fill_wall_j, zero_nonperiodic_ghosts)
+                       fill_ev_axis, fill_ev_faces, fill_ev_plate_j,
+                       fill_ev_wall_j, fill_faces, fill_halos_i, fill_halos_j,
+                       fill_halos_k, fill_wall_j, zero_nonperiodic_ghosts)
 from .fields import array_axis
 
 _CD6_A = (45.0, -9.0, 1.0)
@@ -141,7 +141,8 @@ def dif_bound_for_axis(dif_bound, axis, dif_axis_map=(0, 1, 2)):
 
 def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=None,
                 dif_bound=None, zero_state_ghosts=False, dif_axis_map=(0, 1, 2),
-                boundary_execution=None, farfield=None):
+                boundary_execution=None, farfield=None, faces=None,
+                fill_state_halos=True):
     """粘性 RHS。cons 为含鬼胞尺寸但鬼胞未填的守恒量；内部先填鬼胞。
 
     dx: 按计算 i/j/k 排列的三元组（代码名为 dx/dy/dz）。返回与 cons 同 shape 的 du（鬼胞区为 0）。
@@ -153,22 +154,29 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     LAP 层导数改走单侧公式（`band_one_sided`），即原码
     `OCFD_dy0(u, uy, ..., D0_bound[...])` 的行为；None 等价全 0。
     farfield: 通用 FARFIELD 的 5 分量来流状态，供状态鬼层和 Ev 零梯度使用。
+    faces: 可选六侧描述；给出时按面填状态和 Ev，支持单侧远场。
+    fill_state_halos: False 表示调用方已在 prepare 中准备好状态。
     """
     if dx is None:
         raise ValueError("viscous_rhs requires dx")
     dxs = (dx, dx, dx) if isinstance(dx, (int, float)) else dx
     # 计算方向统一为 (i,j,k)；标量数组的空间轴为 (k,j,i)。
 
-    # 0. cons 填计算 i/j/k 三轴鬼胞；当前计算 j 方向支持 wall
-    f = fill_halos_i(cons, bcs[0], grid.ni, farfield=farfield)
-    if bcs[1] == WALL:
-        f = fill_wall_j(f, grid.nj)
-    else:
-        f = fill_halos_j(f, bcs[1], grid.nj, farfield=farfield)
-    f = fill_halos_k(f, bcs[2], grid.nk, farfield=farfield)
-    if zero_state_ghosts:
-        # 原码语义：非周期物理边界的鬼层是 0（没人给它赋值）
-        f = zero_nonperiodic_ghosts(f, bcs, preserve_inflow=True)
+    # 0. cons 填计算 i/j/k 三轴鬼胞；状态准备与否由 fill_state_halos 决定。
+    f = cons
+    if fill_state_halos:
+        if faces is not None:
+            f = fill_faces(f, faces, grid, farfield=farfield)
+        else:
+            f = fill_halos_i(f, bcs[0], grid.ni, farfield=farfield)
+            if bcs[1] == WALL:
+                f = fill_wall_j(f, grid.nj)
+            else:
+                f = fill_halos_j(f, bcs[1], grid.nj, farfield=farfield)
+            f = fill_halos_k(f, bcs[2], grid.nk, farfield=farfield)
+        if zero_state_ghosts:
+            # 原码语义：非周期物理边界的鬼层是 0（没人给它赋值）
+            f = zero_nonperiodic_ghosts(f, bcs, preserve_inflow=True)
 
     d, rhou, rhov, rhow, rhoE = f
     # 鬼层按原码口径被清 0 时（zero_state_ghosts），这里会出现 0/0；只在鬼层取值，
@@ -180,7 +188,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     E_int = rhoE / dsafe - 0.5 * (u * u + v * v + w * w)
     T = E_int / params.Cv
     T = jnp.where(T > 0.0, T, 1.0)
-    if zero_state_ghosts:
+    if zero_state_ghosts and fill_state_halos:
         # 派生温度的物理鬼层在原码中为零，导数必须读取这个值。
         T = zero_nonperiodic_ghosts(T, bcs, preserve_inflow=True)
     mu = params.amu_C0 * T ** 1.5 / (params.Tsb + T)
@@ -277,7 +285,9 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
         Ev_stack = jnp.stack(Evs)                  # (4, z, y, x)
         mixed_axis = (boundary_execution is not None and
                       any(f.axis == axis for f in boundary_execution.mixed_outflow))
-        if mixed_axis:
+        if faces is not None:
+            Ev_stack = fill_ev_faces(Ev_stack, faces, grid)
+        elif mixed_axis:
             Ev_stack = boundary_execution.fill_mixed_outflow(Ev_stack, axis)
         else:
             Ev_stack = fill_ev_axis(Ev_stack, axis, bcs[axis], nxi_by_axis[axis],

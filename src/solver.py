@@ -16,8 +16,8 @@ du 的符号约定（OCFD_Schemes.cu:306 核实）：
 import jax
 import jax.numpy as jnp
 
-from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, WALL, fill_halos_i,
-                       fill_halos_j, fill_halos_k, fill_wall_j,
+from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, WALL, fill_faces,
+                       fill_halos_i, fill_halos_j, fill_halos_k, fill_wall_j,
                        zero_nonperiodic_ghosts)
 from .fields import array_axis
 from .schemes import (SOLVE_SCHEMES, steger_warming, up7_rhs_along_last_axis,
@@ -50,7 +50,7 @@ def _inner_slice_moved(axis, grid):
 def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
                     scheme="UP7", weno_tv=None, bound=None, metric=None,
                     zero_flux_ghosts=False, zero_state_ghosts=False,
-                    farfield=None):
+                    farfield=None, faces=None, fill_state_halos=True):
     """单方向无粘 RHS：分裂 → 鬼胞填充 → 面通量 → 差分 → 铺回全场。
 
     scheme: "UP7" 或 "WENO7-SYMBO"；weno_tv: None 或 (limiter, tv_max)。
@@ -59,17 +59,23 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
             给出时按原码 `Stager_Warming` 把面面积 ss=|A| 装进分裂通量。
     zero_flux_ghosts: 调试开关，强制清除非周期方向的分裂通量鬼层；
     这不符合 OCFD 的通量分裂流程，平板对齐时应保持 False。
+    faces: 可选的六侧描述；给出时按面填常规鬼层，支持同轴两侧不同 kind。
+    fill_state_halos: False 表示调用方已经在 prepare 中填好状态，跳过状态填充。
     """
     # 原码声速和分裂内核覆盖含鬼层区域，先准备状态，再逐点计算分裂通量。
-    cons = fill_halos_i(cons, bcs[0], grid.ni, farfield=farfield)
-    if bcs[1] == WALL:
-        cons = fill_wall_j(cons, grid.nj)
-    else:
-        cons = fill_halos_j(cons, bcs[1], grid.nj, farfield=farfield)
-    cons = fill_halos_k(cons, bcs[2], grid.nk, farfield=farfield)
-    if zero_state_ghosts:
-        # 当前单块平板口径：保留入口状态，清零其余非周期状态鬼层。
-        cons = zero_nonperiodic_ghosts(cons, bcs, preserve_inflow=True)
+    if fill_state_halos:
+        if faces is not None:
+            cons = fill_faces(cons, faces, grid, farfield=farfield)
+        else:
+            cons = fill_halos_i(cons, bcs[0], grid.ni, farfield=farfield)
+            if bcs[1] == WALL:
+                cons = fill_wall_j(cons, grid.nj)
+            else:
+                cons = fill_halos_j(cons, bcs[1], grid.nj, farfield=farfield)
+            cons = fill_halos_k(cons, bcs[2], grid.nk, farfield=farfield)
+        if zero_state_ghosts:
+            # 当前单块平板口径：保留入口状态，清零其余非周期状态鬼层。
+            cons = zero_nonperiodic_ghosts(cons, bcs, preserve_inflow=True)
     moved = jnp.moveaxis(cons, 1 + array_axis(axis), -1)
     nxi = (grid.ni, grid.nj, grid.nk)[axis]
 
@@ -111,7 +117,8 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
 def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=None,
                 scheme="UP7", weno_tv=None, metrics=None, dif_bound=None,
                 zero_flux_ghosts=False, zero_state_ghosts=False,
-                dif_axis_map=(0, 1, 2), farfield=None):
+                dif_axis_map=(0, 1, 2), farfield=None, faces=None,
+                fill_state_halos=True):
     """无粘 RHS。bcs 与 axes 均按计算方向 (i,j,k) 排列；
     dx: 该方向的计算空间步长（直角算例可与物理步长一致；标量或三元组，
     与 axes 中的方向对应取用；
@@ -130,9 +137,9 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
     dif_bound: 原码 DIF_BOUND 六标志（i-/i+/j-/j+/k-/k+）；
     某侧为 1 时该侧边界按 OCFD 的 boundp/boundm 带重构（只读内点）。
 
-    farfield: 通用 FARFIELD 的 5 分量来流状态；轴级 FARFIELD 的两侧
-    边界层和鬼层都写入它。``zero_state_ghosts=True`` 仍按旧平板口径清零
-    非周期鬼层，会覆盖远场填充，不能与该开关同时使用。
+    farfield: 通用 FARFIELD 的 5 分量来流状态；按面填充时只写远场那一侧。
+    faces: 可选六侧描述；给出时按面填状态鬼层，避免轴级 bcs 把对侧也当成远场。
+    fill_state_halos: False 表示状态已在 ``BoundaryExecution.prepare`` 中准备好。
 
     1D 算例用 axes=(0,)；3D 用 (0,1,2)。返回与 cons 同 shape 的 du，
     鬼胞区为 0。
@@ -142,6 +149,11 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
     if dx is None:
         raise ValueError("inviscid_rhs requires dx (physical step size)")
     dxs = (dx, dx, dx) if isinstance(dx, (int, float)) else dx
+    if fill_state_halos and faces is not None:
+        cons = fill_faces(cons, faces, grid, farfield=farfield)
+        if zero_state_ghosts:
+            cons = zero_nonperiodic_ghosts(cons, bcs, preserve_inflow=True)
+        fill_state_halos = False
     du = jnp.zeros(grid.shape, dtype=cons.dtype)
     sl = grid.inner()
     for axis in axes:
@@ -156,7 +168,8 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
                                            scheme, weno_tv, bound, metric=metric,
                                            zero_flux_ghosts=zero_flux_ghosts,
                                            zero_state_ghosts=zero_state_ghosts,
-                                           farfield=farfield))
+                                           farfield=farfield, faces=faces,
+                                           fill_state_halos=fill_state_halos))
     if metrics is not None:
         # 只看内区；鬼胞区 du 恒为 0，乘任何有限 Ajac 仍是 0
         du = du * metrics["Ajac"]

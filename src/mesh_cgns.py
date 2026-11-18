@@ -414,7 +414,11 @@ def _collect_sides(zone: CgnsZone) -> dict[str, tuple[str, str]]:
 
 
 def _validate_executable(zone: CgnsZone) -> None:
-    """校验本步可执行子集；错误信息带 zone/patch 名。"""
+    """校验本步可执行子集；错误信息带 zone/patch 名。
+
+    允许同一轴两侧是不同 kind（例如 ``i-`` 出流、``i+`` 远场），执行层
+    按面而不是按轴填充；仍然要求每个轴两侧都有整面 patch。
+    """
     sides = _collect_sides(zone)
     for axis, name in enumerate(AXIS_NAMES):
         lo = sides.get(name + "-")
@@ -422,10 +426,9 @@ def _validate_executable(zone: CgnsZone) -> None:
         if lo is None or hi is None:
             raise CgnsError(
                 f"{zone.name} 的 {name} 轴缺少一侧边界：{name}-={lo}, {name}+={hi}")
-        if lo[0] != hi[0]:
-            raise CgnsError(
-                f"{zone.name} 的 {name} 轴两侧 kind 不同：{lo[0]} / {hi[0]}")
         if lo[0] == WALL and axis != 1:
+            raise CgnsError(f"{zone.name} 的壁面只支持 j 方向，得到 {name} 轴")
+        if hi[0] == WALL and axis != 1:
             raise CgnsError(f"{zone.name} 的壁面只支持 j 方向，得到 {name} 轴")
 
 
@@ -433,8 +436,9 @@ def to_block_mesh(zone: CgnsZone, axes: Iterable[int] = (0, 1, 2),
                   dif_bound=None) -> BlockMesh:
     """把可执行 CGNS 子集翻译成 ``BlockMesh``。
 
-    只接受每侧一个整面 patch、同一轴两侧 kind 相同、壁面只在 j 方向。
-    ``bcs`` 顺序固定为计算方向 ``(i,j,k)``；六侧执行来源统一为 ``halo``。
+    每侧一个整面 patch；同一轴两侧可以是不同 kind（例如一侧出流、一侧远场），
+    执行层按 ``faces`` 逐面填充。``bcs`` 仍保留轴级代表值（取低侧面），供旧
+    调用方读取；新执行链以六侧 ``faces`` 为准。壁面仍然只在 j 方向。
     """
     _validate_executable(zone)
     sides = _collect_sides(zone)
@@ -444,6 +448,7 @@ def to_block_mesh(zone: CgnsZone, axes: Iterable[int] = (0, 1, 2),
     if len(set(axes)) != len(axes):
         raise ValueError(f"axes 不能重复，得到 {axes}")
 
+    # 轴级 bcs 只是代表值；真正的执行语义在六侧 faces。
     bcs = tuple(sides[AXIS_NAMES[a] + "-"][0] for a in range(3))
     faces = []
     for side in SIDES:
@@ -462,7 +467,9 @@ def build_cgns_block(zone: CgnsZone, axes: Iterable[int] = (0, 1, 2),
                      dif_bound=None) -> BlockMesh:
     """在 ``to_block_mesh`` 基础上补鬼胞坐标并计算曲线度量。"""
     block = to_block_mesh(zone, axes=axes, dif_bound=dif_bound)
-    periodic = tuple(kind == PERIODIC for kind in block.bcs)
+    periodic = tuple(
+        any(f.kind == PERIODIC for f in block.faces if f.axis == axis)
+        for axis in range(3))
     padded = {key: pad_coords(value, periodic=periodic)
               for key, value in block.coords.items()}
     metrics = compute_metrics_from_coords(

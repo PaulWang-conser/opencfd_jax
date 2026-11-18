@@ -375,7 +375,15 @@ def from_case(case: Mapping) -> BlockMesh:
             raise ValueError(
                 "case 提供了 bc_apply，但没有 channel_bc / plate 特殊边界标记；"
                 "未知特殊边界必须在 case 侧显式选择并补六侧描述")
-        faces = _generic_faces(bcs, dif_bound, dif_axis_map)
+        raw_faces = case.get("faces")
+        if raw_faces is not None:
+            faces = tuple(raw_faces)
+            if len(faces) != 6 or tuple(f.side for f in faces) != SIDES:
+                raise ValueError(f"case['faces'] 必须按 {SIDES} 顺序给出六侧")
+            if not all(isinstance(f, FaceBoundary) for f in faces):
+                raise ValueError("case['faces'] 必须是 FaceBoundary")
+        else:
+            faces = _generic_faces(bcs, dif_bound, dif_axis_map)
 
     return BlockMesh(grid=grid, dxs=dxs, axes=axes, bcs=bcs,
                      dif_bound=dif_bound, dif_axis_map=dif_axis_map,

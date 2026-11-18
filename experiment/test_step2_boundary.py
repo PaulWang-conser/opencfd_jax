@@ -9,6 +9,8 @@ U2/U3/U4 部分验证描述与执行配置一致、通用实现只有一份、�
 """
 
 import argparse
+
+import jax
 import sys
 from pathlib import Path
 
@@ -316,7 +318,7 @@ def test_filter_supports_periodic_outflow_and_rejects_wall():
 
 
 def test_callback_order_through_build_rhs_and_rk3():
-    """U1：正式路径每子步仍先边界、再 RHS；RK 整步共 4 次 Python 回调。"""
+    """U1：正式路径每子步先常规边界、再特殊覆盖、然后 RHS。"""
     case = _plate_case()
     calls = []
     original = case["bc_apply"]
@@ -333,10 +335,10 @@ def test_callback_order_through_build_rhs_and_rk3():
     assert calls == ["bc"]
 
     calls.clear()
-    q, _ = solver.rk3_step_stages(case["cons0"], 1e-3, rhs, bc_apply=wrapper)
-    # JIT 的 rhs 只在首次 trace 时执行一次 Python 回调；之后每步由编译图执行。
-    # RK 外层仍在初态和三个子步末各调用一次，因此这里是 4 次。
-    assert calls == ["bc"] * 4
+    with jax.disable_jit():
+        q, _ = solver.rk3_step_stages(case["cons0"], 1e-3, rhs)
+    # 关闭 JIT 后每个子步都会真实执行一次 prepare 里的特殊回调。
+    assert calls == ["bc"] * 3
     assert np.all(np.isfinite(np.asarray(q)))
 
 
