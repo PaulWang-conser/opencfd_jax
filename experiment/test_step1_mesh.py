@@ -94,16 +94,16 @@ def test_plate_axis_mapping_and_dif_bound_derived_from_faces(built):
     assert desc.dif_axis_map == (0, 2, 1)
     # 算例侧旧字段仍留档，但执行配置里的带由 faces 派生。
     assert desc.dif_bound == (0, 0, 0, 0, 1, 0)
-    # 只有“WALL + 回调”开带：入口扩容、出流/远场零梯度延拓、周期复制都不开。
+    # 壁面与远场开带（鬼层清零 + 边界点赋值）；入口/出口/周期不开。
     assert desc.face("i-").dif_band is False
     assert desc.face("i+").dif_band is False
     assert desc.face("j-").dif_band is True
-    assert desc.face("j+").dif_band is False
+    assert desc.face("j+").dif_band is True
     assert desc.face("k-").dif_band is False
     assert desc.face("k+").dif_band is False
     execution = boundary.build_execution(built["plate"], desc)
     # 原码次序 (x-,x+,y-,y+,z-,z+)，map=(0,2,1)：i→x，j→z，k→y。
-    assert execution.band == (0, 0, 0, 0, 1, 0)
+    assert execution.band == (0, 0, 0, 0, 1, 1)
 
 
 def test_compare_style_step_override_is_visible(built):

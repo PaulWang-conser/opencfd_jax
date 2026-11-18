@@ -43,28 +43,27 @@ def _faces(i_minus=INFLOW, i_plus=OUTFLOW, j_minus=WALL, j_plus=FARFIELD,
 
 
 def test_band_is_derived_from_kind_not_from_case():
-    """DIF_BOUND 由 kind 派生：只有“WALL + 回调”开带。
+    """DIF_BOUND 由 kind 派生：壁面与远场开带，其余不开。
 
-    纯 halo 的壁面由镜像填鬼层、不再写点，中心模板在壁面本来就只读内点，
-    开带反而把重构改成单侧、改变原码口径；出流/远场按零梯度延拓鬼层，
-    模板可正常工作，同样不开带。
+    壁面/远场的鬼层是 0（边界点由 `write_faces` 单独赋值），中心模板跨边界
+    会读到 0，必须换单侧；周期（鬼层是对侧内区）、入口（鬼层是剖面）、
+    出口（鬼层是边界点延拓）鬼层合法，开带只会降精度。
     """
     assert dif_band(PERIODIC) is False
     assert dif_band(INFLOW) is False
     assert dif_band(OUTFLOW) is False
-    assert dif_band(FARFIELD) is False
-    assert dif_band(WALL) is False
+    assert dif_band(WALL) is True
     assert dif_band(WALL, executor="callback") is True
-    assert dif_band(WALL, executor="callback+halo") is True
+    assert dif_band(FARFIELD) is True
 
 
 def test_halo_mode_splits_periodic_keep_copy_zero():
     assert halo_mode(PERIODIC) == "periodic"
     assert halo_mode(INFLOW) == "keep"
-    # 出流/远场：鬼层取边界点那一层（零梯度 / 常数延拓），不是清零
+    # 出口零梯度 = 鬼层取边界点那一层；壁面/远场鬼层清零、边界点单独赋值
     assert halo_mode(OUTFLOW) == "copy"
-    assert halo_mode(FARFIELD) == "copy"
     assert halo_mode(WALL) == "zero"
+    assert halo_mode(FARFIELD) == "zero"
 
 
 def test_nonperiodic_ghosts_are_zero_and_periodic_ghosts_copied():
@@ -89,16 +88,13 @@ def test_nonperiodic_ghosts_are_zero_and_periodic_ghosts_copied():
     assert np.all(np.asarray(q[:, LAP:LAP + nk, :LAP, :]) == 0.0)
 
 
-def test_generic_wall_without_callback_still_mirrors():
-    """没有算例回调的通用 WALL（poiseuille 这类验证算例）仍按原码镜像。"""
+def test_generic_wall_zeroes_halos_like_callback_wall():
+    """通用 WALL 与回调 WALL 一样把鬼层清零：壁面点由 write_faces/回调单独赋值。"""
     grid = _grid()
     nk, nj = grid.nk, grid.nj
     q = grid.alloc().at[:, LAP:LAP + nk, LAP:LAP + nj, :].set(3.0)
     q = fill_faces(q, _faces(j_minus=WALL), grid)
-    sign = np.array([1.0, -1.0, -1.0, -1.0, 1.0]).reshape(5, 1, 1, 1)
-    np.testing.assert_array_equal(
-        np.asarray(q[:, LAP:LAP + nk, :LAP, LAP:LAP + grid.ni]),
-        np.broadcast_to(sign * 3.0, (5, nk, LAP, grid.ni)))
+    assert np.all(np.asarray(q[:, LAP:LAP + nk, :LAP, LAP:LAP + grid.ni]) == 0.0)
 
 
 def test_inflow_keeps_its_ghosts_until_it_writes_them():
@@ -119,8 +115,8 @@ def test_inflow_keeps_its_ghosts_until_it_writes_them():
         np.asarray(q[:, LAP:LAP + nk, LAP:LAP + nj, :LAP + 1]), expect)
 
 
-def test_farfield_and_outflow_copy_the_boundary_point():
-    """远场/出流鬼层 = 边界点那一层（零梯度/常数延拓）；prepare 顺序是写点→填鬼层。"""
+def test_farfield_zeroes_ghosts_and_outflow_copies_boundary_point():
+    """远场：鬼层清零 + 只写最后一层内点（开带，模板不读鬼胞）；出口：鬼层=边界点。"""
     grid = _grid()
     nk, ni = grid.nk, grid.ni
     far = np.array([1.0, 1.0, 0.0, 0.0, 179.07142857142858])
@@ -131,11 +127,7 @@ def test_farfield_and_outflow_copy_the_boundary_point():
     np.testing.assert_array_equal(
         np.asarray(q[:, LAP:LAP + nk, nj_in - 1, LAP:LAP + ni]),
         np.broadcast_to(far.reshape(5, 1, 1), (5, nk, ni)))
-    expect = np.broadcast_to(np.asarray(q[:, LAP:LAP + nk, nj_in - 1:nj_in,
-                                       LAP:LAP + ni]),
-                             (5, nk, LAP, ni))
-    np.testing.assert_array_equal(
-        np.asarray(q[:, LAP:LAP + nk, nj_in:, LAP:LAP + ni]), expect)  # 顶部
+    assert np.all(np.asarray(q[:, LAP:LAP + nk, nj_in:, LAP:LAP + ni]) == 0.0)
     expect_i = np.broadcast_to(
         np.asarray(q[:, LAP:LAP + nk, LAP:LAP + grid.nj, LAP + ni - 1:LAP + ni]),
         (5, nk, grid.nj, LAP))
@@ -157,8 +149,8 @@ def _ns(**kw):
 def test_plate_band_derived_and_inflow_constant(tmp_path):
     case = cases.build_case(_ns())
     execution = build_execution(case)
-    # 只有 j-（WALL + 平板回调）开带；i+/j+ 走零梯度延拓鬼层，不开带。
-    assert execution.band == (0, 0, 0, 0, 1, 0)
+    # 壁面与远场开带；i+ 出口走零梯度鬼层、不开带；周期不开。
+    assert execution.band == (0, 0, 0, 0, 1, 1)
     assert np.asarray(execution.inflow)[0, 0, 0] == 1.0
 
 

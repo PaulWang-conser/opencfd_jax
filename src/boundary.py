@@ -87,24 +87,26 @@ WALL_BAND_EXECUTORS = ("callback", "callback+halo")
 
 
 def halo_mode(kind):
-    """该 kind 的鬼层由谁负责：周期复制、零梯度复制、INFLOW 保持、其余清零。"""
+    """该 kind 的鬼层由谁负责：周期复制、出口零梯度复制、壁面/远场清零、INFLOW 保持。"""
     if kind == PERIODIC:
         return HALO_PERIODIC
-    if kind in (OUTFLOW, FARFIELD):
+    if kind == OUTFLOW:
         return HALO_COPY
     if kind == INFLOW:
         return HALO_KEEP
+    # 壁面与远场：鬼层清零，边界点单独赋值，该侧开单侧差分带。
     return HALO_ZERO
 
 
 def dif_band(kind, executor="halo"):
     """该面是否开边界单侧带（原码 DIF_BOUND 的逐侧开关）。
 
-    只有“壁面点由回调写、鬼层清零”的壁面需要单侧带：它的鬼层没有物理值，
-    中心模板会读到 0。其余面都有合法鬼层——周期/INFLOW/出口/远场是有效延拓，
-    无回调的通用壁面走原码镜像——中心差分成立，开带反而降精度。
+    壁面与远场靠“鬼层清零 + 边界点赋值”工作，中心模板会跨边界读到 0，
+    必须换单侧；周期（鬼层是对侧内区）、入口（鬼层是剖面）、出口（鬼层是
+    边界点延拓）三类鬼层本身合法，中心差分成立，开带反而降精度。
     """
-    return kind == WALL and executor in WALL_BAND_EXECUTORS
+    del executor
+    return kind in (WALL, FARFIELD)
 
 
 
@@ -336,24 +338,19 @@ def _face_extent(face, grid):
 
 
 def _fill_face_halos(f, face, grid):
-    """按单个面的 kind 填状态鬼层：周期复制、零梯度复制、INFLOW 保持、其余清零。
+    """按单个面的 kind 填状态鬼层：周期复制、出口零梯度复制、INFLOW 保持、壁面/远场清零。
 
-    ``HALO_COPY``（出口/远场）把**边界点**广播到四层鬼层：出口是零梯度、远场
-    是 Dirichlet 常数，两者都应有“鬼层 = 边界点”的有效延拓，不是 0。
+    ``HALO_COPY``（出口）把**边界点**广播到四层鬼层：出口零梯度，鬼层 = 边界点。
 
-    例外：没有算例回调的通用 WALL（pure ``halo`` 执行来源）仍按原码的壁面
-    镜像填鬼层，它没有别的途径写壁面点（poiseuille 这类验证算例走这条）；
-    带回调的壁面（plate/channel）鬼层清零，壁面点由回调写。
+    壁面与远场一律清零：这两个面的边界点由单独一层赋值（回调写壁面点、
+    远场常数写最后一层内点），该侧同时开单侧差分带（见 :func:`dif_band`），
+    所以鬼层不需要也不应该有物理值。
     """
     mode = halo_mode(face.kind)
     if mode == HALO_KEEP:
         return f
     axis = int(face.axis)
     n = _face_extent(face, grid)
-    if face.kind == WALL and face.executor == "halo":
-        if axis != 1:
-            raise ValueError("通用 WALL 只支持计算 j 方向（axis=1）")
-        return _mirror_wall_halos(f, face.side, n)
     moved = jnp.moveaxis(f, 3 - axis, -1)
     low = face.side.endswith("-")
     if mode == HALO_PERIODIC:
@@ -597,21 +594,15 @@ def _fill_ev_face(f, face, grid, signs=None):
     """填 4 分量 Ev 鬼层，规则与状态鬼层同构。
 
     - 周期：复制对侧；
-    - 出口 / 远场：零梯度（复制边界点那一层）；
+    - 出口：零梯度（复制边界点那一层）；
     - INFLOW：保持；
-    - 无回调的通用壁面：原码镜像（该侧差分是中心格式，需要有效鬼层）；
-    - 有回调的壁面：清零（该侧差分走边界带，只读内点）。
+    - 壁面 / 远场：清零（边界点单独赋值，该侧差分走单侧带，只读内点）。
     """
     mode = halo_mode(face.kind)
     if mode == HALO_KEEP:
         return f
     axis = int(face.axis)
     n = _face_extent(face, grid)
-    if face.kind == WALL and face.executor == "halo":
-        if axis != 1:
-            raise ValueError("通用 WALL 只支持计算 j 方向（axis=1）")
-        signs = EV_WALL_SIGNS[1] if signs is None else signs
-        return _mirror_ev_wall_halos(f, face.side, n, signs)
     moved = jnp.moveaxis(f, 3 - axis, -1)
     low = face.side.endswith("-")
     if mode == HALO_PERIODIC:

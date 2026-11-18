@@ -494,8 +494,12 @@ def flux_band_faces(Fp, Fm, fp, fm, lo=True, hi=True,
 
     def reconstruct(g, base, kind, branch):
         # stencil[-ka-2] 指向 base-2；实际只取各分支用到的值。
+        # 带内模板不许读鬼胞：壁面/远场的鬼层是 0（边界点由 write_faces 赋值），
+        # 所以越界索引一律夹到最近的**内点**，等价于“边界点延拓”（原码边界宏
+        # 拿 apply_bc 写出的壁面值参与，而不是拿 0 鬼胞参与）。
         def at(offset):
-            return g[..., LAP + base + offset]
+            idx = min(max(LAP + base + offset, LAP), LAP + n - 1)
+            return g[..., idx]
 
         if kind == "p" and branch == "lo0":
             return at(1)

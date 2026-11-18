@@ -232,15 +232,12 @@ def test_plate_inlet_outlet_wall_far_and_corners():
     np.testing.assert_allclose(out[4, kz, LAP, ix_in],
                                rho_w[kz, ix_in] * phys.Cv, rtol=0, atol=1e-13)
 
-    # 顶部：远场常数写内区最后一层内点，鬼层取该边界点延拓（不是清零）。
+    # 顶部：远场常数写内区最后一层内点，鬼层清零（该侧开单侧带，模板不读鬼胞）。
     np.testing.assert_array_equal(
         out[:, kz, nj_in - 1, ix_in],
         np.broadcast_to(np.asarray(execution.farfield).reshape(5, 1, 1),
                         (5, grid.nk, ni)))
-    np.testing.assert_array_equal(
-        out[:, kz, nj_in:, ix_in],
-        np.broadcast_to(np.asarray(out[:, kz, nj_in - 1:nj_in, ix_in]),
-                        (5, grid.nk, LAP, ni)))
+    np.testing.assert_array_equal(out[:, kz, nj_in:, ix_in], 0.0)
 
     # 壁面鬼层不再镜像，整体为 0。
     np.testing.assert_array_equal(out[:, :, :LAP, :], 0.0)

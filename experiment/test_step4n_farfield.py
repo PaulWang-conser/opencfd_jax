@@ -123,9 +123,9 @@ def test_single_sided_cgns_farfield_does_not_require_opposite_face():
     q = execution.prepare(q)
     layer = FAR.astype(q.dtype).reshape(5, 1, 1, 1)
     ni, nj, nk = block.grid.ni, block.grid.nj, block.grid.nk
-    # FARFIELD 写内区范围内的边界点（最后一层内点），鬼层取该边界点延拓。
+    # FARFIELD 写内区最后一层内点，鬼层清零（开带，模板不读鬼胞）。
     assert jnp.all(q[:, LAP:LAP + nk, LAP + nj - 1:LAP + nj, LAP:LAP + ni] == layer)
-    assert jnp.all(q[:, LAP:LAP + nk, LAP + nj:, LAP:LAP + ni] == layer)
+    assert jnp.all(q[:, LAP:LAP + nk, LAP + nj:, LAP:LAP + ni] == 0.0)
     # j- 边界内点没有被远场覆盖，说明只填了 j+ 这一面。
     assert jnp.all(q[:, LAP:LAP + nk, LAP, LAP:LAP + ni] == 10.0)
 
@@ -162,7 +162,7 @@ def test_prepare_runs_special_boundary_after_general_ghosts():
     execution = BoundaryExecution("custom", (PERIODIC, WALL, PERIODIC),
                                   special, faces, grid=grid, farfield=FAR)
     q = execution.prepare(grid.alloc())
-    assert seen == [float(FAR[0])]    # 回调执行时远场鬼层已是边界点延拓
+    assert seen == [0.0]              # 回调执行时远场鬼层是 0（边界点已单独赋值）
     assert jnp.all(q[..., LAP + grid.nj:, :] == 99.0)
     ni, nj, nk = grid.ni, grid.nj, grid.nk
     assert jnp.all(q[:, LAP:LAP + nk, LAP + nj - 1, LAP:LAP + ni]
