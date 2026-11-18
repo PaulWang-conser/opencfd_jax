@@ -185,7 +185,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     mu = params.amu_C0 * T ** 1.5 / (params.Tsb + T)
 
     # 1. 导数场（12 个）：cd 沿各轴输出全长。
-    # 与 compute_dt 同一约定：dxs[axis] <= 0 表示该方向不求解（如 2D 算例
+    # 与求解方向约定一致：dxs[axis] <= 0 表示该方向不求解（如 2D 算例
     # 的 z），该轴导数置 0（场沿该轴均匀时物理导数本为 0）。
     def cd_or_zero(g, axis):
         """计算指定计算方向的中心差分；非求解方向直接返回零导数场。"""

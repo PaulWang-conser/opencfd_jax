@@ -24,9 +24,10 @@ def array_axis(axis):
 
 
 class Grid:
-    """结构网格：内区 ni/nj/nk 个 cell，全场加 2*LAP 鬼胞。
+    """结构网格：内区 ni/nj/nk 个离散点，全场加 2*LAP 鬼胞。
 
-    构造入口只接受规范字段 ni/nj/nk。
+    CGNS 路径下 ni/nj/nk 直接取 ``VertexSize``（顶点即离散点），不再做格心
+    八点平均。构造入口只接受规范字段 ni/nj/nk。
     """
 
     def __init__(self, ni=MISSING, nj=MISSING, nk=MISSING):

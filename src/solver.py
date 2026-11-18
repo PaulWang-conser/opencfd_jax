@@ -156,32 +156,6 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
     return du
 
 
-def compute_dt(cons, grid, gamma, cfl, dx):
-    """CFL 时间步长：dt = cfl / Σ_axis((|u_n| + c) / h)。内区取各轴最大。
-
-    维度分裂格式的谱半径按各方向叠加（dt·Σλi ≤ C，SSP-RK3 对流 C≈1），
-    因此多维求和；单轴时求和退化为单轴 max。**注意：求和式是移植版自加
-    的逻辑，原版用固定 dt（parameters.c:56），无原码可对拍。**
-
-    dx 为标量（各向同性）或三元组 (dx, dy, dz)。某方向 h<=0 表示该方向
-    不求解（1D 算例的 y/z）。
-    """
-    d = cons[0]
-    u = cons[1] / d
-    v = cons[2] / d
-    w = cons[3] / d
-    cc = sound_speed(cons, gamma)
-    sl = grid.inner()[1:]   # 分量场为 3 维，去掉变量轴
-    dxs = (dx, dx, dx) if isinstance(dx, (int, float)) else dx
-    lams = []
-    for vel, h in zip((u, v, w), dxs):
-        if h <= 0.0:
-            continue
-        lams.append(jnp.max((jnp.abs(vel) + cc)[sl] / h))
-    lam_sum = jnp.sum(jnp.stack(lams))
-    return cfl / lam_sum
-
-
 def rk3_step_stages(cons, dt, rhs_fn, bc_apply=None):
     """SSP-RK3 一步，同时返回三个子步的 RHS。
 

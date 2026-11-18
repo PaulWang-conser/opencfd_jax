@@ -7,7 +7,7 @@
   - 无粘：``WENO7``（原码 SCHEME_INVIS=303 的 7 阶 WENO-Z），**不用 OMP6 系列**；
   - 粘性：``--vis-order CD8``；
   - FP64；激波滤波关闭（``--filter`` 不启用），保证"格式本身"被冻结；
-  - 固定 dt，保证逐点可复现（另设一条 CFL 自适应用例单独冻结 compute_dt）。
+  - 只保留显式固定 dt 的用例；CFL 自适应已从入口删除。
 
 第 0 步只做一件事：把这些结果连同哈希一起钉住，后续第 1~9 步每一步都要
 复跑本清单并给出 ``check_step0.py`` 的 PASS。
@@ -17,8 +17,6 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parents[1]                     # ...\ocfd2jax
-QUICK = PROJECT / "channel_case_iiA" / "quick"
-SMALL_IN = HERE / "cases" / "channel_small.in"
 
 CASES = [
     {
@@ -32,18 +30,6 @@ CASES = [
         "config": "cases/sod_1step.json",
         "json_argv": ["--ni", "128", "--nj", "4", "--nk", "4"],
         "note": "1 维问题在 3 维布局里跑（nj=nk=4）；激波尚在隔膜附近，场应保持对称。",
-    },
-    {
-        "id": "sod_cfl_5step",
-        "title": "Sod 激波管 · 5 步（CFL 自适应 dt）",
-        "cover": "compute_dt 的 CFL 判据（含声速/网格/粘性口径），逐步 dt 序列被冻结",
-        "argv": ["--case", "sod", "--ni", "128", "--nj", "4", "--nk", "4",
-                 "--scheme", "WENO7", "--vis-order", "CD8", "--cfl", "0.4",
-                 "--end-step", "5", "--end-time", "0.5",
-                 "--kstep-show", "1", "--kstep-save", "1"],
-        "config": "cases/sod_cfl_5step.json",
-        "json_argv": ["--ni", "128", "--nj", "4", "--nk", "4"],
-        "note": "每步都存 npz，_meta 里的 dt 就是自适应步长序列。",
     },
     {
         "id": "tg_10step",
@@ -84,39 +70,6 @@ CASES = [
         "config": "cases/plate_1step.json",
         "json_argv": ["--ni", "64", "--nj", "64", "--nk", "4"],
         "note": "验收基准仍是 blasius.py；这里只钉住单步 RHS 的实现细节。",
-    },
-    {
-        "id": "channel_1step",
-        "title": "单块槽道（真网格 96×97×64）· 1 步",
-        "cover": "原版 in 文件 + 原版初场 + OCFD3d-Mesh.dat 度量链 + IBC=200 双壁",
-        "argv": ["--case", "channel", "--in", str(QUICK / "opencfd-scu.in"),
-                 "--field", str(QUICK / "opencfd.dat"),
-                 "--mesh", str(QUICK / "OCFD3d-Mesh.dat"),
-                 "--scheme", "WENO7", "--vis-order", "CD8", "--viscous",
-                 "--forcing-work", "off",
-                 "--dt", "5e-5", "--end-step", "1", "--end-time", "0.4",
-                 "--kstep-show", "1", "--kstep-save", "1"],
-        "config": "cases/channel_1step.json",
-        "json_argv": [],
-        "note": ("覆盖 JAC_BOUND 度量（Ajac/余子式）+ 真实湍流初场 + 双壁 BC + 体积力。"
-                 "输出 22.7 MB，是整套基准里最大的一份。"
-                 "必须 --forcing-work off：原码 channel_body_force 只做 du[1] += F*rho，"
-                 "不做 rho*u*G 的做功项，否则 rhoE 会有 ~1e-3 的系统差（实测）。"),
-    },
-    {
-        "id": "channel_small_100step",
-        "title": "单块槽道（小型 24×25×16）· 100 步",
-        "cover": "多步连续演化：壁面 BC 每子步重置、体积力、粘性，累计到 t=0.005",
-        "argv": ["--case", "channel", "--in", str(SMALL_IN),
-                 "--scheme", "WENO7", "--vis-order", "CD8", "--viscous",
-                 "--forcing-work", "off",
-                 "--dt", "5e-5", "--end-step", "100", "--end-time", "0.005",
-                 "--kstep-show", "20", "--kstep-save", "20"],
-        "config": "cases/channel_small_100step.json",
-        "json_argv": [],
-        "note": ("配合 channel_1step 使用：那条冻结「单步 + 真网格」，这条冻结"
-                 "「多步 + 便宜网格」。现有 128×129×96 的 20000 步原版长跑结果"
-                 "（channel_case_iiA/main_128x129x96）第 0 步不重跑，作为外部参考保留。"),
     },
 ]
 

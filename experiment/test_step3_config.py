@@ -1,8 +1,8 @@
 """Step 3 统一运行配置（`input.json`）的验收测试。
 
-覆盖：默认值/JSON/显式 CLI 的合并优先级、字段与算例适用范围、槽道 `.in`
-优先级、输出前缀、负向开关、自适应 dt，以及七条 Step 0 用例的 JSON 与
-CLI 参数等价。
+覆盖：默认值/JSON/显式 CLI 的合并优先级、字段与算例适用范围、CGNS
+网格路径、输出前缀、负向开关，以及 Step 0 用例的 JSON 与 CLI 参数等价。
+槽道 `.in`、CFL 自适应和旧 OCFD 网格入口已在第 4 步删除。
 """
 
 import argparse
@@ -48,6 +48,7 @@ def test_defaults_unchanged():
     assert args.dt is None
     assert args.Re == 1000.0
     assert args.viscous is False
+    assert args.mesh_format == "builtin"
     assert args.out_prefix == "sod"
     assert args.config_path is None
 
@@ -81,11 +82,12 @@ def test_explicit_detection_does_not_compare_values(tmp_path):
 def test_partial_json_uses_cli_case(tmp_path):
     """JSON 省略 case.name 时，按显式 --case 判断字段适用范围。"""
     cfg = write_json(tmp_path, {
-        "mesh": {"infile": str(EXPERIMENT / "cases" / "channel_small.in")},
+        "mesh": {"file": str(PROJECT / "opencfd_jax/Grid/fixtures/poiseuille_box.cgns")},
     })
-    args = parse(["--config", cfg, "--case", "channel"])
-    assert args.case == "channel"
-    assert args.infile.endswith("channel_small.in")
+    args = parse(["--config", cfg, "--case", "poiseuille"])
+    assert args.case == "poiseuille"
+    assert args.mesh_format == "cgns"
+    assert args.mesh.endswith("poiseuille_box.cgns")
 
 
 def test_output_dir_relative_to_json(tmp_path):
@@ -113,7 +115,7 @@ def test_cli_case_override_rechecks_json_scope(tmp_path):
         "case": {"name": "plate", "plate_x0": 0.1},
     })
     with pytest.raises(runtime_config.ConfigError, match="plate_x0"):
-        parse(["--config", cfg, "--case", "channel"])
+        parse(["--config", cfg, "--case", "sod"])
 
 
 def test_invalid_case_name_rejected(tmp_path):
@@ -134,19 +136,21 @@ def test_case_scope_rejected(tmp_path):
         runtime_config.load_config(cfg)
 
 
-def test_channel_requires_infile(tmp_path):
-    cfg = write_json(tmp_path, {"case": {"name": "channel"}})
-    with pytest.raises(runtime_config.ConfigError, match="mesh.infile"):
+def test_cgns_mesh_requires_file(tmp_path):
+    cfg = write_json(tmp_path, {"case": {"name": "poiseuille"},
+                                "mesh": {"format": "cgns"}})
+    with pytest.raises(runtime_config.ConfigError, match="mesh.file"):
         runtime_config.load_config(cfg)
 
 
-def test_channel_infile_wins_over_config():
-    """槽道 `.in` 仍然是有效物性的来源，JSON 的 physics 只做提示。"""
-    args = parse(["--config", str(config_path(CASES[6]))])
-    from opencfd_jax.src.cases import build_case
-    case = build_case(args)
-    assert args.Re == 1000.0          # 元数据仍记录命令行/默认值
-    assert case["params"].Re == pytest.approx(190.7, rel=1e-3)
+def test_cgns_mesh_rejects_non_poiseuille(tmp_path):
+    (tmp_path / "mesh.cgns").write_bytes(b"")
+    cfg = write_json(tmp_path, {
+        "case": {"name": "sod"},
+        "mesh": {"format": "cgns", "file": "mesh.cgns"},
+    })
+    with pytest.raises(runtime_config.ConfigError, match="CGNS"):
+        runtime_config.load_config(cfg)
 
 
 def test_negative_switch_overrides_json(tmp_path):
@@ -165,16 +169,18 @@ def test_positive_and_negative_switch_conflict(tmp_path):
         parse(["--config", cfg, "--viscous", "--no-viscous"])
 
 
-def test_adaptive_dt_overrides_json(tmp_path):
+def test_cfl_config_field_rejected(tmp_path):
     cfg = write_json(tmp_path, {
         "case": {"name": "sod"},
         "time": {"dt": 1e-3, "cfl": 0.4},
     })
-    args = parse(["--config", cfg, "--adaptive-dt"])
-    assert args.dt is None
-    assert args.cfl == 0.4
+    with pytest.raises(runtime_config.ConfigError, match="time.cfl"):
+        runtime_config.load_config(cfg)
+
+
+def test_adaptive_dt_flag_is_gone():
     with pytest.raises(SystemExit):
-        parse(["--config", cfg, "--dt", "1e-3", "--adaptive-dt"])
+        parse(["--case", "sod", "--adaptive-dt"])
 
 
 def test_precision_merge(tmp_path):
@@ -186,12 +192,12 @@ def test_precision_merge(tmp_path):
 
 
 def test_output_prefix_from_mesh_and_case():
-    assert runtime_config.derive_prefix(r"a\b\OCFD3d-Mesh.dat", "channel") \
+    assert runtime_config.derive_prefix(r"a\b\OCFD3d-Mesh.dat", "poiseuille") \
         == "OCFD3d-Mesh"
-    assert runtime_config.derive_prefix("mesh.v2.dat", "channel") == "mesh.v2"
+    assert runtime_config.derive_prefix("mesh.v2.dat", "poiseuille") == "mesh.v2"
     assert runtime_config.derive_prefix(None, "plate") == "plate"
     with pytest.raises(runtime_config.ConfigError):
-        runtime_config.derive_prefix("dir/.dat", "channel")
+        runtime_config.derive_prefix("dir/.dat", "poiseuille")
 
 
 def test_output_filename_uses_eight_digit_istep():
@@ -204,19 +210,22 @@ def test_output_filename_uses_eight_digit_istep():
         io.checkpoint_name("sod", -1)
 
 
-def test_channel_json_paths_are_relative_to_config():
-    cfg = runtime_config.load_config(config_path(CASES[5]))
-    expected = PROJECT / "channel_case_iiA" / "quick" / "OCFD3d-Mesh.dat"
-    assert Path(cfg.values["mesh"]) == expected
-    assert cfg.values["mesh_format"] == "ocfd"
-    assert cfg.values["infile"].endswith("opencfd-scu.in")
+def test_cgns_json_paths_are_relative_to_config(tmp_path):
+    (tmp_path / "mesh.cgns").write_bytes(b"")
+    cfg = write_json(tmp_path, {
+        "case": {"name": "poiseuille"},
+        "mesh": {"file": "mesh.cgns"},
+    })
+    parsed = runtime_config.load_config(cfg)
+    assert Path(parsed.values["mesh"]) == tmp_path / "mesh.cgns"
+    assert parsed.values["mesh_format"] == "cgns"
 
 
 COMPARE_ATTRS = (
     "case", "ni", "nj", "nk", "scheme", "vis_order", "viscous", "Re", "Ama",
-    "ref_t", "pr", "forcing_work", "p_grad", "dt", "cfl", "end_time",
+    "ref_t", "pr", "forcing_work", "p_grad", "dt", "end_time",
     "end_step", "kstep_show", "kstep_save", "plate_x0", "plate_x1", "plate_h",
-    "mesh", "field", "infile", "out_prefix",
+    "mesh", "mesh_format", "cgns_zone", "out_prefix",
 )
 
 
@@ -228,19 +237,20 @@ def test_json_matches_cli_arguments(case):
         assert getattr(as_json, attr) == getattr(cli, attr), attr
 
 
-def test_channel_without_infile_cli_fails():
+def test_channel_case_is_gone():
     proc = subprocess.run(
         [sys.executable, "-m", "opencfd_jax.src.main", "--case", "channel",
-         "--end-step", "0"],
+         "--end-step", "0", "--dt", "1e-3"],
         cwd=str(PROJECT), capture_output=True, text=True)
     assert proc.returncode != 0
-    assert ".in" in (proc.stderr + proc.stdout)
+    assert "invalid choice" in (proc.stderr + proc.stdout)
 
 
-def test_missing_cli_input_file_fails():
+def test_missing_cgns_file_fails():
     proc = subprocess.run(
-        [sys.executable, "-m", "opencfd_jax.src.main", "--case", "sod",
-         "--mesh", "Z:/definitely-missing.dat", "--end-step", "0"],
+        [sys.executable, "-m", "opencfd_jax.src.main", "--case", "poiseuille",
+         "--mesh", "Z:/definitely-missing.cgns", "--dt", "1e-3",
+         "--end-step", "0"],
         cwd=str(PROJECT), capture_output=True, text=True)
     assert proc.returncode != 0
     assert "不存在" in (proc.stderr + proc.stdout)

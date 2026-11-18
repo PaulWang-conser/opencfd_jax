@@ -23,7 +23,7 @@ from . import boundary, config, init, io, runtime_config
 from .ana import check_nan, diagnostic_line
 from .cases import apply_forcing
 from .mesh_data import from_case
-from .solver import compute_dt, inviscid_rhs, rk3_step
+from .solver import inviscid_rhs, rk3_step
 from .viscous import viscous_rhs
 
 
@@ -98,23 +98,19 @@ def build_parser(explicit_only=False):
     add("--plate-x1", type=float, default=0.25)
     add("--plate-h", type=float, default=0.12)
     add("--plate-dif-bound", default="0 0 0 0 1 0")
-    add("--in", dest="infile", default=None,
-        help="原码 in 文件路径（case=channel 必需，维数与物性都从它读）")
-    add("--field", default=None,
-        help="原码场文件（opencfd.dat / OCFD000xx.dat），case=channel 初场")
+    add("--mesh-format", default=None, choices=runtime_config.MESH_FORMATS,
+        help="网格格式：builtin（程序内置网格）或 cgns（单块 CGNS/HDF5）")
     add("--mesh", default=None,
-        help="原码 OCFD3d-Mesh.dat；给出则按 JAC_BOUND=1 算度量并接进差分主链，"
-             "不给等于 JAC_BOUND=0（Ajac=1）")
+        help="CGNS/HDF5 单块网格路径；给出时默认按 cgns 读取")
+    add("--cgns-zone", default=None,
+        help="CGNS 文件包含多个 zone 时必须显式给出 zone 名")
     add("--ni", type=int, default=256, help="计算 i 方向网格")
     add("--nj", type=int, default=64, help="计算 j 方向网格")
     add("--nk", type=int, default=4, help="计算 k 方向网格")
     add("--scheme", default="UP7",
         choices=runtime_config.SCHEMES)
-    add("--cfl", type=float, default=0.4)
     add("--dt", type=float, default=None,
-        help="固定时间步长（不给则用 CFL 自适应）")
-    add("--adaptive-dt", action="store_true",
-        help="显式改用 CFL 自适应；用于覆盖 JSON 里的固定 dt")
+        help="固定时间步长（必填；不再提供 CFL 自适应）")
     add("--weno-tv", action="store_true",
         help="WENO7-SYMBO 启用 TV 快速路径（光滑区线性权）")
     add("--no-weno-tv", action="store_true",
@@ -161,9 +157,8 @@ _NEGATIVE_FLAGS = (("no_viscous", "viscous"), ("no_filter", "filter"),
 def resolve_cli(parsed, parser):
     """把一次显式命令行解析结果整理成配置合并所需的字典。
 
-    负向开关（``--no-*``）在这里折叠成对应布尔参数；``--adaptive-dt``
-    折叠成 ``dt=None``；互相冲突的显式开关直接报错。返回
-    ``(config_path, explicit)``。
+    负向开关（``--no-*``）在这里折叠成对应布尔参数；互相冲突的显式开关直接报错。
+    返回 ``(config_path, explicit)``。
     """
     explicit = dict(parsed)
     config_path = explicit.pop("config", None)
@@ -173,35 +168,12 @@ def resolve_cli(parsed, parser):
                 parser.error(f"--{positive.replace('_', '-')} 与 "
                              f"--{negative.replace('_', '-')} 不能同时给出")
             explicit[positive] = False
-    if explicit.pop("adaptive_dt", False):
-        if explicit.get("dt") is not None:
-            parser.error("--dt 与 --adaptive-dt 不能同时给出")
-        explicit["dt"] = None
     return config_path, explicit
 
 
-def _warn_channel_overrides(args, case):
-    """槽道的 `.in` 已消费字段优先，冲突时如实提示被忽略的来源。"""
-    if args.case != "channel":
-        return
-    params = case["params"]
-    sources = getattr(args, "config_sources", {})
-    for dest, effective in (("Re", params.Re), ("Ama", params.Ama),
-                            ("ref_t", params.Ref_T), ("pr", params.Pr)):
-        value = getattr(args, dest, None)
-        if value is None or sources.get(dest) == "default":
-            continue
-        if not (isinstance(value, (int, float)) and float(value) == float(effective)):
-            label = {"Re": "Re", "Ama": "Ama", "ref_t": "Ref_T", "pr": "Pr"}[dest]
-            print(f"WARNING: 槽道 {label} 以 .in 为准："
-                  f"配置给出 {value!r}，实际 {effective!r}（来源 "
-                  f"{sources.get(dest, 'unknown')} 被忽略）")
-
-
 def _warn_forced_viscous(args):
-    """channel/poiseuille 在 RHS 里强制粘性；显式关闭时如实提示。"""
-    if not getattr(args, "viscous", False) \
-            and args.case in ("channel", "poiseuille"):
+    """poiseuille 在 RHS 里强制粘性；显式关闭时如实提示。"""
+    if not getattr(args, "viscous", False) and args.case == "poiseuille":
         print(f"WARNING: {args.case} 强制粘性，显式 viscous=false 不会关闭粘性项")
 
 
@@ -218,26 +190,16 @@ def run(args):
     cons = state.cons0
     gamma = 1.4
     grid = desc.grid
-    dxs = desc.dxs
     params = case["params"]
 
     rhs = build_rhs(case, args, execution=execution)
     bcs = execution.bcs
     bc_apply = execution.callback
 
-    dt_mode = f"fixed({args.dt})" if args.dt is not None else \
-        f"adaptive(cfl={args.cfl})"
-    if args.dt is None:
-        def dt_fn_(q):
-            """按当前流场和 CFL 数计算自适应时间步长。"""
-            return compute_dt(q, grid, gamma, args.cfl, dxs)
-
-        dt_fn = jax.jit(dt_fn_)
-    else:
-        dt_fn = None
+    if args.dt is None or not (np.isfinite(args.dt) and args.dt > 0.0):
+        raise ValueError("固定 dt 必须显式给出，且为正的有限数")
+    dt_mode = f"fixed({args.dt})"
     rhs(cons)
-    if dt_fn is not None:
-        dt_fn(cons)   # 预热编译
 
     prefix = getattr(args, "out_prefix", None) or args.case
     print(f"case={args.case} grid={grid.ni}x{grid.nj}x{grid.nk} "
@@ -249,10 +211,8 @@ def run(args):
           f"metrics={'on' if desc.has_metrics else 'off(Ajac=1)'} "
           f"dt-mode={dt_mode} out-prefix={prefix} "
           f"config={getattr(args, 'config_path', None) or 'cli'}")
-    _warn_channel_overrides(args, case)
     _warn_forced_viscous(args)
-    if (args.viscous or args.case == "poiseuille") and args.ref_t is None \
-            and args.case != "channel":
+    if (args.viscous or args.case == "poiseuille") and args.ref_t is None:
         print("WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度"
               "（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；"
               "与原码对拍时必须用 --ref-t 给出 in 文件里的同值。")
@@ -270,14 +230,7 @@ def run(args):
     step_jit = jax.jit(lambda q, dt_: rk3_step(q, dt_, rhs, bc_apply=bc_apply),
                        donate_argnums=(0,))
     while t < args.end_time and step < args.end_step:
-        if args.dt is not None:
-            dt = min(args.dt, args.end_time - t)
-        else:
-            dt = float(dt_fn(cons))
-            if not (np.isfinite(dt) and dt > 0.0):
-                print(f"bad dt={dt} at step {step}, t={t}")
-                break
-            dt = min(dt, args.end_time - t)
+        dt = min(args.dt, args.end_time - t)
         cons = step_jit(cons, dt)
         t += dt
         step += 1
@@ -304,13 +257,14 @@ def run(args):
 
 def _validate_input_paths(args, parser):
     """启动前检查输入文件；避免进入 JIT 后才因缺文件报错。"""
-    if args.case == "channel" and not getattr(args, "infile", None):
-        parser.error("case=channel 需要 .in 文件（--in / mesh.infile）")
-    for attr, flag in (("mesh", "--mesh"), ("field", "--field"),
-                       ("infile", "--in")):
-        value = getattr(args, attr, None)
-        if value and not os.path.isfile(value):
-            parser.error(f"{flag} 指向的文件不存在或不可读：{value}")
+    if args.dt is None or not (np.isfinite(args.dt) and args.dt > 0.0):
+        parser.error("固定 dt 必须显式给出，且为正的有限数")
+    if getattr(args, "mesh_format", None) == "cgns" \
+            and not getattr(args, "mesh", None):
+        parser.error("mesh_format=cgns 需要 --mesh / mesh.file")
+    value = getattr(args, "mesh", None)
+    if value and not os.path.isfile(value):
+        parser.error(f"--mesh 指向的文件不存在或不可读：{value}")
 
 
 def main(argv=None):
@@ -329,7 +283,10 @@ def main(argv=None):
 
     _validate_input_paths(args, explicit_parser)
     os.makedirs(args.out_dir, exist_ok=True)
-    run(args)
+    try:
+        run(args)
+    except ValueError as exc:
+        explicit_parser.error(f"运行参数错误：{exc}")
 
 
 if __name__ == "__main__":

@@ -133,11 +133,15 @@ CGNSBase_t → Zone_t (尺寸 + GridCoordinates) + ZoneBC_t (BCType) + ZoneGridC
 - 面/边/格心在 `PointRange` 里用"**最小顶点索引**"表示：i- 面写 `i = 1`，i+ 面写 `i = VertexSize_i`；
   格心 `(i,j,k)` 用构成该单元的最小顶点索引（即 `i,j,k` 本身，范围 `1..CellSize`）。
 
-### 3.3 坐标：顶点还是格心
+### 3.3 坐标：顶点即离散点
 
-`GridCoordinates_t` 下的 `CoordinateX/Y/Z` 是**顶点坐标**，数组大小 = `VertexSize`（有 rind 时再加
-`Rind_t` 指定的层数）。文件里没有格心坐标——格心坐标要自己由 8 个顶点平均，
-这和仓库现有 `mesh.py` 的口径一致（现有代码是格心量，读 CGNS 时照旧平均）。
+`GridCoordinates_t` 下的 `CoordinateX/Y/Z` 是**顶点坐标**，数组大小 = `VertexSize`。当前
+`opencfd_jax` 把顶点当作**离散点**使用：`Grid(ni,nj,nk)` 直接取 `VertexSize`，坐标也按
+同一组离散点进入度量；**不再做全局八点平均，也不把 CGNS 转成格心量**。因此
+`VertexSize` 与 `Grid.inner()` 的内区点数一致，`CellSize` 只做 `+1` 自洽校验。
+
+LAP=4 的鬼胞由 `mesh.pad_coords` 在读取后补，不依赖 CGNS 的 `Rind`；当前 reader 明确拒绝
+`Rind>0` 和 `CellCenter` 坐标。
 
 实测 `Zone 1` 的 `CoordinateX`：`min = 0.895`、`max = 10.0`；`CoordinateY ∈ [-1, 0]`——
 坐标范围可以直接用来自检块是否接上（相邻块界面顶点应完全重合）。
@@ -410,16 +414,22 @@ with h5py.File("grid.cgns", "w") as f:
 
 ---
 
-## 7. Step 4 读取口径建议（按本文核对）
+## 7. Step 4 读取口径（已实现部分）
 
-1. **只做 `ZoneType = Structured`**：`Unstructured` 直接报"不支持"并列出块名。
-2. **逐块读**：`VertexSize → Grid(ni,nj,nk)`，`CellSize` 检查 `+1` 关系；块数 ≥1 都要能读。
-3. **坐标**：读顶点 `CoordinateX/Y/Z`（注意 h5py 维度反转），格心由 8 点平均（与 `mesh.py` 现有口径一致）。
-4. **鬼胞**：若存在 `Rind_t`，可把它当现成的 4 层鬼胞用；没有就照现在的方式自己补。
+1. **只做 `ZoneType = Structured`**：`Unstructured` 直接报"不支持"并列出块名；二维 zone
+   （任一 `VertexSize <= 1`）也拒绝。
+2. **逐块读**：`VertexSize → Grid(ni,nj,nk)`，`CellSize` 检查 `+1` 关系；多 zone 文件必须
+   用 `--cgns-zone` 指定，单 zone 可省略。
+3. **坐标**：读顶点 `CoordinateX/Y/Z`（注意 h5py 维度反转），**顶点即离散点**，不做八点
+   平均、不转格心；坐标按 `(nk,nj,ni)` 进入 `pad_coords` 和 `compute_metrics_from_coords`。
+4. **鬼胞**：LAP=4 由 `mesh.pad_coords` 自己补；当前 reader 拒绝 `Rind>0`，不把 CGNS rind
+   当现成鬼胞。
 5. **BC**：遍历 `ZoneBC_t` 下所有 `BC_t`，按 `BCType` 字符串 + `PointRange` 建面表；
-   `BCType` 无法映射到现有 5 个 kind 时**报错并打印 patch 名**，不要退化。
-6. **1to1**：读全部 `GridConnectivity1to1_t`，用 `Transform` 建"轴映射 + 翻转"，
-   同块自连接且两范围互补 → 标 `PERIODIC`；跨块 → 留下接口记录（多块阶段再接 `halo` 交换）。
+   当前执行子集是 `BCWall`→`WALL`、同轴双面 `BCSymmetryPlane`→`PERIODIC`、
+   `BCExtrapolate/BCOutflow*`→`OUTFLOW`；`BCFarfield`、`BCInflow*`、`BCWallViscous*`
+   在严格模式下报错并打印 patch 名，不退化。
+6. **1to1**：当前只接受同块、`Transform=(1,2,3)` 的整面 identity 自连接，两范围互补时
+   标 `PERIODIC`；跨块、翻转/轴交换和 `GridConnectivity_t` 留给多块阶段。
 7. **自检**（写进测试 fixture）：
    - `CellSize + 1 == VertexSize`；
    - 1to1 双向存在且 `Transform`/范围互补；

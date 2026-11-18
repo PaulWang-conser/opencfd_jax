@@ -1,6 +1,6 @@
 # OpenCFD-JAX 计算流程说明
 
-这套代码用 **JAX + NumPy** 求解五个守恒变量的可压缩流动方程，并提供 Sod 激波管、Taylor–Green 涡、Poiseuille 槽道流、三维槽道流和平板边界层五种算例。代码包含无粘通量、可选粘性项、物理边界、体积力、三阶 Runge–Kutta 时间推进、激波滤波、诊断和 NPZ 存盘。
+这套代码用 **JAX + NumPy** 求解五个守恒变量的可压缩流动方程，提供 Sod 激波管、Taylor–Green 涡、Poiseuille 槽道流和平板边界层四个命令行算例。代码包含无粘通量、可选粘性项、物理边界、体积力、三阶 Runge–Kutta 时间推进、激波滤波、诊断和 NPZ 存盘。单块 CGNS/HDF5 结构网格只在 `poiseuille` 上接入；`channel` 不再是命令行算例，只保留为内部壁面库。
 
 阅读时只需要先记住一条主线：
 
@@ -13,7 +13,7 @@ cases.py：建立网格、物性、初值、边界和源项
    ↓
 main.py：组装右端项 L(Q) = 无粘项 + 粘性项 + 源项
    ↓
-solver.py：CFL 定步长 + SSP-RK3 时间推进
+solver.py：显式固定 dt + SSP-RK3 时间推进
    ↓
 filtering.py / ana.py：整步后的可选滤波与诊断
    ↓
@@ -33,7 +33,7 @@ io.py：只保存物理内区的守恒量 NPZ
 
 
 ```
-python -m opencfd_jax.src.main --case sod --ni 256 --scheme UP7 --end-time 0.2
+python -m opencfd_jax.src.main --case sod --ni 256 --scheme UP7 --dt 1e-3 --end-time 0.2
 ```
 
 当前目录结构中，源码包名是 `opencfd_jax.src`，所以不要写成 `python -m opencfd_jax.run`。
@@ -57,14 +57,16 @@ output/sod-istep-00000100.npz
 
 | 参数                        | 含义                                                      |
 | ------------------------- | ------------------------------------------------------- |
-| `--case`                  | 算例：`sod` / `tg` / `poiseuille` / `channel` / `plate`    |
-| `--ni --nj --nk`          | 计算 i/j/k 方向内区网格数，缺省 256/64/4                          |
+| `--case`                  | 算例：`sod` / `tg` / `poiseuille` / `plate`；`channel` 只保留为内部库    |
+| `--ni --nj --nk`          | 计算 i/j/k 方向内区离散点数，缺省 256/64/4；CGNS 时按 `VertexSize` 校验 |
+| `--mesh-format`           | `builtin`（默认）或 `cgns`；只给 `--mesh` 时自动推断为 `cgns`       |
+| `--mesh`                  | CGNS/HDF5 文件路径；当前只能用于 `poiseuille`                     |
+| `--cgns-zone`             | 多 zone 文件中的 zone 名；单 zone 可省略                          |
 | `--scheme`                | 无粘重构格式，默认 `UP7`                                         |
-| `--dt`                    | 固定时间步长；不提供时按 `--cfl` 自适应计算                              |
-| `--cfl`                   | 自适应步长的 CFL 数，默认 0.4                                     |
+| `--dt`                    | 固定时间步长，**必填且必须为正的有限数**；CFL 自适应已删除              |
 | `--end-time`              | 终止物理时间                                                  |
 | `--end-step`              | 最大整步数；与终止时间谁先满足就停止                                      |
-| `--viscous`               | 对 Sod、Taylor–Green、平板启用粘性项；Poiseuille 和 channel 始终计算粘性项 |
+| `--viscous`               | 对 Sod、Taylor–Green、平板启用粘性项；Poiseuille 始终计算粘性项            |
 | `--vis-order`             | 粘性导数格式：`CD6` 或 `CD8`                                    |
 | `--Re --Ama --ref-t --pr` | Reynolds 数、参考 Mach 数、有量纲参考温度和 Prandtl 数                 |
 | `--filter`                | 启用整步后的激波选择性滤波                                           |
@@ -94,26 +96,27 @@ JSON 只分六组，外加顶层 `precision`：
 
 | 组 | 字段 |
 |---|---|
-| `mesh` | `format`（`builtin`/`ocfd`）、`file`、`field`、`infile` |
+| `mesh` | `format`（`builtin`/`cgns`）、`file` |
 | `physics` | `Re`、`Ama`、`ref_t`、`pr` |
 | `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv`、`filter`、`nstep_filter`、`filter_s0`、`filter_rth` |
-| `time` | `dt`（`null` 表示自适应）、`cfl`、`end_time`、`end_step` |
+| `time` | `dt`（必填）、`end_time`、`end_step` |
 | `case` | `name`、`p_grad`、`forcing_work`、`plate_x0`、`plate_x1`、`plate_h` |
 | `output` | `dir`、`kstep_show`、`kstep_save` |
 
 优先级：程序默认值 → JSON → 显式命令行。显式与否由“参数是否出现在命令行”判断，
 不靠与默认值比较。需要显式关闭 JSON 里的布尔项时用 `--no-viscous`、`--no-filter`、
-`--no-weno-tv`；需要用自适应步长覆盖 JSON 的固定 `dt` 时用 `--adaptive-dt`
-（与 `--dt` 同时给出会报错）。
+`--no-weno-tv`。`time.cfl`、`--cfl`、`--adaptive-dt` 均已删除；运行必须给出固定 `dt`。
 
 网格文件名决定输出前缀：给了 `--mesh`/`mesh.file` 就用文件名去最后一个扩展名
 （`OCFD3d-Mesh.dat` → `OCFD3d-Mesh-istep-00000001.npz`），否则用算例名。JSON 内相对
 路径按 JSON 所在目录解析，命令行路径按当前工作目录解析。
 
-`channel` 的网格维数、`RE/AMA/T_REF`、可选 `GAMMA/PR`、`IBC` 与
-`JAC_BOUND/DIF_BOUND` 仍以 `mesh.infile` 的 `.in` 为准；JSON/命令行给了不同的
-物性只会打警告，不改变有效值。JSON 不接受网格维数、边界开关和 `gamma`，出现未知
-字段或不属于当前算例的字段会在启动前报错。
+`channel` 的 `.in`、场文件和旧 `OCFD3d-Mesh.dat` 入口已从 CLI/JSON 删除；`channel.py`、
+`infile.py`、`mesh.read_ocfd_mesh/read_ocfd_field` 只保留为内部库和旧测试依赖，不再从正式入口进入。
+CGNS 路径只适用于 `poiseuille`：`mesh.file` 指向 HDF5/CGNS 文件，`mesh.format="cgns"` 可由
+`file` 自动推断；`VertexSize` 是离散点数，`CellSize` 只校验 `+1`，不做全局八点平均。未知字段、
+不属于当前算例的字段、`CellCenter`、`Rind>0`、`PointList`、二维 zone 和单侧对称面都会在启动前
+或 reader 中报错。
 
 
 
@@ -181,9 +184,9 @@ JSON 只分六组，外加顶层 `precision`：
 | -- | --------------- | ---------------------------------- | ----------------------------------------------- |
 | 1  | 读取命令行并设置精度      | `main.py::main`、`init.py::prepare`、`config.py` | 默认开启 JAX x64；`--fp32` 时关闭；精度在数组创建前设置 |
 | 2  | 装配算例            | `init.py::prepare`、`cases.py::build_case` | 创建 `Grid`、`PhysParams`、初始守恒量、边界类型、求解方向、步长和源项    |
-| 3  | 读取外部输入（仅需要时）    | `infile.py`、`mesh.py`、`channel.py` | channel 可读取原码 in、场和网格文件；把原始变量转换为守恒量，必要时计算曲线网格度量 |
+| 3  | 读取外部网格（仅 CGNS 需要时） | `mesh_cgns.py` | `poiseuille` 读 CGNS/HDF5，补鬼胞坐标并算曲线度量；旧 `.in`/场/OCFD 网格入口已删除 |
 | 4  | 组装单个 RK 子步的右端项  | `main.py::build_rhs`                | 形成 JIT 函数 `rhs(q)`，组合边界、无粘、粘性和源项；滤波不放入其中        |
-| 5  | 确定时间步长          | `solver.py::compute_dt`            | 固定 `dt` 或按各求解方向的 \`(                            |
+| 5  | 确定时间步长          | `main.py::run`                    | 只接受显式固定 `dt`；不再有 CFL 自适应或 `compute_dt` |
 | 6  | 执行一个 SSP-RK3 整步 | `solver.py::rk3_step_stages`       | 三次计算右端项，三次组合状态；每个子步都重新施加专用物理边界                  |
 | 7  | 可选激波滤波          | `filtering.py::shock_filter`       | 每个 `nstep_filter` 整步执行一次，不在 RK 子步内执行            |
 | 8  | 打印诊断            | `ana.py::diagnostic_line`          | 输出时间、步数、耗时、内区平均 `rho*E` 和全场 NaN 标志              |
@@ -198,23 +201,13 @@ JSON 只分六组，外加顶层 `precision`：
 
 ## 4. 一个时间整步内发生了什么
 
-### 4.1 时间步长：固定或 CFL 自适应
+### 4.1 时间步长：只支持显式固定 dt
 
-文件：`solver.py`；函数：`compute_dt()`。
+文件：`main.py::run`；`solver.py` 只保留 `rk3_step()` / `rk3_step_stages()`。
 
-
-
-* 给出 `--dt`：使用该固定值，最后一步会缩短以准确到达 `end_time`。
-
-* 不给 `--dt`：从当前流场恢复三个速度和声速，按求解方向累计最大谱半径：
-
-
-
-```
-dt = CFL / Σ_direction max[(|u_direction| + sound_speed) / h_direction]
-```
-
-`dxs` 中小于等于零的方向不参与求和，因此二维算例不会错误地加入 z 向限制。
+* `--dt` / JSON `time.dt` 必须显式给出，且为正的有限数；缺失或非正会在启动前报错。
+* 最后一步按 `end_time` 缩短以准确到达终止时间。
+* `compute_dt()`、`--cfl`、`--adaptive-dt` 和 JSON `time.cfl` 已删除；没有 CFL 自适应路径。
 
 ### 4.2 SSP-RK3：三个子步推进守恒量
 
@@ -360,7 +353,7 @@ du = -(F_right - F_left) / h
 
 * Sutherland 公式使用 `Ref_T`；`Re` 控制粘性大小，`Pr` 进入热传导能量通量。
 
-注意：Sod 初值采用常见的 `E = p/(gamma-1)` 验证约定，与粘性模块的 OCFD `Ama` 无量纲约定不同。程序保留 `sod + --viscous` 的灵活性，但会打印警告；研究粘性时应优先使用 Taylor–Green、Poiseuille、channel 或 plate 的相应约定。
+注意：Sod 初值采用常见的 `E = p/(gamma-1)` 验证约定，与粘性模块的 OCFD `Ama` 无量纲约定不同。程序保留 `sod + --viscous` 的灵活性，但会打印警告；研究粘性时应优先使用 Taylor–Green、Poiseuille 或 plate 的相应约定。
 
 
 
@@ -399,6 +392,20 @@ du = -(F_right - F_left) / h
 和 `compare.py` 都用它决定轴级 `bcs` 与 case 回调；描述不写回算例字典，避免出现
 两份可独立修改的状态。构造必须发生在创建 JIT 闭包之前；之后修改 `case` 不会回溯
 已经建立的闭包。
+
+### 7.1.1 CGNS 单块接入（第 4 步）
+
+文件：`mesh_cgns.py`。`read_cgns_zone()` 只读 HDF5/CGNS 的 `CGNSBase_t`、`Zone_t`、
+`GridCoordinates_t`、`ZoneBC_t` 和 `GridConnectivity1to1_t`；坐标转成 `(nk,nj,ni)`，
+`PointRange` 的 1-based 索引转 0-based。`to_block_mesh()` 把可执行子集翻译成
+`BlockMesh`（`dxs=(1,1,1)`，物理间距进入 `Ajac`/度量），`build_cgns_block()` 再补
+LAP 鬼胞坐标并计算 CD6 度量。
+
+当前执行子集：三维 `Structured`、`Vertex` 坐标、整面 `BC`、同块 identity 1to1；
+`BCWall` 只映射 `WALL`，同一轴两侧整面 `BCSymmetryPlane` 才近似 `PERIODIC`，单侧
+对称面拒绝；`BCExtrapolate/BCOutflow*` 映射 `OUTFLOW`。`BCWallViscous*`、`BCInflow*`、
+`BCFarfield` 只读不执行。`validate=False` 保留所有原始 `BCType` 供诊断，但仍拒绝
+`CellCenter`、`Rind>0`、`PointList`、`Periodic_t` 和二维 zone。
 
 ### 7.2 统一边界执行与扩展入口（第 2 步）
 
@@ -487,7 +494,7 @@ case["bc_apply"] = special.apply
 
 ```
 cons_0 ... cons_4：五个守恒变量的物理内区，形状均为 (nk, nj, ni)
-_meta            ：JSON 元信息，包括 t、step、dt、case、N（实际 i 方向网格）、scheme、gamma、Re、Ama、Ref_T、Pr；槽道的 Re/Ama 取 `.in` 解析后的实际物性
+_meta            ：JSON 元信息，包括 t、step、dt、case、N（实际 i 方向离散点数）、scheme、gamma、Re、Ama、Ref_T、Pr；CGNS 的 Re/Ama 取命令行/JSON 的实际物性
 ```
 
 读取示例：
@@ -507,9 +514,10 @@ with np.load("output/sod-istep-00000100.npz") as data:
 
 ***
 
-## 9. 五种算例分别怎样进入主流程
+## 9. 四个命令行算例分别怎样进入主流程
 
 所有算例都由 `cases.py::build_case()` 统一返回 `case` 字典，后续主循环不再区分初值细节。
+`channel` 已从 CLI 算例列表移除；`channel.py` 只作为壁面/初值库保留给 `plate` 和内部测试。
 
 
 
@@ -517,42 +525,27 @@ with np.load("output/sod-istep-00000100.npz") as data:
 | ------------ | ------------------------------------- | ------------------------ | ------------------ | --------------------------------- |
 | `sod`        | `make_initial_sod()` 生成左右常数态激波管       | x；x 出流，y/z 周期            | 默认无粘，可选滤波          | `exact_riemann.py` 提供 Riemann 精确解 |
 | `tg`         | `make_initial_tg()` 生成周期正余弦速度场        | x/y；周期边界                 | 可叠加粘性              | `tests/test_taylor_green.py`      |
-| `poiseuille` | `make_initial_poiseuille()` 生成抛物线速度剖面 | x/y；x/z 周期，y 双壁          | 始终计算粘性；x 向恒体积力     | 稳态层流剖面                            |
-| `channel`    | 从原码 in 读取维数和物性；可读取原码初场与网格             | i/j/k；i/k 周期，j 双壁        | 始终计算粘性；槽道源项；可选曲线度量 | `compare.py` 逐子步对拍                |
+| `poiseuille` | 内置 `make_initial_poiseuille()`，或 CGNS `Vertex` 坐标 | x/y；x/z 周期，y 双壁          | 始终计算粘性；x 向恒体积力；CGNS 带曲线度量 | 稳态层流剖面；Step 4 NPZ 对齐 |
 | `plate`      | 均匀来流，边界层从入口向下游发展                      | x/y；入口 / 出口、下壁 / 顶部、z 周期 | 使用平板专用边界和鬼层口径      | `blasius.py` 提供相似解和 Cf 基准         |
 
-### 9.1 channel 的外部文件链
+### 9.1 CGNS 单块网格路径
 
+`poiseuille` 可用 HDF5/CGNS 文件替代内置均匀网格：
 
-
-```
---in opencfd-scu.in
-   → infile.py：解析 GRID_3D、RE、AMA、PR、T_REF、BC_RPARA、JAC_BOUND、DIF_BOUND 等
-
---field opencfd.dat（可选）
-   → mesh.py::read_ocfd_field：读取 rho/U/V/W/T
-   → channel.py::cons_from_primitive：转换为五个守恒量
-   不提供 --field 时使用 rho=T=1、速度为 0 的内区初值
-
---mesh OCFD3d-Mesh.dat（可选）
-   → mesh.py::read_ocfd_mesh：读取 X/Y/Z 坐标
-   → pad_coords：按周期/非周期规则补鬼胞
-   → compute_metrics_from_coords：CD6 计算坐标导数、Jacobi 和余子式
-   不提供 --mesh 时 metrics=None，按 Ajac=1 的直角假设计算
+```powershell
+python -m opencfd_jax.src.main --case poiseuille `
+  --mesh opencfd_jax/Grid/fixtures/poiseuille_box.cgns `
+  --dt 1e-3 --end-step 1 --end-time 0.5 --kstep-save 1
 ```
 
-channel 命令示例：
+只给 `--mesh` 时运行配置自动把 `mesh_format` 推断为 `cgns`。CGNS 的 `VertexSize`
+（离散点数）与物理间距进入 `Ajac`，`dxs` 固定为索引空间 `(1,1,1)`；因此不再需要
+`dt_dxs`。当前只支持单块、三维、整面边界；`multi_hdf5.cgns` 这类多 zone 文件必须
+用 `--cgns-zone` 指定 zone，且默认严格模式会拒绝 `BCFarfield` 等未执行边界。
 
-
-
-```
-python -m opencfd_jax.src.main --case channel `
-  --in path/to/opencfd-scu.in `
-  --field path/to/opencfd.dat `
-  --mesh path/to/OCFD3d-Mesh.dat `
-  --scheme OMP6_CD8 --vis-order CD8 --forcing-work off `
-  --dt 0.0001 --end-step 1
-```
+旧 `channel` 的外部文件链（`--in`、`--field`、`--mesh` OCFD dat）已删除；`infile.py`、
+`mesh.read_ocfd_mesh/read_ocfd_field`、`channel.py` 只保留为内部库和旧测试依赖，
+不再有正式入口。
 
 ### 9.2 平板与 Blasius 基准
 
@@ -589,19 +582,21 @@ python -m opencfd_jax.src.main --case plate `
 | 文件                 | 责任                                |
 | ------------------ | --------------------------------- |
 | `main.py`           | 命令行、正式主循环、RHS 总装、滤波 / 诊断 / 存盘节奏   |
+| `init.py`           | 初始化编排：解析配置、精度、网格、数组、初场和边界组装 |
 | `runtime_config.py`| `input.json` 读取 / 校验 / 合并 / 输出前缀（第 3 步） |
-| `cases.py`         | 五种算例的网格、物性、初值、边界与通用体积力            |
+| `cases.py`         | 四个命令行算例的网格、物性、初值、边界与通用体积力            |
 | `fields.py`        | 守恒量数组布局、`Grid`、canonical 边界入口重新导出          |
 | `axes.py`          | 计算 i/j/k 词表、尺寸和六侧标签工具                  |
 | `boundary.py`      | 通用鬼胞填充、壁面镜像、Ev 与统一边界执行配置       |
-| `solver.py`        | 单方向 / 多方向无粘 RHS、声速、CFL 步长、SSP-RK3 |
+| `solver.py`        | 单方向 / 多方向无粘 RHS、声速、SSP-RK3；无 CFL 步长 |
 | `schemes.py`       | Steger–Warming 分裂、各对流格式、边界面通量带    |
 | `viscous.py`       | 物性、CD6/CD8、单侧导数、应力与粘性通量散度         |
-| `channel.py`       | 槽道原始变量转换、双壁条件、槽道体积力               |
+| `mesh_cgns.py`     | CGNS/HDF5 单块读取、执行子集校验、BlockMesh 适配与度量（第 4 步） |
+| `channel.py`       | 内部槽道壁面/体积力库；不再是 CLI 算例               |
 | `plate.py`         | 平板入口、出口、下壁和顶部自由来流条件               |
-| `mesh.py`          | 原码网格 / 场读取、坐标补层、曲线网格度量与缓存         |
+| `mesh.py`          | 原码网格 / 场读取、坐标补层、曲线网格度量（内部库）         |
 | `mesh_data.py`     | 单块网格与六侧边界的只读描述（第 1 步）             |
-| `infile.py`        | 原码 in 文件的键值解析和网格维数校验              |
+| `infile.py`        | 原码 in 文件键值解析（内部库；无正式入口）              |
 | `filtering.py`     | 压力传感器与整步后的选择性激波滤波                 |
 | `ana.py`           | 平均总能量、NaN 检查和诊断行                  |
 | `io.py`            | NPZ 读写和通用原码 dat 读取                |
@@ -668,6 +663,6 @@ python -m opencfd_jax.src.compare diff dump-npz dump-jax
 
 6. **专用边界先于每个子步的 RHS**：channel 和 plate 不只是计算结束后修边，而是在每个 RK 子步中维护边界状态。
 
-7. **channel 的曲线度量是可选的**：提供 `--mesh` 才读取并计算；否则走直角假设。
+7. **Poiseuille 的曲线度量是可选的**：内置网格走直角假设（`Ajac=1`）；给 `--mesh` 才读取 CGNS 并计算曲线度量。
 
 8. **验证模块不参与正式求解**：`exact_riemann.py`、`blasius.py`、`compare.py` 都是基准或对拍工具。

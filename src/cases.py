@@ -129,6 +129,32 @@ def build_case(args):
                     forcing=None, gamma=gamma)
 
     if args.case == "poiseuille":
+        mesh_format = getattr(args, "mesh_format", "builtin")
+        if mesh_format == "cgns":
+            from . import mesh_cgns
+            if not getattr(args, "mesh", None):
+                raise ValueError("mesh_format=cgns 需要 --mesh / mesh.file")
+            zone = mesh_cgns.read_cgns_zone(
+                args.mesh, zone=getattr(args, "cgns_zone", None), validate=True)
+            explicit = getattr(args, "config_sources", {})
+            for name, got in (("ni", zone.ni), ("nj", zone.nj), ("nk", zone.nk)):
+                value = getattr(args, name, None)
+                if explicit.get(name) == "cli" and int(value) != got:
+                    raise ValueError(
+                        f"显式 --{name}={value} 与 CGNS VertexSize 的 {got} 不一致")
+            block = mesh_cgns.build_cgns_block(zone, axes=(0, 1))
+            grid = block.grid
+            G = args.p_grad
+            cons, dy = make_initial_poiseuille(grid, params, G, gamma)
+            fw = getattr(args, "forcing_work", True)
+            if isinstance(fw, str):
+                fw = fw.strip().lower() not in ("off", "0", "false", "no")
+            return dict(grid=grid, cons0=cons, bcs=block.bcs,
+                        dxs=block.dxs, axes=(0, 1), params=params,
+                        forcing=("x", G), forcing_work=bool(fw), gamma=gamma,
+                        metrics=block.metrics, coords=block.coords,
+                        dif_bound=block.dif_bound,
+                        dif_axis_map=block.dif_axis_map)
         ni = int(_dimension(args, "ni", 256))
         nj = int(_dimension(args, "nj", 64))
         grid = Grid(ni=ni, nj=nj, nk=nk)

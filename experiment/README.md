@@ -1,10 +1,11 @@
 # 第 0 步：固定当前基准（回归护栏）
 
 对应 `11-16 我建议先对齐的.md` 第六节「第 0 步：固定当前基准」。这一步**不改任何功能**，
-只把当前程序的行为钉死：Sod / TG / Poiseuille / channel / plate 各跑一小段，
+只把当前程序的行为钉死：Sod / TG / Poiseuille / plate 各跑一小段，
 连同逐文件 sha256 一起存档。之后做第 1~9 步（MeshData、boundary.py、input.json、
 Gridgen 读取、case 插件化、多块串行、多块粘性、I/O、多 GPU）时，
 每一步收尾都要复跑本清单并拿到 PASS，任何一位变化都能立刻定位到哪个用例。
+`channel` 已从 CLI 算例列表移除，原 `.in`/场/OCFD 网格入口不再参与基准。
 
 ## 数值口径（2026-11-17 指定）
 
@@ -14,26 +15,20 @@ Gridgen 读取、case 插件化、多块串行、多块粘性、I/O、多 GPU）
 | 粘性格式 | `--vis-order CD8` | 对应原码 `SCHEME_VIS=CD8` |
 | 精度 | FP64（缺省） | 逐位比对的前提 |
 | 激波滤波 | 关闭 | 只冻结"格式本身"，滤波属于整步后处理，另案处理 |
-| dt | 固定 `--dt`（另有一条 CFL 自适应用例） | 固定 dt 让逐位复现与"dt 序列是否变化"解耦 |
-| 体积力做功 | `--forcing-work off`（两条 channel 用例） | 原码 `channel_body_force_kernel` 只做 `du[1] += F·rho`；JAX 缺省 `on` 会多出 `rho*u*G`，实测让 rhoE 每步差 ~1e-3 |
+| dt | 显式固定 `--dt` | CFL 自适应已从入口删除；固定 dt 让逐位复现已确定 |
+| 体积力做功 | `--forcing-work off`（Poiseuille 对拍时） | 原码对应内核只做 `du[1] += F·rho`；JAX 缺省 `on` 会多出 `rho*u*G` |
 
 ## 用例清单
 
 | id | 内容 | 覆盖点 | 规模 | 耗时 |
 |---|---|---|---|---|
 | `sod_1step` | Sod 激波管 1 步，dt=1e-3 | 通量分裂 + WENO7 重构 + 出流/周期 | 128×4×4 | 2.7 s |
-| `sod_cfl_5step` | Sod 5 步，CFL=0.4 自适应 | `compute_dt`："逐步 dt 序列"被冻结 | 128×4×4 | 2.7 s |
 | `tg_10step` | Taylor-Green，Re=1000，10 步 | 周期双轴 + 粘性 CD8 + 2D 涡 | 64×64×4 | 4.0 s |
 | `poiseuille_5step` | 层流 Poiseuille 5 步 | WALL 镜像鬼胞 + 体积力 + 粘性 | 32×64×4 | 4.2 s |
 | `plate_1step` | 平板边界层 1 步 | INFLOW/PLATE 非对称边界 + 零状态鬼层 + `dif_bound` 边界带 | 64×64×4 | 5.3 s |
-| `channel_1step` | 单块槽道 1 步（**真网格**） | 原版 in + 原版初场 + `OCFD3d-Mesh.dat` 度量链 + IBC=200 双壁 | 96×97×64 | 18.0 s |
-| `channel_small_100step` | 单块槽道 100 步（小网格） | 多步连续演化（壁面 BC 每子步重置、体积力、粘性累计） | 24×25×16 | 9.1 s |
 
-合计 7 条、约 46 s、28.6 MB。`channel_1step` 用 `channel_case_iiA/quick` 里的
-`opencfd-scu.in` / `opencfd.dat` / `OCFD3d-Mesh.dat`（96×97×64，Re=190.7、Ma=0.0955、
-T_REF=300K、`DIF_BOUND=0 0 1 1 0 0`），所以它同时冻结了度量（Ajac/余子式）与边界带路径。
-`channel_small_100step` 用 `cases/channel_small.in`（同口径、网格缩小到 24×25×16、不给 `--mesh`），
-专门用来在便宜的网格上看"很多步之后"是否还一致。
+合计 4 条。`channel_1step` / `channel_small_100step` 已随旧 `.in` 与 OCFD 网格入口删除；
+它们的历史基准文件仍保留在 `baseline/` 供旧提交对照，但不再由当前入口生成。
 
 ## 用法
 
@@ -66,7 +61,8 @@ python opencfd_jax\experiment\run_step0.py --list
   NPZ 与各用例 `case.json` 记录的 SHA-256 不一致均判 FAIL。零容差逐字节比较数组，
   因此正负零也会区分。测试可运行 `python -m unittest discover -s opencfd_jax/experiment -p test_check_step0.py`。
 - 缺省 `--tol 0`：**逐位一致**。本机（Python 3.13.18 / numpy 2.5.4 / jax 0.12.0.1，
-  CPU）实测：7 条用例、80 个场，`max|diff|` 全为 `0.000e+00`；证据见
+  CPU）历史 7 条用例、80 个场实测 `max|diff|=0.000e+00`；当前 CLI 清单已缩为 4 条，
+  旧 `channel_*` 基准仍留在 `baseline/` 作为历史对照，不再由当前入口重跑。
   `baseline/SELFCHECK.txt` 与 `baseline/SELFCHECK.json`（该次跑完即删除 `candidate/`，
   consumer 需要重跑）。
 - 只有当改动**必然**改变运算顺序（例如算子融合、规约顺序）时，才允许
@@ -174,31 +170,30 @@ python -m pytest experiment/test_step2_boundary.py -q
 `test_step3_config.py` 覆盖：
 
 - 默认值 / JSON / 显式命令行的合并优先级，显式判定不靠与默认值比较；
-- 未知字段、算例不适用字段（如 Sod 的 `p_grad`）、channel 缺 `.in` 启动前报错；
-- 槽道 `.in` 的物性优先级、`--no-*` 显式关闭、`--adaptive-dt`、`--fp32/--fp64`；
+- 未知字段、算例不适用字段（如 Sod 的 `p_grad`）、CGNS 缺 `mesh.file` / 非 `poiseuille` 报错；
+- `--no-*` 显式关闭、`time.cfl` / `--adaptive-dt` / `--cfl` 已拒绝、`--fp32/--fp64`；
 - 输出前缀取网格文件名，以及在临时目录里 CLI 与 JSON 两条路径的 NPZ 逐位一致；
-- 输出文件名为 `<前缀>-istep-00000001.npz` 形式，步号至少八位；槽道 `_meta.N`
-  记录实际 `grid.ni`，`_meta.Re/Ama` 记录 `.in` 解析后的实际物性；
-- 七条 Step 0 用例的 JSON 参数与 CLI 参数逐项相等。
+- 输出文件名为 `<前缀>-istep-00000001.npz` 形式，步号至少八位；`_meta.N` 记录实际 `grid.ni`，
+  `_meta.Re/Ama` 记录实际物性；
+- 四条 Step 0 用例的 JSON 参数与 CLI 参数逐项相等。
 
 ```powershell
 cd D:\Desktop\ocfd2jax
 python -m pytest opencfd_jax/experiment/test_step3_config.py -q
 ```
 
-七例 JSON 配置放在 `experiment/cases/*.json`，网格维数仍由命令行提供（JSON 明确
-不承载维数/边界开关）。用 JSON 重跑候选并比对：
+七例 JSON 配置仍放在 `experiment/cases/*.json`，但当前 `step0_cases.py` 只保留 4 条 CLI 用例；
+`channel_1step.json` / `channel_small_100step.json` / `sod_cfl_5step.json` 是历史遗留配置，不再被清单引用。
+网格维数仍由命令行提供（JSON 明确不承载维数/边界开关）。用 JSON 重跑候选并比对：
 
 ```powershell
 python opencfd_jax\experiment\run_step0.py --phase candidate_json --arg-source json
 python opencfd_jax\experiment\check_step0.py --candidate opencfd_jax\experiment\candidate_json
 ```
 
-验收结果（2026-11-17，本机）：`29 passed`；CLI 候选 7 例 80 场
-`max|diff|=0.000e+00`；JSON 候选同样 7 例 80 场全零。`channel_1step` 的输出名从
-`channel_step000001.npz` 变为 `OCFD3d-Mesh-istep-00000001.npz`，`check_step0.py`
-同时解析旧 `_stepNNNNNN` 和新 `-istep-NNNNNNNN`，按步号与基准一对一映射，
-基准文件未改名、未重写。
+验收结果（2026-11-18，本机）：`test_step3_config.py` 全部通过；`experiment/` 全量 100 passed。
+旧 `channel_1step` 的输出名 `OCFD3d-Mesh-istep-00000001.npz` 仍由 `check_step0.py` 的
+旧基准映射读取，但当前入口不再生成它。
 
 ## 第 3.5 步验收：计算方向命名
 
@@ -234,6 +229,34 @@ python -m opencfd_jax.src.main --case sod --ni 16 --nj 4 --nk 4 --scheme UP7 `
 （平板 `(0,2,1)`）和 `DIF_BOUND` 六标志顺序未改。输出八位步号属于第 3 步，
 不并入本步结论。
 
+## 第 4 步验收：单块 CGNS/HDF5 结构网格
+
+`test_step4_cgns_reader.py`、`test_step4_cgns_adapter.py`、`test_step4_cgns_run.py` 覆盖：
+
+- fixture `Grid/fixtures/poiseuille_box.cgns` 的 `VertexSize=(16,16,8)`、`CellSize=(15,15,7)`、
+  `Vertex` 坐标形状 `(nk,nj,ni)` 和四组同块 identity 1to1；
+- `read_cgns_zone(validate=True)` 的执行子集校验，zone 名空格归一化，以及真实样例
+  `Grid/samples/multi_hdf5.cgns` Zone 1 的 `validate=False` 原始读取；
+- `BCFarfield` 在严格模式被拒绝，reader 把错误报在 zone/patch 名上；
+- `to_block_mesh()` 的 `(i,j,k)` 顺序、`(periodic,wall,periodic)`、六侧 `halo`；
+  `build_cgns_block()` 的 `Ajac` 形状与均匀间距解析值；
+- `poiseuille` 用 CGNS 和内置网格各跑一步，五个守恒分量在 `rtol=1e-12, atol=1e-14` 内一致。
+
+```powershell
+cd D:\Desktop\ocfd2jax
+python -m pytest opencfd_jax/experiment/test_step4_cgns_reader.py `
+  opencfd_jax/experiment/test_step4_cgns_adapter.py `
+  opencfd_jax/experiment/test_step4_cgns_run.py -q
+```
+
+验收结果（2026-11-18，本机）：Step 4 三个文件 12 passed；`experiment/` 全量
+100 passed。CGNS 一步与内置一步的逐分量最大绝对差在 `2.27e-13` 以内；两边 `_meta`
+同为 `N=16`、`dt=0.001`、`step=1`。
+
+当前未覆盖：非均匀 CGNS 的 `poiseuille` 解析初值、`BCFarfield`/`BCInflow*`/粘性壁面的执行、
+多块连接与翻转/轴交换、二维 zone、`Rind`/`PointList`、以及仓库级 `tests/` 全量套件。
+`Grid/samples/` 被 `.gitignore` 排除，真实样例测试在缺文件时自动 skip。
+
 ## 目录结构
 
 ```text
@@ -245,9 +268,12 @@ experiment/
   test_step2_boundary.py  第 2 步统一边界/执行配置验收测试
   test_step3_config.py    第 3 步 input.json 合并/前缀/等价验收测试
   test_step3_5_axes.py    第 3.5 步计算方向命名/兼容迁移验收测试
+  test_step4_cgns_reader.py  第 4 步 CGNS reader 验收测试
+  test_step4_cgns_adapter.py 第 4 步 CGNS -> BlockMesh 适配/度量测试
+  test_step4_cgns_run.py     第 4 步 CGNS 与内置 Poiseuille 一步 NPZ 对齐
   compare_ocfd_jax.py     原码 dump vs JAX 的单步对拍（--dir/--scheme 可换口径）
-  cases/channel_small.in  小网格槽道 in 文件（同 IBC=200 口径）
-  cases/*.json            七条 Step 0 用例的 input.json（第 3 步）
+  cases/channel_small.in  小网格槽道 in 文件（历史遗留，当前入口不再读取）
+  cases/*.json            七条历史 Step 0 JSON；当前清单只引用 4 条
   baseline/               基准数据（7 条用例、28.6 MB、可复现）
     manifest.json         全局清单：环境、git、逐用例命令与哈希
     STEP0.md              自动生成的摘要表

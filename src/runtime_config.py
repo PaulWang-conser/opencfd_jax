@@ -4,7 +4,7 @@
 
 - JSON 只承载运行参数，不设置网格维数、边界类型或 `DIF_BOUND/JAC_BOUND` 开关；
 - 优先级为 程序默认值 → JSON → 用户显式命令行；
-- 槽道仍从 OCFD `.in` 取维数、物性、壁温与边界开关，JSON 不覆盖这些字段；
+- 网格只支持程序内置网格或 CGNS 单块文件；CGNS 的维数由文件 `VertexSize` 决定；
 - JSON 内相对路径按配置文件所在目录解析，输出前缀取网格文件名主干。
 """
 
@@ -22,8 +22,8 @@ from typing import Any, Mapping
 SCHEMES = ("UP7", "WENO7-SYMBO", "NND2", "WENO5", "WENO7",
            "OMP6-1", "OMP6-2", "OMP6-3", "OMP6_HR", "OMP6_LD", "OMP6_CD8")
 VIS_ORDERS = ("CD6", "CD8")
-CASE_NAMES = ("sod", "tg", "poiseuille", "channel", "plate")
-MESH_FORMATS = ("builtin", "ocfd")
+CASE_NAMES = ("sod", "tg", "poiseuille", "plate")
+MESH_FORMATS = ("builtin", "cgns")
 
 
 class ConfigError(ValueError):
@@ -35,8 +35,6 @@ _SCHEMA = {
     "mesh": {
         "format": ("str", "mesh_format"),
         "file": ("path", "mesh"),
-        "field": ("path", "field"),
-        "infile": ("path", "infile"),
     },
     "physics": {
         "Re": ("number", "Re"),
@@ -56,7 +54,6 @@ _SCHEMA = {
     },
     "time": {
         "dt": ("dt", "dt"),
-        "cfl": ("number", "cfl"),
         "end_time": ("number", "end_time"),
         "end_step": ("int", "end_step"),
     },
@@ -77,11 +74,9 @@ _SCHEMA = {
 
 # 字段只在列出的算例中生效；其余算例出现即报错，避免静默忽略。
 _CASE_SCOPE = {
-    "mesh.file": {"channel"},
-    "mesh.field": {"channel"},
-    "mesh.infile": {"channel"},
+    "mesh.file": {"poiseuille"},
     "case.p_grad": {"poiseuille"},
-    "case.forcing_work": {"channel", "poiseuille"},
+    "case.forcing_work": {"poiseuille"},
     "case.plate_x0": {"plate"},
     "case.plate_x1": {"plate"},
     "case.plate_h": {"plate"},
@@ -179,9 +174,9 @@ def _validate_value(kind: str, value: Any, dotted: str, directory: Path) -> Any:
 def _validate_applicability(values: dict[str, Any], case: str) -> None:
     """JSON 中已给出的字段是否适用于最终生效的算例。"""
     fmt = values.get("mesh_format")
-    if fmt == "ocfd" and case != "channel":
+    if fmt == "cgns" and case != "poiseuille":
         raise ConfigError(
-            f"{case} 使用程序内置网格，mesh.format 只能是 \"builtin\"，得到 {fmt!r}")
+            f"{case} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille")
     for dotted, allowed in _CASE_SCOPE.items():
         section, name = dotted.split(".")
         dest = _SCHEMA[section][name][1]
@@ -208,19 +203,14 @@ def _semantic_checks(values: dict[str, Any], sources: dict[str, str],
     if fmt is not None and fmt not in MESH_FORMATS:
         raise ConfigError(f"mesh.format 需要 {MESH_FORMATS} 之一，得到 {fmt!r}")
     if fmt is None:
-        fmt = "ocfd" if "mesh" in values else "builtin"
+        fmt = "cgns" if "mesh" in values else "builtin"
         values["mesh_format"] = fmt
         sources["mesh_format"] = "mesh.format(推断)"
-    if "mesh" in values and fmt != "ocfd":
-        raise ConfigError("mesh.file 只在 mesh.format=\"ocfd\" 时可用")
-    if fmt == "ocfd" and "mesh" not in values:
-        raise ConfigError("mesh.format=\"ocfd\" 需要 mesh.file")
+    if "mesh" in values and fmt != "cgns":
+        raise ConfigError("mesh.file 只在 mesh.format=\"cgns\" 时可用")
+    if fmt == "cgns" and "mesh" not in values:
+        raise ConfigError("mesh.format=\"cgns\" 需要 mesh.file")
 
-    if case == "channel":
-        if "infile" not in values:
-            raise ConfigError(
-                "channel 在 Step 3 仍需要 mesh.infile（OCFD .in 提供维数、物性、"
-                "壁温与边界开关）")
     _validate_applicability(values, case)
 
     if values.get("plate_x0") is not None and values.get("plate_x1") is not None:
@@ -230,8 +220,6 @@ def _semantic_checks(values: dict[str, Any], sources: dict[str, str],
                 f"和 {values['plate_x1']:g}")
     if "end_step" in values and values["end_step"] < 1:
         raise ConfigError("time.end_step 至少为 1")
-    if "cfl" in values and values["cfl"] <= 0.0:
-        raise ConfigError("time.cfl 必须为正数")
 
 
 def load_config(path: str | os.PathLike[str],
@@ -330,6 +318,21 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
 
     if config is not None:
         _validate_applicability(config.values, merged.get("case", "sod"))
+
+    fmt = merged.get("mesh_format")
+    if fmt is None:
+        fmt = "cgns" if merged.get("mesh") else "builtin"
+        merged["mesh_format"] = fmt
+        sources["mesh_format"] = "mesh.format(推断)"
+    if fmt not in MESH_FORMATS:
+        raise ConfigError(f"mesh.format 需要 {MESH_FORMATS} 之一，得到 {fmt!r}")
+    if merged.get("mesh") and fmt != "cgns":
+        raise ConfigError("mesh.file 只在 mesh.format=\"cgns\" 时可用")
+    if fmt == "cgns" and not merged.get("mesh"):
+        raise ConfigError("mesh.format=\"cgns\" 需要 mesh.file")
+    if fmt == "cgns" and merged.get("case", "sod") != "poiseuille":
+        raise ConfigError(
+            f"{merged.get('case')} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille")
 
     # 网格尺寸只保留 i/j/k 入口。JSON 不提供维数（Step 3 口径），
     # 命令行与默认值必须给出正整数。
