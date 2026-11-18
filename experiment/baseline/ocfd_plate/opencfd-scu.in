@@ -1,0 +1,39 @@
+# OpenCFD-SCU 输入 —— plate_1step 准例（与 experiment/baseline/plate_1step 同网格同边条）
+# 生成者：experiment/baseline/ocfd_plate/gen_case.py
+# OCFD 索引：x=流向(JAX i, 64)  y=展向周期(JAX k, 4)  z=壁法向(JAX j, 64)
+GRID_3D = 64   4   64
+PARALLEL_3D = 1   1   1
+STREAM = 0
+CHARTERIC = 0
+TEST = 0
+
+# x 非周期、y 展向周期、z 非周期
+IPERIODIC = 0   1   0
+JAC_BOUND = 1   1   1
+# DIF_BOUND = x- x+ y- y+ z- z+ ；只有 z-（壁面）开粘性带
+DIF_BOUND = 0   0   0   0   1   0
+NON_REFLETION = 0   0   0   0   0   0
+
+SCHEME_INVIS = WENO7
+SCHEME_VIS = CD8
+
+RE = 1000.0
+AMA = 0.1
+GAMMA = 1.4
+PR = 0.7
+T_REF = 288.15
+EPSL_SW = 0.0
+
+DT = 0.0001
+END_TIME = 0.0001
+KSTEP_SHOW = 1
+KSTEP_SAVE = 1
+INIT_STAT = 1
+
+IBC = 124
+# IF_SYMMETRY  IF_WITHLEADING  IFLAG_UPPERBOUNDARY  MZMAX  MTMAX
+# MZMAX 必须为 0：非 0 分支不填 pu_dist_upper（未初始化显存），顶部 u 会变成
+# 1 + 垃圾；为 0 时 u_dist = EPSL_UPPER*rand = 0，顶部退化为常数 (1,1,0,0,1)。
+BC_NPARA = 0   0   0   0   5
+# AoA  Tw  EPSL_WALL  EPSL_UPPER  BETA  WALL_DIS_BEGIN  WALL_DIS_END
+BC_RPARA = 0.0   1.0   0.0   0.0   0.0   0.0   0.0
