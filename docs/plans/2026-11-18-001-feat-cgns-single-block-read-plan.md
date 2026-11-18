@@ -99,8 +99,8 @@ flowchart TB
 
 - 多块 `MeshData` 容器、跨块 1to1/halo 交换、Step 6。
 - 子区周期条带、`Transform` 翻转/轴交换的执行支持。
-- `BCInflow*`、`BCFarfield`、`BCSymmetryPlane`、`BCWallViscousHeatFlux`、`BCDataSet` 的求解器实现。
-- `input.json` 的 `boundary.specific` 入口（`module:function` + `params`）与“generic halo 填充后叠加 special boundary”的执行顺序；需要同时改造逐轴填充和 `fill_mixed_outflow` 的先后，另立后续计划。
+- `BCInflow*`、`BCFarfield`、`BCSymmetryPlane`、`BCWallViscousHeatFlux`、`BCDataSet` 的求解器实现；其中通用 `FARFIELD` 的均匀 Dirichlet 执行归入 Step 4.n，CGNS `BCFarfield` 的 `BCDataSet` 参数读取仍在本步之后。
+- `input.json` 的 `specificboundary` 入口（`module` + `function` + `params`）与“常规 halo 填充后叠加 special boundary”的执行顺序；见 `docs/plans/2026-11-18-002-feat-step4n-boundary-execution-plan.md`。
 - `mesh.scale` / 单位换算、`origin` 平移、`.in` 删除。
 - ADF 文件读取、真实样例入库、完整 Pointwise BC 表。
 
