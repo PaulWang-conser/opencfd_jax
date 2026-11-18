@@ -123,9 +123,9 @@ def test_single_sided_cgns_farfield_does_not_require_opposite_face():
     q = execution.prepare(q)
     layer = FAR.astype(q.dtype).reshape(5, 1, 1, 1)
     ni, nj, nk = block.grid.ni, block.grid.nj, block.grid.nk
-    # FARFIELD 只写内区范围内的边界点（最后一层内点），鬼层与角点由 halo 清零。
+    # FARFIELD 写内区范围内的边界点（最后一层内点），鬼层取该边界点延拓。
     assert jnp.all(q[:, LAP:LAP + nk, LAP + nj - 1:LAP + nj, LAP:LAP + ni] == layer)
-    assert jnp.all(q[:, :, LAP + nj:, :] == 0.0)
+    assert jnp.all(q[:, LAP:LAP + nk, LAP + nj:, LAP:LAP + ni] == layer)
     # j- 边界内点没有被远场覆盖，说明只填了 j+ 这一面。
     assert jnp.all(q[:, LAP:LAP + nk, LAP, LAP:LAP + ni] == 10.0)
 
@@ -162,7 +162,7 @@ def test_prepare_runs_special_boundary_after_general_ghosts():
     execution = BoundaryExecution("custom", (PERIODIC, WALL, PERIODIC),
                                   special, faces, grid=grid, farfield=FAR)
     q = execution.prepare(grid.alloc())
-    assert seen == [0.0]              # 回调执行时远场鬼层已由 halo 清零
+    assert seen == [float(FAR[0])]    # 回调执行时远场鬼层已是边界点延拓
     assert jnp.all(q[..., LAP + grid.nj:, :] == 99.0)
     ni, nj, nk = grid.ni, grid.nj, grid.nk
     assert jnp.all(q[:, LAP:LAP + nk, LAP + nj - 1, LAP:LAP + ni]
@@ -190,7 +190,7 @@ def test_callback_face_gets_general_outflow_before_special():
                                   special, faces, grid=grid)
     q = grid.alloc().at[:, :, :, LAP].set(7.0)
     q = execution.prepare(q)
-    assert seen == [0.0]             # OUTFLOW 不写鬼层，halo 已清零
+    assert seen == [7.0]             # OUTFLOW 鬼层 = 边界点复制，随后由回调覆盖
     assert jnp.all(q[..., LAP] == 7.0)
     assert jnp.all(q[..., :LAP] == 88.0)
 

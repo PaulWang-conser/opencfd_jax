@@ -94,16 +94,16 @@ def test_plate_axis_mapping_and_dif_bound_derived_from_faces(built):
     assert desc.dif_axis_map == (0, 2, 1)
     # 算例侧旧字段仍留档，但执行配置里的带由 faces 派生。
     assert desc.dif_bound == (0, 0, 0, 0, 1, 0)
-    # 非周期且非 INFLOW 才开：i- 入口（INFLOW）关；i+ 出流、j- 壁面、j+ 远场开。
+    # 只有“WALL + 回调”开带：入口扩容、出流/远场零梯度延拓、周期复制都不开。
     assert desc.face("i-").dif_band is False
-    assert desc.face("i+").dif_band is True
+    assert desc.face("i+").dif_band is False
     assert desc.face("j-").dif_band is True
-    assert desc.face("j+").dif_band is True
+    assert desc.face("j+").dif_band is False
     assert desc.face("k-").dif_band is False
     assert desc.face("k+").dif_band is False
     execution = boundary.build_execution(built["plate"], desc)
     # 原码次序 (x-,x+,y-,y+,z-,z+)，map=(0,2,1)：i→x，j→z，k→y。
-    assert execution.band == (0, 1, 0, 0, 1, 1)
+    assert execution.band == (0, 0, 0, 0, 1, 0)
 
 
 def test_compare_style_step_override_is_visible(built):
@@ -155,7 +155,7 @@ def test_channel_six_faces_and_executor_source(built):
     for side in ("j-", "j+"):
         face = desc.face(side)
         assert face.executor == "callback+halo"
-        assert face.dif_band is True  # in 文件 DIF_BOUND=0 0 1 1 0 0
+        assert face.dif_band is True  # 双壁都靠回调写点，原码 DIF_BOUND 也开带
     for side in ("i-", "i+", "k-", "k+"):
         assert desc.face(side).executor == "halo"
 

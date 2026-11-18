@@ -210,8 +210,12 @@ def test_plate_inlet_outlet_wall_far_and_corners():
         out[:, LAP:LAP + grid.nk, LAP + 1:nj_in - 1, :LAP + 1],
         np.broadcast_to(np.asarray(case["plate"]["inflow"])[:, :, 1:-1, None],
                         (5, grid.nk, nj - 2, LAP + 1)))
-    # 出口：方式 A，不开左行点、鬼层由 halo 清零。
-    np.testing.assert_array_equal(out[:, :, :, LAP + ni:], 0.0)
+    # 出口：方式 A，鬼层 = 出口边界点那一列（零梯度复制），不是清零。
+    ghost = np.asarray(out[:, :, :, LAP + ni:])
+    np.testing.assert_array_equal(
+        ghost,
+        np.broadcast_to(np.asarray(out[:, :, :, LAP + ni - 1:LAP + ni]),
+                        ghost.shape))
 
     # 下壁：两点压力外推 + 无滑移 + rhoE=rho Cv Tw（只在内区窗口内比较）
     # 壁面回调在入口写完之后执行，故外推基线要用“已写入口”的状态。
@@ -228,12 +232,15 @@ def test_plate_inlet_outlet_wall_far_and_corners():
     np.testing.assert_allclose(out[4, kz, LAP, ix_in],
                                rho_w[kz, ix_in] * phys.Cv, rtol=0, atol=1e-13)
 
-    # 顶部：只写最后一层内点（内区横向窗口），四层鬼胞保持 0。
+    # 顶部：远场常数写内区最后一层内点，鬼层取该边界点延拓（不是清零）。
     np.testing.assert_array_equal(
         out[:, kz, nj_in - 1, ix_in],
         np.broadcast_to(np.asarray(execution.farfield).reshape(5, 1, 1),
                         (5, grid.nk, ni)))
-    np.testing.assert_array_equal(out[:, :, nj_in:, :], 0.0)
+    np.testing.assert_array_equal(
+        out[:, kz, nj_in:, ix_in],
+        np.broadcast_to(np.asarray(out[:, kz, nj_in - 1:nj_in, ix_in]),
+                        (5, grid.nk, LAP, ni)))
 
     # 壁面鬼层不再镜像，整体为 0。
     np.testing.assert_array_equal(out[:, :, :LAP, :], 0.0)
@@ -543,8 +550,12 @@ def test_special_inlet_and_outflow_share_axis():
     q = case["cons0"].at[..., LAP + case["grid"].ni - 1].set(0.75)
     actual = execution.apply(q)
     np.testing.assert_array_equal(np.asarray(actual[0, ..., :LAP]), 0.25)
-    # OUTFLOW 走方式 A：不复制末点，鬼层被 halo 清零。
-    np.testing.assert_array_equal(np.asarray(actual[..., LAP + case["grid"].ni:]), 0.0)
+    # OUTFLOW 走方式 A（零梯度复制）：鬼层 = 出口边界点那一层。
+    np.testing.assert_array_equal(
+        np.asarray(actual[..., LAP + case["grid"].ni:]),
+        np.broadcast_to(np.asarray(actual[..., LAP + case["grid"].ni - 1:
+                                        LAP + case["grid"].ni]),
+                        np.asarray(actual[..., LAP + case["grid"].ni:]).shape))
     args = argparse.Namespace(case="sod", scheme="UP7", vis_order="CD6",
                               viscous=False, weno_tv=False)
     got = main.build_rhs(case, args)(case["cons0"])

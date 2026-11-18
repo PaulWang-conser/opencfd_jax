@@ -21,7 +21,7 @@ from typing import Mapping, Optional, Tuple
 from .axes import (AXIS_NAMES, DIMENSION_NAMES, SIDES, grid_extent,
                    normalize_side, side_axis)
 from .fields import INFLOW, LAP, OUTFLOW, PERIODIC, PLATE, WALL, Grid
-from .boundary import validate_special_sides
+from .boundary import dif_band, validate_special_sides
 from .mesh import METRIC_KEYS
 
 # 描述的边界种类；farfield 既用于通用轴级边界，也用于平板顶面回调。
@@ -149,7 +149,7 @@ def _as_ints(raw, name, length=None):
 
 
 def _dif_band(dif_bound, axis, side, dif_axis_map):
-    """边界带由 kind 派生：非周期且非 INFLOW 才开（见 boundary.dif_band）。
+    """旧签名：边界带改由 kind + executor 派生（见 ``boundary.dif_band``）。
 
     保留 ``dif_bound`` 参数只为兼容旧调用；算例不再手写 DIF_BOUND。
     """
@@ -163,7 +163,7 @@ def _face(side, kind, executor, dif_bound, dif_axis_map, detail="",
     side = normalize_side(side)
     axis = side_axis(side)
     return FaceBoundary(side=side, axis=axis, kind=kind, executor=executor,
-                        dif_band=kind not in (PERIODIC, INFLOW),
+                        dif_band=dif_band(kind, executor),
                         detail=detail, thermal=thermal,
                         params={} if params is None else params)
 

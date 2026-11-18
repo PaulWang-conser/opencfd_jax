@@ -25,6 +25,7 @@ from .axes import AXIS_NAMES, SIDES, normalize_side, side_axis
 from .boundary import FARFIELD, INFLOW, LAP, OUTFLOW, PERIODIC, WALL
 from .fields import Grid
 from .mesh import METRIC_KEYS, compute_metrics_from_coords, pad_coords
+from .boundary import dif_band
 from .mesh_data import BlockMesh, FaceBoundary
 
 _BC_OUTFLOW = ("BCExtrapolate", "BCOutflow", "BCOutflowSubsonic",
@@ -455,7 +456,7 @@ def to_block_mesh(zone: CgnsZone, axes: Iterable[int] = (0, 1, 2),
         kind = sides[side][0]
         faces.append(FaceBoundary(
             side=side, axis=side_axis(side), kind=kind, executor="halo",
-            dif_band=kind not in (PERIODIC, INFLOW), detail=f"CGNS {sides[side][1]}"))
+            dif_band=dif_band(kind, "halo"), detail=f"CGNS {sides[side][1]}"))
     grid = Grid(ni=zone.ni, nj=zone.nj, nk=zone.nk)
     return BlockMesh(
         grid=grid, dxs=(1.0, 1.0, 1.0), axes=axes, bcs=bcs,
