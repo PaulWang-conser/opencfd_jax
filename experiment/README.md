@@ -237,24 +237,30 @@ python -m opencfd_jax.src.main --case sod --ni 16 --nj 4 --nk 4 --scheme UP7 `
   `Vertex` 坐标形状 `(nk,nj,ni)` 和四组同块 identity 1to1；
 - `read_cgns_zone(validate=True)` 的执行子集校验，zone 名空格归一化，以及真实样例
   `Grid/samples/multi_hdf5.cgns` Zone 1 的 `validate=False` 原始读取；
-- `BCFarfield` 在严格模式被拒绝，reader 把错误报在 zone/patch 名上；
+- `BCFarfield` 在严格模式被接受并映射为通用 `FARFIELD`；真实样例
+  `multi_hdf5.cgns` 仍在 `Klo_Seg 2` 的非整面 patch 处被拒绝；
 - `to_block_mesh()` 的 `(i,j,k)` 顺序、`(periodic,wall,periodic)`、六侧 `halo`；
   `build_cgns_block()` 的 `Ajac` 形状与均匀间距解析值；
 - `poiseuille` 用 CGNS 和内置网格各跑一步，五个守恒分量在 `rtol=1e-12, atol=1e-14` 内一致。
+
+`test_step4n_farfield.py` 另覆盖通用 `FARFIELD` 的边界内点/鬼层写入、`Ev` 零梯度、
+`build_execution` 的来流状态校验，以及 CGNS `BCFarfield` 到通用远场的适配。
 
 ```powershell
 cd D:\Desktop\ocfd2jax
 python -m pytest opencfd_jax/experiment/test_step4_cgns_reader.py `
   opencfd_jax/experiment/test_step4_cgns_adapter.py `
-  opencfd_jax/experiment/test_step4_cgns_run.py -q
+  opencfd_jax/experiment/test_step4_cgns_run.py `
+  opencfd_jax/experiment/test_step4n_farfield.py -q
 ```
 
-验收结果（2026-11-18，本机）：Step 4 三个文件 12 passed；`experiment/` 全量
-100 passed。CGNS 一步与内置一步的逐分量最大绝对差在 `2.27e-13` 以内；两边 `_meta`
+验收结果（2026-11-18，本机）：Step 4 四个文件 17 passed；`experiment/` 全量
+105 passed。CGNS 一步与内置一步的逐分量最大绝对差在 `2.27e-13` 以内；两边 `_meta`
 同为 `N=16`、`dt=0.001`、`step=1`。
 
-当前未覆盖：非均匀 CGNS 的 `poiseuille` 解析初值、`BCFarfield`/`BCInflow*`/粘性壁面的执行、
-多块连接与翻转/轴交换、二维 zone、`Rind`/`PointList`、以及仓库级 `tests/` 全量套件。
+当前未覆盖：非均匀 CGNS 的 `poiseuille` 解析初值、`BCInflow*`/粘性壁面的执行、
+CGNS `BCFarfield` 的 `BCDataSet` 来流参数、多块连接与翻转/轴交换、二维 zone、
+`Rind`/`PointList`、以及仓库级 `tests/` 全量套件。
 `Grid/samples/` 被 `.gitignore` 排除，真实样例测试在缺文件时自动 skip。
 
 ## 目录结构

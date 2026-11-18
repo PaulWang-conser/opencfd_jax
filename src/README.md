@@ -403,15 +403,17 @@ LAP 鬼胞坐标并计算 CD6 度量。
 
 当前执行子集：三维 `Structured`、`Vertex` 坐标、整面 `BC`、同块 identity 1to1；
 `BCWall` 只映射 `WALL`，同一轴两侧整面 `BCSymmetryPlane` 才近似 `PERIODIC`，单侧
-对称面拒绝；`BCExtrapolate/BCOutflow*` 映射 `OUTFLOW`。`BCWallViscous*`、`BCInflow*`、
-`BCFarfield` 只读不执行。`validate=False` 保留所有原始 `BCType` 供诊断，但仍拒绝
+对称面拒绝；`BCExtrapolate/BCOutflow*` 映射 `OUTFLOW`，`BCFarfield` 映射通用
+`FARFIELD`。`BCWallViscous*`、`BCInflow*` 只读不执行。CGNS 文件不解析
+`BCDataSet`；`BCFarfield` 的来流状态由算例侧提供（当前 `poiseuille` 从初场内区
+两端平均出默认状态）。`validate=False` 保留所有原始 `BCType` 供诊断，但仍拒绝
 `CellCenter`、`Rind>0`、`PointList`、`Periodic_t` 和二维 zone。
 
 ### 7.2 统一边界执行与扩展入口（第 2 步）
 
 文件：`boundary.py`、`mesh_data.py`、`main.py`。
 
-通用边界（周期、出流、计算 j 方向壁面镜像、非周期鬼层清零）只在 `boundary.py` 实现；
+通用边界（周期、出流、计算 j 方向壁面镜像、远场、非周期鬼层清零）只在 `boundary.py` 实现；
 `fields.py` 只重新导出 canonical 名，`channel.py` / `plate.py` 保留壁面和回调的兼容入口，
 壁面及平板的已有状态赋值公式由 `boundary.py` 提供。`build_execution(case, desc=None)` 在 JIT 前完成：
 
@@ -423,7 +425,9 @@ LAP 鬼胞坐标并计算 CD6 度量。
 
 **新增通用边界**：在 `boundary.py` 的 `_GENERIC_AXIS_FILLERS` 注册填充函数并加入
 `GENERIC_KINDS`，再让 `mesh_data._generic_faces` 能描述对应语义。通用 WALL 目前仅
-支持计算 j 方向；`filtering.py` 的滤波也仍只支持周期/出流。
+支持计算 j 方向；通用 FARFIELD 把边界内点和两侧 2*LAP 鬼层写成同一个来流状态，
+粘性 Ev 鬼层按零梯度复制。`filtering.py` 的滤波尚未接入 FARFIELD，`main.build_rhs`
+在启用 `--filter` 时对远场算例直接报错。
 
 **新增 case 特殊边界**：case 侧显式提供一个对象，并同时把它的 `apply` 设为
 `case["bc_apply"]`：
@@ -443,7 +447,7 @@ case["bc_apply"] = special.apply
 约束：回调面所在轴的轴级 `bcs` 必须是 `INFLOW`/`PLATE`（no-op 占位）；同轴另一侧
 可设为 `OUTFLOW` halo，回调后由执行配置填充该侧状态鬼层，并在粘性通量阶段
 填充对应出流侧的 Ev 鬼层；特殊侧的 Ev 暂时保留原值，其他物理条件需另行实现和验证。没有回调的轴只能是
-`PERIODIC`/`OUTFLOW`，其 halo 面的 `kind` 必须等于轴级 `bcs`；
+`PERIODIC`/`OUTFLOW`/`FARFIELD`，其 halo 面的 `kind` 必须等于轴级 `bcs`；
 `WALL` 仍只允许计算 j 方向。`special_boundary` 不能与 `plate`/`channel_bc` 同时出现。
 当前这是**显式导入**入口，不做动态注册；回调只允许数组运算，不得把 I/O 放进 JIT。
 槽道三点压力外推和平板两点外推在 `boundary.py` 中分别保留原有公式。
@@ -541,7 +545,8 @@ python -m opencfd_jax.src.main --case poiseuille `
 只给 `--mesh` 时运行配置自动把 `mesh_format` 推断为 `cgns`。CGNS 的 `VertexSize`
 （离散点数）与物理间距进入 `Ajac`，`dxs` 固定为索引空间 `(1,1,1)`；因此不再需要
 `dt_dxs`。当前只支持单块、三维、整面边界；`multi_hdf5.cgns` 这类多 zone 文件必须
-用 `--cgns-zone` 指定 zone，且默认严格模式会拒绝 `BCFarfield` 等未执行边界。
+用 `--cgns-zone` 指定 zone，且默认严格模式会拒绝 `BCInflow*`/`BCWallViscous*` 等
+未执行边界；`BCFarfield` 已执行，但来流状态需由算例提供。
 
 旧 `channel` 的外部文件链（`--in`、`--field`、`--mesh` OCFD dat）已删除；`infile.py`、
 `mesh.read_ocfd_mesh/read_ocfd_field`、`channel.py` 只保留为内部库和旧测试依赖，

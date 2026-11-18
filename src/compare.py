@@ -183,9 +183,10 @@ def cmd_jax_run(args):
         # 原码 du_comput 恒算无粘 + 粘性，这里不加 --viscous 条件
         du = inviscid_rhs(q, grid, gamma=gamma, bcs=bcs,
                           axes=desc.axes, dx=dxs, scheme=args.scheme,
-                          metrics=metrics)
+                          metrics=metrics, farfield=execution.farfield)
         du = du + viscous_rhs(q, grid, params, bcs, axes=desc.axes,
-                              dx=dxs, order=vis_order, metrics=metrics)
+                              dx=dxs, order=vis_order, metrics=metrics,
+                              farfield=execution.farfield)
         du = du + apply_forcing(case, q)
         return du
 

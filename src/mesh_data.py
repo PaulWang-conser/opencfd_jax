@@ -24,7 +24,7 @@ from .fields import INFLOW, LAP, OUTFLOW, PERIODIC, PLATE, WALL, Grid
 from .boundary import validate_special_sides
 from .mesh import METRIC_KEYS
 
-# 描述的边界种类；farfield 只用于平板顶面，原码没有同名枚举。
+# 描述的边界种类；farfield 既用于通用轴级边界，也用于平板顶面回调。
 FARFIELD = "farfield"
 
 _EXEC_HALO = "halo"
@@ -230,6 +230,10 @@ def _generic_faces(bcs, dif_bound, dif_axis_map):
                         f"（axis=1）；得到 axis={axis}")
                 faces.append(_face(side, WALL, _EXEC_HALO, dif_bound,
                                    dif_axis_map, "壁面镜像鬼胞"))
+            elif bc == FARFIELD:
+                faces.append(_face(side, FARFIELD, _EXEC_HALO, dif_bound,
+                                   dif_axis_map,
+                                   "远场 Dirichlet：边界内点 + 两侧鬼层"))
             else:
                 raise ValueError(
                     f"{side} 的轴级边界 {bc!r} 不能由通用单块描述准确表示；"

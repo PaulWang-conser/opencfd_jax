@@ -426,8 +426,9 @@ with h5py.File("grid.cgns", "w") as f:
    当现成鬼胞。
 5. **BC**：遍历 `ZoneBC_t` 下所有 `BC_t`，按 `BCType` 字符串 + `PointRange` 建面表；
    当前执行子集是 `BCWall`→`WALL`、同轴双面 `BCSymmetryPlane`→`PERIODIC`、
-   `BCExtrapolate/BCOutflow*`→`OUTFLOW`；`BCFarfield`、`BCInflow*`、`BCWallViscous*`
-   在严格模式下报错并打印 patch 名，不退化。
+   `BCExtrapolate/BCOutflow*`→`OUTFLOW`、`BCFarfield`→`FARFIELD`；`BCInflow*`、
+   `BCWallViscous*` 在严格模式下报错并打印 patch 名，不退化。`BCFarfield` 本步不读
+   `BCDataSet`，来流状态由算例侧提供。
 6. **1to1**：当前只接受同块、`Transform=(1,2,3)` 的整面 identity 自连接，两范围互补时
    标 `PERIODIC`；跨块、翻转/轴交换和 `GridConnectivity_t` 留给多块阶段。
 7. **自检**（写进测试 fixture）：

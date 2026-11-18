@@ -10,6 +10,10 @@ execution: code
 
 # Step 4.n 边界执行扩展、特殊边界顺序与错误分层 - Plan
 
+## 实施进度（2026-11-18）
+
+通用 `FARFIELD`（R1–R4 的边界填充、状态校验、`Ev` 零梯度）与 CGNS `BCFarfield` 到通用远场的适配已实现并有回归测试；R5–R20 的四阶段 `prepare`、`specificboundary` 顶层入口和 `main.py` 错误分层仍未实现。本计划其余内容保持为待实施设计。
+
 ## Goal Capsule
 
 在 Step 4 的 CGNS 单块读取之后，补上四项能力：通用边界支持 `FARFIELD`（它属于通用边界，不通过特殊边界脚本实现）；特殊边界改为在常规 halo 填充之后叠加；`input.json` 增加正式顶层入口 `specificboundary`；`main.py` 区分初始化/配置错误与运行期异常，不再把 `run()` 的任意 `ValueError` 吞成启动参数错误。
@@ -90,7 +94,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 **Deferred to follow-up work**
 
-- CGNS `BCFarfield` 的 `BCDataSet` 读取、来流参数来源和 CGNS patch 到通用远场的适配；这属于 Step 4 的读取层后续，不在本步。
+- CGNS `BCFarfield` 的 `BCDataSet` 读取和来流参数来源；CGNS patch 到通用远场的类型映射已实现，但不解析 `BCDataSet`，默认状态由 `poiseuille` 从初场内区两端平均得到。
 - 把 `src/` 下所有底层 `ValueError` 改造成完整的自定义异常层级；本步只建立主入口的 `SetupError` / `RuntimeExecutionError` 分界。
 - 运行期异常的结构化日志、JSON 错误报告和自动复现包；本步保留 traceback 并加运行位置上下文。
 - 同侧多个 farfield patch、每面不同来流状态、子区远场。

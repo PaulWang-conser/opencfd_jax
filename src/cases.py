@@ -9,8 +9,33 @@ import numpy as np
 
 import jax.numpy as jnp
 
+from .boundary import FARFIELD, LAP
 from .fields import INFLOW, OUTFLOW, PERIODIC, PLATE, WALL, Grid
 from .viscous import PhysParams
+
+
+def _initial_farfield(cons, grid, bcs):
+    """CGNS 没有 BCDataSet 时，从初场内区两端取平均作为默认远场状态。
+
+    两侧远场共用同一个轴级 FARFIELD；优先使用低/高边界内层平面平均，
+    这样均匀来流初场会精确保留。返回值是 5 分量守恒量，形状 (5,)。
+    """
+    if FARFIELD not in bcs:
+        return None
+    axis = bcs.index(FARFIELD)
+    if axis == 0:
+        lo = cons[:, LAP:LAP + grid.nk, LAP:LAP + grid.nj, LAP]
+        hi = cons[:, LAP:LAP + grid.nk, LAP:LAP + grid.nj,
+                  LAP + grid.ni - 1]
+    elif axis == 1:
+        lo = cons[:, LAP:LAP + grid.nk, LAP, LAP:LAP + grid.ni]
+        hi = cons[:, LAP:LAP + grid.nk, LAP + grid.nj - 1,
+                  LAP:LAP + grid.ni]
+    else:
+        lo = cons[:, LAP, LAP:LAP + grid.nj, LAP:LAP + grid.ni]
+        hi = cons[:, LAP + grid.nk - 1, LAP:LAP + grid.nj,
+                  LAP:LAP + grid.ni]
+    return 0.5 * (jnp.mean(lo, axis=(1, 2)) + jnp.mean(hi, axis=(1, 2)))
 
 
 def _dimension(args, name, default):
@@ -146,6 +171,7 @@ def build_case(args):
             grid = block.grid
             G = args.p_grad
             cons, dy = make_initial_poiseuille(grid, params, G, gamma)
+            farfield = _initial_farfield(cons, grid, block.bcs)
             fw = getattr(args, "forcing_work", True)
             if isinstance(fw, str):
                 fw = fw.strip().lower() not in ("off", "0", "false", "no")
@@ -154,7 +180,8 @@ def build_case(args):
                         forcing=("x", G), forcing_work=bool(fw), gamma=gamma,
                         metrics=block.metrics, coords=block.coords,
                         dif_bound=block.dif_bound,
-                        dif_axis_map=block.dif_axis_map)
+                        dif_axis_map=block.dif_axis_map,
+                        farfield=farfield)
         ni = int(_dimension(args, "ni", 256))
         nj = int(_dimension(args, "nj", 64))
         grid = Grid(ni=ni, nj=nj, nk=nk)

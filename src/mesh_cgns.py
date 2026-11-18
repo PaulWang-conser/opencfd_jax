@@ -9,7 +9,8 @@
 
 当前只支持三维 Structured zone、顶点坐标（``GridLocation=Vertex``）和整面边界；
 子区、翻转/轴交换 1to1、``Periodic_t``、``CellCenter``、``Rind``、``PointList``
-在 reader 或 adapter 阶段明确拒绝。
+在 reader 或 adapter 阶段明确拒绝。可执行 BCType 包含远场 ``BCFarfield``；
+远场来流状态不来自 CGNS 文件（本步不解析 ``BCDataSet``），由算例侧提供。
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from typing import Iterable, Mapping
 import numpy as np
 
 from .axes import AXIS_NAMES, SIDES, normalize_side, side_axis
-from .boundary import LAP, OUTFLOW, PERIODIC, WALL
+from .boundary import FARFIELD, LAP, OUTFLOW, PERIODIC, WALL
 from .fields import Grid
 from .mesh import METRIC_KEYS, compute_metrics_from_coords, pad_coords
 from .mesh_data import BlockMesh, FaceBoundary
@@ -30,8 +31,9 @@ _BC_OUTFLOW = ("BCExtrapolate", "BCOutflow", "BCOutflowSubsonic",
                "BCOutflowSupersonic")
 _BC_WALL = ("BCWall",)
 _BC_SYMMETRY = ("BCSymmetryPlane",)
+_BC_FARFIELD = ("BCFarfield",)
 
-_BC_EXECUTABLE = _BC_OUTFLOW + _BC_WALL + _BC_SYMMETRY
+_BC_EXECUTABLE = _BC_OUTFLOW + _BC_WALL + _BC_SYMMETRY + _BC_FARFIELD
 
 
 class CgnsError(ValueError):
@@ -353,6 +355,8 @@ def _bc_kind(bc_type: str) -> str | None:
         return WALL
     if bc_type in _BC_SYMMETRY:
         return PERIODIC
+    if bc_type in _BC_FARFIELD:
+        return FARFIELD
     return None
 
 

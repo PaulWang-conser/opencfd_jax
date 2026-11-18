@@ -44,8 +44,8 @@ from .axes import SIDES, grid_extent
 LAP = 4
 NVARS = 5
 
-# 边界类型。INFLOW/PLATE/FARFIELD 只用于描述非对称 case 边界；FARFIELD 不是
-# 主循环的轴级 bc，只在 FaceBoundary.kind 出现。
+# 边界类型。INFLOW/PLATE 只用于非对称 case 回调边界；FARFIELD 既是通用轴级
+# 边界（两侧写入同一个来流状态），也可作为 FaceBoundary.kind 由特殊边界描述。
 PERIODIC = "periodic"
 OUTFLOW = "outflow"
 INFLOW = "inflow"
@@ -53,7 +53,7 @@ PLATE = "plate"
 WALL = "wall"
 FARFIELD = "farfield"
 
-GENERIC_KINDS = (PERIODIC, OUTFLOW, WALL)
+GENERIC_KINDS = (PERIODIC, OUTFLOW, WALL, FARFIELD)
 SIX_SIDES = SIDES
 
 # 守恒量 var 轴符号：(rho, rho*u, rho*v, rho*w, rho*E)
@@ -68,14 +68,37 @@ EV_WALL_SIGNS = {
 _EV_WALL_SIGNS = EV_WALL_SIGNS
 
 
-def fill_halos_i(f, bc, ni):
-    """沿计算 i（ξ，数组 axis=-1）填充四层鬼胞。f: (..., ni+2*LAP)。"""
+def _farfield_layer(f, farfield):
+    """把 5 分量来流状态扩成可写入 f 的广播形状。
+
+    只在通用 FARFIELD 分支使用；``farfield`` 的形状和数值由
+    ``build_execution`` 在 JIT 之前校验，这里不把 Python 校验带进 trace。
+    """
+    if farfield is None:
+        raise ValueError("FARFIELD 边界需要 case['farfield'] 来流状态")
+    value = jnp.asarray(farfield, dtype=f.dtype)
+    if value.shape != (NVARS,):
+        raise ValueError(
+            f"farfield 形状必须是 ({NVARS},)，得到 {value.shape}")
+    return value.reshape((NVARS,) + (1,) * (f.ndim - 1))
+
+
+def fill_halos_i(f, bc, ni, farfield=None):
+    """沿计算 i（ξ，数组 axis=-1）填充四层鬼胞。f: (..., ni+2*LAP)。
+
+    FARFIELD 把边界第一层和两侧 2*LAP 鬼层都写成同一个来流状态；这与
+    原码远场“边界层内点 + 鬼层”的 Dirichlet 口径一致。
+    """
     if bc == PERIODIC:
         f = f.at[..., :LAP].set(f[..., ni:ni + LAP])
         f = f.at[..., LAP + ni:].set(f[..., LAP:LAP + LAP])
     elif bc == OUTFLOW:
         f = f.at[..., :LAP].set(f[..., LAP:LAP + 1])
         f = f.at[..., LAP + ni:].set(f[..., LAP + ni - 1:LAP + ni])
+    elif bc == FARFIELD:
+        layer = _farfield_layer(f, farfield)
+        f = f.at[..., :LAP + 1].set(layer)
+        f = f.at[..., LAP + ni - 1:].set(layer)
     elif bc in (INFLOW, PLATE):
         pass   # 由 case 回调写入入口剖面/壁面；单轴填充只保留原值
     else:
@@ -83,7 +106,7 @@ def fill_halos_i(f, bc, ni):
     return f
 
 
-def fill_halos_j(f, bc, nj):
+def fill_halos_j(f, bc, nj, farfield=None):
     """沿计算 j（η，数组 axis=-2）填充四层鬼胞。"""
     if bc == PERIODIC:
         f = f.at[..., :LAP, :].set(f[..., nj:nj + LAP, :])
@@ -91,6 +114,10 @@ def fill_halos_j(f, bc, nj):
     elif bc == OUTFLOW:
         f = f.at[..., :LAP, :].set(f[..., LAP:LAP + 1, :])
         f = f.at[..., LAP + nj:, :].set(f[..., LAP + nj - 1:LAP + nj, :])
+    elif bc == FARFIELD:
+        layer = _farfield_layer(f, farfield)
+        f = f.at[..., :LAP + 1, :].set(layer)
+        f = f.at[..., LAP + nj - 1:, :].set(layer)
     elif bc in (INFLOW, PLATE):
         pass   # 由 case 回调写入入口/顶部/壁面；单轴填充只保留原值
     else:
@@ -98,7 +125,7 @@ def fill_halos_j(f, bc, nj):
     return f
 
 
-def fill_halos_k(f, bc, nk):
+def fill_halos_k(f, bc, nk, farfield=None):
     """沿计算 k（ζ，数组 axis=-3）填充四层鬼胞。"""
     if bc == PERIODIC:
         f = f.at[:, :LAP, :, :].set(f[:, nk:nk + LAP, :, :])
@@ -106,6 +133,10 @@ def fill_halos_k(f, bc, nk):
     elif bc == OUTFLOW:
         f = f.at[:, :LAP, :, :].set(f[:, LAP:LAP + 1, :, :])
         f = f.at[:, LAP + nk:, :, :].set(f[:, LAP + nk - 1:LAP + nk, :, :])
+    elif bc == FARFIELD:
+        layer = _farfield_layer(f, farfield)
+        f = f.at[:, :LAP + 1, :, :].set(layer)
+        f = f.at[:, LAP + nk - 1:, :, :].set(layer)
     elif bc in (INFLOW, PLATE):
         pass   # 由 case 回调写入；单轴填充只保留原值
     else:
@@ -120,9 +151,9 @@ _GENERIC_AXIS_FILLERS = {
 }
 
 
-def fill_halos_axis(f, axis, bc, n):
+def fill_halos_axis(f, axis, bc, n, farfield=None):
     """按计算方向调用单轴通用填充（f 的最后三轴为 (k,j,i)）。"""
-    return _GENERIC_AXIS_FILLERS[axis](f, bc, n)
+    return _GENERIC_AXIS_FILLERS[axis](f, bc, n, farfield=farfield)
 
 
 def fill_wall_j(f, nj):
@@ -229,14 +260,14 @@ def apply_plate_bc(cons, grid, phys, inflow, far, Tw=1.0):
     return cons
 
 
-def fill_halos(f, bcs, ni, nj, nk):
+def fill_halos(f, bcs, ni, nj, nk, farfield=None):
     """依次填充计算 i/j/k 鬼胞；j 的 WALL 走状态镜像。"""
-    f = fill_halos_i(f, bcs[0], ni)
+    f = fill_halos_i(f, bcs[0], ni, farfield=farfield)
     if bcs[1] == WALL:
         f = fill_wall_j(f, nj)
     else:
-        f = fill_halos_j(f, bcs[1], nj)
-    f = fill_halos_k(f, bcs[2], nk)
+        f = fill_halos_j(f, bcs[1], nj, farfield=farfield)
+    f = fill_halos_k(f, bcs[2], nk, farfield=farfield)
     return f
 
 
@@ -281,8 +312,21 @@ def fill_ev_axis(f, axis, bc, nxi, is_ev=False):
     """Ev 场的单轴填充；壁面/平板规则与守恒量状态规则显式分开。
 
     wall 目前只在计算 j 方向支持；i/k 的 WALL 走通用填充会按未知边界报错，
-    避免把槽道镜像误用于其他方向。
+    避免把槽道镜像误用于其他方向。FARFIELD 的粘性通量按零梯度处理：远场
+    状态是 Dirichlet 常量，Ev 的鬼层直接复制边界内层。
     """
+    if bc == FARFIELD:
+        if axis == 0:
+            f = f.at[..., :LAP].set(f[..., LAP:LAP + 1])
+            f = f.at[..., LAP + nxi:].set(f[..., LAP + nxi - 1:LAP + nxi])
+        elif axis == 1:
+            f = f.at[..., :LAP, :].set(f[..., LAP:LAP + 1, :])
+            f = f.at[..., LAP + nxi:, :].set(f[..., LAP + nxi - 1:LAP + nxi, :])
+        else:
+            f = f.at[:, :LAP, :, :].set(f[:, LAP:LAP + 1, :, :])
+            f = f.at[:, LAP + nxi:, :, :].set(
+                f[:, LAP + nxi - 1:LAP + nxi, :, :])
+        return f
     if axis == 0:
         return fill_halos_i(f, bc, nxi)
     if axis == 1:
@@ -315,6 +359,7 @@ class BoundaryExecution:
     plate: Any = None
     mixed_outflow: Tuple[Any, ...] = ()
     grid: Any = None
+    farfield: Any = None
 
     def apply(self, q):
         """调用 case 特殊边界；generic 保持原状态。"""
@@ -345,6 +390,26 @@ def _as_float(value, name):
     if not (out == out and abs(out) != float("inf")):
         raise ValueError(f"{name} 含非有限值: {out}")
     return out
+
+
+def _farfield_state(case):
+    """从 case 读取并校验通用远场的 5 分量守恒状态。
+
+    远场状态必须在 JIT 之前固定；这里做形状、有限值和密度检查，
+    避免把非法状态带进编译后的边界填充。
+    """
+    raw = case.get("farfield")
+    if raw is None:
+        raise ValueError(
+            "通用 FARFIELD 需要 case['farfield']（5 分量守恒量）")
+    state = jnp.asarray(raw)
+    if state.shape != (NVARS,):
+        raise ValueError(f"case['farfield'] 形状必须是 ({NVARS},)，得到 {state.shape}")
+    if not bool(jnp.all(jnp.isfinite(state))):
+        raise ValueError(f"case['farfield'] 含 NaN/inf: {state}")
+    if float(state[0]) <= 0.0:
+        raise ValueError(f"case['farfield'] 的密度必须为正，得到 {float(state[0])}")
+    return state
 
 
 def _face_map(desc):
@@ -379,10 +444,10 @@ def validate_special_sides(faces, bcs):
             raise ValueError(
                 f"special_boundary axis={axis} 有回调面，轴级 bcs 必须是 "
                 f"INFLOW/PLATE（no-op 占位），得到 {bc!r}")
-        if not callback_faces and bc not in (PERIODIC, OUTFLOW):
+        if not callback_faces and bc not in (PERIODIC, OUTFLOW, FARFIELD):
             raise ValueError(
                 f"special_boundary axis={axis} 没有回调面，轴级 bcs 只能是 "
-                f"PERIODIC/OUTFLOW，得到 {bc!r}")
+                f"PERIODIC/OUTFLOW/FARFIELD，得到 {bc!r}")
         for face in halo_faces:
             if callback_faces and face.kind == OUTFLOW:
                 continue
@@ -422,7 +487,7 @@ def _check_faces(faces, kinds, executors, label):
 def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
     """在 JIT 前把 case、六侧描述和轴级 bcs 收敛成一份执行配置。
 
-    现有组合只接受三类：通用（仅周期/出流/y 壁面）、channel（IBC=200）、
+    现有组合只接受三类：通用（周期/出流/壁面/远场）、channel（IBC=200）、
     plate（IBC=124）。任何“回调存在但没有专属标记”“标记存在但回调缺失”
     “固定六侧与 bcs 矛盾”都在这里报错，绝不猜一个能跑的组合。
     """
@@ -510,13 +575,18 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
             raise ValueError("special_boundary.faces 与已构造的六侧描述不一致")
         mixed_outflow = tuple(f for f in marker_faces if f.executor == "halo" and
                               bcs[f.axis] in (INFLOW, PLATE) and f.kind == OUTFLOW)
+        needs_farfield = any(f.kind == FARFIELD and f.executor == "halo"
+                             for f in marker_faces)
+        farfield = _farfield_state(case) if needs_farfield else None
         execution = BoundaryExecution("custom", bcs, callback, marker_faces,
-                                      mixed_outflow=mixed_outflow, grid=desc.grid)
+                                      mixed_outflow=mixed_outflow, grid=desc.grid,
+                                      farfield=farfield)
         if mixed_outflow:
             def composed_callback(q):
                 return execution.fill_mixed_outflow(callback(q))
             return BoundaryExecution("custom", bcs, composed_callback, marker_faces,
-                                     mixed_outflow=mixed_outflow, grid=desc.grid)
+                                     mixed_outflow=mixed_outflow, grid=desc.grid,
+                                     farfield=farfield)
         return execution
 
     if callback is not None:
@@ -531,7 +601,9 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
             raise ValueError(
                 f"通用 WALL 只支持计算 j 方向（axis=1），得到 axis={axis}")
     _check_faces(faces, kinds_for(bcs), ("halo",) * 6, "generic")
-    return BoundaryExecution("generic", bcs, None, tuple(faces.values()))
+    farfield = _farfield_state(case) if FARFIELD in bcs else None
+    return BoundaryExecution("generic", bcs, None, tuple(faces.values()),
+                             farfield=farfield)
 
 
 def kinds_for(bcs):

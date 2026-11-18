@@ -10,6 +10,8 @@ execution: code
 
 # Step 4 CGNS 单块读取与最小运行 - Plan
 
+> 后续状态（2026-11-18）：Step 4.n 已把 `BCFarfield` 映射到通用 `FARFIELD`；本计划 R7/R8 中的“BCFarfield 不执行”保留为 Step 4 当时的范围记录，不再是当前行为。
+
 ## Goal Capsule
 
 实现结构网格 CGNS/HDF5 的单块读取：把 `Zone_t` 的尺寸、顶点坐标、`ZoneBC_t` 的边界 patch 和 `ZoneGridConnectivity_t` 的 1to1 连接读成独立的 `CgnsZone`，再适配成现有 `BlockMesh`；只对“整面、每侧单 patch、轴级同向”的 `PERIODIC` / `OUTFLOW` / `WALL` 组合执行，并用一个与内置 `poiseuille` 等价的单块算例完成一步结果对齐。当前只支持三维 zone；壁面只映射 `BCWall`，同轴两侧整面 `BCSymmetryPlane` 近似为 `PERIODIC`。

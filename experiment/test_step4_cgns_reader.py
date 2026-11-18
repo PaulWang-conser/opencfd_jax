@@ -72,5 +72,6 @@ def test_real_sample_raw_read_keeps_all_bc_types():
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="缺少 Grid/samples/multi_hdf5.cgns")
 def test_real_sample_strict_mode_rejects_non_executable_bc():
-    with pytest.raises(CgnsError, match="BCFarfield"):
+    # BCFarfield 已接入可执行子集；该样例仍在 Klo 处因非整面 patch 被拒绝。
+    with pytest.raises(CgnsError, match="不是整面"):
         read_cgns_zone(SAMPLE, zone="Zone 1", validate=True)

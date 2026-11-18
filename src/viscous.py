@@ -141,7 +141,7 @@ def dif_bound_for_axis(dif_bound, axis, dif_axis_map=(0, 1, 2)):
 
 def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=None,
                 dif_bound=None, zero_state_ghosts=False, dif_axis_map=(0, 1, 2),
-                boundary_execution=None):
+                boundary_execution=None, farfield=None):
     """粘性 RHS。cons 为含鬼胞尺寸但鬼胞未填的守恒量；内部先填鬼胞。
 
     dx: 按计算 i/j/k 排列的三元组（代码名为 dx/dy/dz）。返回与 cons 同 shape 的 du（鬼胞区为 0）。
@@ -152,6 +152,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     dif_bound: 原码计算方向的六标志 (i-,i+,j-,j+,k-,k+)。为 1 的一侧，
     LAP 层导数改走单侧公式（`band_one_sided`），即原码
     `OCFD_dy0(u, uy, ..., D0_bound[...])` 的行为；None 等价全 0。
+    farfield: 通用 FARFIELD 的 5 分量来流状态，供状态鬼层和 Ev 零梯度使用。
     """
     if dx is None:
         raise ValueError("viscous_rhs requires dx")
@@ -159,12 +160,12 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     # 计算方向统一为 (i,j,k)；标量数组的空间轴为 (k,j,i)。
 
     # 0. cons 填计算 i/j/k 三轴鬼胞；当前计算 j 方向支持 wall
-    f = fill_halos_i(cons, bcs[0], grid.ni)
+    f = fill_halos_i(cons, bcs[0], grid.ni, farfield=farfield)
     if bcs[1] == WALL:
         f = fill_wall_j(f, grid.nj)
     else:
-        f = fill_halos_j(f, bcs[1], grid.nj)
-    f = fill_halos_k(f, bcs[2], grid.nk)
+        f = fill_halos_j(f, bcs[1], grid.nj, farfield=farfield)
+    f = fill_halos_k(f, bcs[2], grid.nk, farfield=farfield)
     if zero_state_ghosts:
         # 原码语义：非周期物理边界的鬼层是 0（没人给它赋值）
         f = zero_nonperiodic_ghosts(f, bcs, preserve_inflow=True)

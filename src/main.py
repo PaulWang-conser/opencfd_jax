@@ -54,6 +54,10 @@ def build_rhs(case, args, execution=None):
     dif_bound = desc.dif_bound
     dif_axis_map = desc.dif_axis_map
     plate_ghosts = args.case == "plate"
+    farfield = execution.farfield
+    if getattr(args, "filter", False) and farfield is not None:
+        raise ValueError(
+            "--filter 尚未接入通用 FARFIELD；请关闭滤波后再运行远场边界算例")
 
     def rhs(q):
         """计算当前 RK 子步状态 ``q`` 的总右端项 ``du = L(q)``。"""
@@ -61,13 +65,14 @@ def build_rhs(case, args, execution=None):
         du = inviscid_rhs(q, grid, gamma=gamma, bcs=bcs, axes=axes, dx=dxs,
                           scheme=args.scheme, weno_tv=weno_tv, metrics=metrics,
                           dif_bound=dif_bound, zero_state_ghosts=plate_ghosts,
-                          dif_axis_map=dif_axis_map)
+                          dif_axis_map=dif_axis_map, farfield=farfield)
         if args.viscous or args.case in ("poiseuille", "channel"):
             # viscous 的 dxs 是导数步长，必须全部合法
             du = du + viscous_rhs(q, grid, params, bcs, axes=axes, dx=dxs,
                                   order=vis_order, metrics=metrics,
                                   dif_bound=dif_bound, zero_state_ghosts=plate_ghosts,
-                                  dif_axis_map=dif_axis_map, boundary_execution=execution)
+                                  dif_axis_map=dif_axis_map, boundary_execution=execution,
+                                  farfield=farfield)
         du = du + apply_forcing(case, q)
         if src is not None:
             du = du + src(q)         # IBC=200 体积力（channel_body_force_kernel）
