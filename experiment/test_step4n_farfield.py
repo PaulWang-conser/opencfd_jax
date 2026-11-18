@@ -11,7 +11,8 @@ import numpy as np
 import pytest
 
 from opencfd_jax.src.boundary import (FARFIELD, LAP, PERIODIC, fill_ev_axis,
-                                      fill_halos, build_execution)
+                                      fill_halos, build_execution,
+                                      zero_nonperiodic_ghosts)
 from opencfd_jax.src.cases import build_case
 from opencfd_jax.src.fields import Grid
 from opencfd_jax.src.mesh_cgns import CgnsBC, read_cgns_zone, to_block_mesh
@@ -43,6 +44,17 @@ def test_fill_halos_farfield_writes_boundary_and_ghost_layers():
     layer = FAR.astype(q.dtype).reshape(5, 1, 1, 1)
     assert jnp.all(q[:, :, :LAP + 1, :] == layer)
     assert jnp.all(q[:, :, LAP + grid.nj - 1:, :] == layer)
+
+
+def test_zero_state_ghosts_clears_farfield_ghosts():
+    grid = Grid(ni=4, nj=5, nk=6)
+    q = fill_halos(grid.alloc(), (PERIODIC, FARFIELD, PERIODIC),
+                   grid.ni, grid.nj, grid.nk, farfield=FAR)
+    q = zero_nonperiodic_ghosts(q, (PERIODIC, FARFIELD, PERIODIC))
+    assert jnp.all(q[:, :, :LAP, :] == 0.0)
+    assert jnp.all(q[:, :, LAP + grid.nj:, :] == 0.0)
+    # 清零只覆盖鬼层，远场边界第一层内点保留。
+    assert jnp.all(q[:, :, LAP:LAP + 1, :] == FAR.astype(q.dtype).reshape(5, 1, 1, 1))
 
 
 def test_fill_ev_farfield_uses_zero_gradient_ghosts():

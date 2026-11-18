@@ -254,8 +254,8 @@ python -m pytest opencfd_jax/experiment/test_step4_cgns_reader.py `
   opencfd_jax/experiment/test_step4n_farfield.py -q
 ```
 
-验收结果（2026-11-18，本机）：Step 4 四个文件 17 passed；`experiment/` 全量
-105 passed。CGNS 一步与内置一步的逐分量最大绝对差在 `2.27e-13` 以内；两边 `_meta`
+验收结果（2026-11-18，本机）：Step 4 四个文件 18 passed；`experiment/` 全量
+106 passed。CGNS 一步与内置一步的逐分量最大绝对差在 `2.27e-13` 以内；两边 `_meta`
 同为 `N=16`、`dt=0.001`、`step=1`。
 
 当前未覆盖：非均匀 CGNS 的 `poiseuille` 解析初值、`BCInflow*`/粘性壁面的执行、
