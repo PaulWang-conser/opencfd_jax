@@ -100,7 +100,7 @@ flowchart TB
 - 多块 `MeshData` 容器、跨块 1to1/halo 交换、Step 6。
 - 子区周期条带、`Transform` 翻转/轴交换的执行支持。
 - `BCInflow*`、`BCFarfield`、`BCSymmetryPlane`、`BCWallViscousHeatFlux`、`BCDataSet` 的求解器实现；其中通用 `FARFIELD` 的均匀 Dirichlet 执行归入 Step 4.n，CGNS `BCFarfield` 的 `BCDataSet` 参数读取仍在本步之后。
-- `input.json` 的 `specificboundary` 入口（`module` + `function` + `params`）与“常规 halo 填充后叠加 special boundary”的执行顺序；见 `docs/plans/2026-11-18-002-feat-step4n-boundary-execution-plan.md`。
+- `input.json` 的 `specificboundary` 入口（只填 `src/special_boundaries/` 下的 `.py` 文件名）与“常规 halo 填充后叠加 special boundary”的执行顺序；见 `docs/plans/2026-11-18-002-feat-step4n-boundary-execution-plan.md`。
 - `mesh.scale` / 单位换算、`origin` 平移、`.in` 删除。
 - ADF 文件读取、真实样例入库、完整 Pointwise BC 表。
 
@@ -128,14 +128,14 @@ flowchart TB
 
 **Files.** `Grid/make_cgns_fixture.py`; `Grid/fixtures/poiseuille_box.cgns`; `Grid/fixtures/README.md`.
 
-**Approach.** 官方 Python CGNS 库在本机 py3.13 构建失败，因此生成脚本用 h5py 按 `multi_hdf5.cgns` Zone 1 的 `label`/节点布局写一个 `VertexSize=(ni,nj,nk)`、`CellSize=(ni-1,nj-1,nk-1)` 的单 zone：i-/i+ 与 k-/k+ 各写整面自连接 1to1（`Transform=[1,2,3]`），j-/j+ 写 `BCWallViscous`；坐标采用 `x=(i+0.5)*2π/ni`、`y=(j+0.5)/nj`、`z=k/(nk-1)`，与现有 `poiseuille` 的 `dxs=(2π/ni,1/nj,2π/ni)` 对齐。生成脚本保留可重复调用，并可选对照 `Grid/samples/multi_hdf5.cgns` 的节点层级；fixture 提交到未被 `.gitignore` 排除的 `Grid/fixtures/`。
+**Approach.** 官方 Python CGNS 库在本机 py3.13 构建失败，因此生成脚本用 h5py 按 `multi_hdf5.cgns` Zone 1 的 `label`/节点布局写一个 `VertexSize=(ni,nj,nk)`、`CellSize=(ni-1,nj-1,nk-1)` 的单 zone：i-/i+ 与 k-/k+ 各写整面自连接 1to1（`Transform=[1,2,3]`），j-/j+ 写 `BCWallViscous`；坐标采用 `x=(i+0.5)*dx`、`y=(j+0.5)*dy`、`z=k*dz`，其中 `dx=dz=2π/ni`、`dy=1/nj`，与现有 `poiseuille` 的 `dxs=(2π/ni,1/nj,2π/ni)` 对齐，且 z 向离散间距必须等于 `dxs[2]`。生成脚本保留可重复调用，并可选对照 `Grid/samples/multi_hdf5.cgns` 的节点层级；fixture 提交到未被 `.gitignore` 排除的 `Grid/fixtures/`。
 
 **Patterns to follow.** `Grid/download_cgns_samples.py` 的样例管理方式；`src/cases.py::make_initial_poiseuille` 的 `dxs=(2π/ni,1/nj,dx)` 与 y 坐标约定；`src/cases.py::build_case` 的 `poiseuille` 分支。
 
 **Test scenarios.**
 
 - 生成脚本能重复生成 fixture；h5py 打开后存在 `Base/Zone`、`ZoneType=Structured`、三个 `Coordinate*`、`ZoneBC` 和 `ZoneGridConnectivity`。
-- `Zone_t` 的 `CellSize+1 == VertexSize` 逐向成立；坐标形状为 `(nk,nj,ni)`。
+- `Zone_t` 的 `CellSize+1 == VertexSize` 逐向成立；坐标形状为 `(nk,nj,ni)`；三个内区方向的相邻坐标差分别等于 `dxs=(2π/ni,1/nj,2π/ni)`。
 - 六个面的 BC/1to1 类型与生成脚本声明一致；fixture 文件大小保持在可入库范围。
 
 **Verification.** `Grid/fixtures/poiseuille_box.cgns` 存在且能被 h5py 遍历；`Grid/make_cgns_fixture.py` 再次运行得到同结构文件；节点名/`label` 与 `multi_hdf5` Zone 1 的层级对照通过（样例不存在时跳过错位对照，但不跳过 fixture 自身断言）。生成器不再依赖 pyCGNS。

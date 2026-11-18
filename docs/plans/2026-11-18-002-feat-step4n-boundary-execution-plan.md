@@ -16,7 +16,7 @@ execution: code
 
 - **Authority.** 本计划以本轮已确认的三项要求为产品约束：远场进入通用边界；特殊边界在常规边界之后执行；`specificboundary` 是正式 JSON key。Step 4 的 CGNS 读取范围不变，本计划不实现 CGNS `BCFarfield` 的 `BCDataSet` 解析。
 - **Execution profile.** 只改边界执行、RHS 调用顺序、JSON 配置入口、测试与文档；不改变无粘/粘性离散公式，不改变网格来源，不引入新物理模型，不扩展到多块。
-- **Stop conditions.** 若顺序调整导致 `plate`/`channel` 的内区结果无法保持、若 `specificboundary` 必须依赖任意文件路径导入、若远场状态无法在 JIT 前确定，停止并报告，不用临时兼容分支掩盖。
+- **Stop conditions.** 若顺序调整导致 `plate`/`channel` 的内区结果无法保持、若 `specificboundary` 必须依赖固定目录外的脚本或任意文件路径才能工作、若远场状态无法在 JIT 前确定，停止并报告，不用临时兼容分支掩盖。
 - **Tail ownership.** 在本机完成实现、验证和本地 Git 提交；不推送远端、不创建 PR。
 
 ---
@@ -27,7 +27,7 @@ execution: code
 
 当前通用边界只有周期、出流和计算 j 向壁面；`FARFIELD` 只是平板顶部回调的描述，不是 `GENERIC_KINDS` 成员。特殊边界的执行顺序是“case 回调先、逐轴 halo 后”，与“特殊边界在常规边界之后”相反；`rk3_step_stages` 还会在子步前后重复调用回调。`input.json` 也没有加载特殊边界的入口。
 
-Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填常规 halo，再叠加特殊回调，再执行 `callback+halo` 的专属填充，最后对未被特殊面接管的常规面做一次角点清理。通用 `FARFIELD` 采用均匀自由来流守恒量的 Dirichlet 口径。`specificboundary` 以 `{module, function, params}` 的形式加载一个显式工厂，工厂返回现有的 `special_boundary` 对象。
+Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填常规 halo，再叠加特殊回调，再执行 `callback+halo` 的专属填充，最后对未被特殊面接管的常规面做一次角点清理。通用 `FARFIELD` 采用均匀自由来流守恒量的 Dirichlet 口径。`specificboundary` 只填特殊边界脚本的文件名，加载器按固定目录和固定入口函数装配现有的 `special_boundary` 对象。
 
 ### Problem Frame
 
@@ -58,8 +58,8 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 **`specificboundary` 入口**
 
-- R10. `input.json` 顶层正式 key 为 `specificboundary`，值为对象：`module`（非空字符串）、`function`（非空字符串）、`params`（JSON 对象）。不接受文件路径、`module:function` 冒号拼接或 `eval`。这不改变 Step 3 的“JSON 不设置常规边界类型或 `DIF_BOUND` 开关”口径；`specificboundary` 只是特殊边界工厂的显式加载入口。
-- R11. 加载器只导入仓库根目录内可解析的 Python 模块；`function` 必须是该模块的公开可调用属性；工厂签名固定为 `factory(case, params)`，返回带 `name`、`faces`、`apply` 的对象。
+- R10. `input.json` 顶层正式 key 为 `specificboundary`，值只填一个特殊边界脚本的文件名（例如 `"my_boundary.py"`），不填对象、模块路径、函数名或参数。这不改变 Step 3 的“JSON 不设置常规边界类型或 `DIF_BOUND` 开关”口径；`specificboundary` 只是特殊边界脚本的显式加载入口。
+- R11. 加载器按固定目录 `src/special_boundaries/` 解析这个文件名，拒绝绝对路径、路径分隔符、`..` 和非 `.py` 后缀；脚本必须定义公开入口 `build_special_boundary(case)`，返回带 `name`、`faces`、`apply` 的对象。脚本参数由脚本自身或算例提供，JSON 不再传 `params`。
 - R12. `init.prepare` 在 `build_case` 之后、`from_case` 之前加载 `specificboundary`，把返回对象挂到 `case["special_boundary"]`，把 `apply` 挂到 `case["bc_apply"]`；`from_case` 继续负责六侧与轴级 `bcs` 校验。
 - R13. `specificboundary` 与 `plate` / `channel_bc` / 已有 `special_boundary` 互斥；冲突在配置解析或初始化阶段报错，不进入 JIT。本步不提供 CLI 覆盖入口。
 
@@ -84,7 +84,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 - CGNS `BCFarfield` 的 `BCDataSet` 读取、来流参数来源和 CGNS patch 到通用远场的适配；这属于 Step 4 的读取层后续，不在本步。
 - 同侧多个 farfield patch、每面不同来流状态、子区远场。
 - 特征边界（按法向马赫进/出口切换）、无反射远场、总压/总焓/熵进口。
-- `specificboundary` 的 CLI 覆盖、路径式脚本加载、跨仓库模块、参数 schema 校验器。
+- `specificboundary` 的 CLI 覆盖、脚本参数化（`params` 或脚本参数块）、路径式脚本加载、跨仓库脚本。
 - 特殊边界对 `Ev` 的全新物理模型；本步只保持现有 `Ev` 分支，并为通用 `FARFIELD` 增加零梯度。
 - `filtering.shock_filter` 的逐轴填充迁移；本步对 `--filter` + `FARFIELD` 直接报错，不静默运行。
 - 多块、并行、完整 Pointwise BC 表。
@@ -100,7 +100,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 - AE1. 构造 `bcs=(PERIODIC, FARFIELD, PERIODIC)` 的小网格，给出 `case["farfield"]`；`prepare` 后 `j-`/`j+` 的边界层内点与 `2*LAP` 鬼层都等于该守恒量，`i`/`k` 周期鬼层仍按周期值填充。
 - AE2. 构造 i- 特殊回调、i+ 普通出流的 custom case；回调执行时 i+ 出流鬼层已经被常规填充；回调只改 i-；`prepare` 结束后 i- 保持特殊值、i+ 保持出流值、j/k 角点回到周期值。
 - AE3. `plate` 与 `channel` 的一步 `cons`、三个子步 `du` 与改动前 NPZ 逐位一致；若不能逐位一致，必须把差异定位到具体鬼层/角点并报告，不能放宽断言掩盖。
-- AE4. 合法 `specificboundary` 工厂被加载并挂到 case；未知模块、非公开函数、`params` 不是对象、与 `plate`/`channel` 冲突分别在 JIT 前报错。
+- AE4. 合法 `specificboundary` 脚本文件名被加载并挂到 case；脚本不存在、文件名含路径、后缀不是 `.py`、缺少 `build_special_boundary(case)`、返回对象缺 `apply`、与 `plate`/`channel` 冲突分别在 JIT 前报错。
 - AE5. `specificboundary` 与另一轴通用 `FARFIELD` 同时存在时能通过 `from_case` 和 `prepare`，且回调次数不再是每步 7 次。
 
 ---
@@ -114,22 +114,22 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 - KTD3. **`rhs` 是唯一状态准备点.** `build_rhs` 内部调用 `execution.prepare(q)`，然后以“状态已准备”模式调用无粘/粘性 RHS。`rk3_step` / `rk3_step_stages` 删除 `bc_apply` 参数；`main.run` 在整步 JIT 的外层再调用一次 `execution.prepare`，保证输出状态也带边界层。编译图中每步状态准备从约 7 次降到 3 次 RHS + 1 次最终准备；Python 侧具体可见次数由测试用 `jax.disable_jit()` 固定。
 - KTD4. **通用远场采用均匀 Dirichlet.** 不把平板顶部的“顶部来流”语义抽象成特征边界；通用 `FARFIELD` 只做“把给定守恒量写到该侧边界层+鬼层”。这与当前平板顶部 `far_state` 的赋值口径一致，也避免在 Step 4.n 引入未验证的无反射公式。
 - KTD5. **远场状态由 case 提供.** `BoundaryExecution` 从 `case["farfield"]` 读取 5 分量守恒量；本步不把远场参数塞进 `physics` JSON，也不从 CGNS `BCDataSet` 推断。CGNS 适配和 JSON 暴露留给后续计划。
-- KTD6. **`specificboundary` 是显式工厂入口.** JSON 只描述模块、函数和参数；工厂负责构造六侧 `FaceBoundary` 与 `apply`。加载器不执行任意表达式，不做动态注册，不把 I/O 放进 JIT。
-- KTD7. **仓库内模块限制.** 本步只允许导入仓库根目录内的模块，避免 `input.json` 变成任意代码执行入口。路径式脚本加载、跨仓库插件和参数 schema 校验留给后续；如果用户需要仓库外脚本，必须先扩展这一层并单独评审。
+- KTD6. **`specificboundary` 只放脚本文件名.** JSON 值是一个 `.py` 文件名，目录、入口函数和对象形状由加载器约定；脚本负责构造六侧 `FaceBoundary` 与 `apply`。加载器不执行任意表达式，不做动态注册，不把 I/O 放进 JIT。参数化留给后续，不在本步给 JSON 增加第二个键。
+- KTD7. **固定脚本目录.** 本步只允许 `src/special_boundaries/` 下的 `.py` 脚本，避免 `input.json` 变成任意代码执行入口。路径式脚本加载、跨仓库脚本和脚本参数化留给后续；如果用户需要仓库外脚本，必须先扩展这一层并单独评审。
 - KTD8. **`fill_mixed_outflow` 只保留给 Ev.** 状态路径由按面常规填充解决；粘性 `Ev` 仍按现有混合出流侧补零梯度，并为通用 `FARFIELD` 增加零梯度分支。其他 `Ev` 公式不重写。
 
 ### Assumptions
 
 - `case["farfield"]` 是守恒量 `(rho, rho*u, rho*v, rho*w, rho*E)`，不是原始量；这样执行层不需要再读 `Cv` 或 `gamma`。
-- 仓库根目录指 `opencfd_jax` 包根；`specificboundary` 模块必须位于该根之下并可按点号导入。
-- `specificboundary` 的工厂在 `build_case` 之后调用，可以使用 `case["grid"]`、`case["bcs"]`、`case["params"]` 等已装配对象，但不能要求 `BlockMesh` 已存在。
+- `specificboundary` 的值是 `src/special_boundaries/` 下的裸文件名，不是模块路径、函数名或参数对象。
+- 脚本入口固定为 `build_special_boundary(case)`，在 `build_case` 之后调用，可以使用 `case["grid"]`、`case["bcs"]`、`case["params"]` 等已装配对象，但不能要求 `BlockMesh` 已存在。
 - `plate` / `channel` 的一步基线以现有 NPZ 为准；本步不接受“只比较内区、忽略边界层”的放宽。
 
 ### Risks & Dependencies
 
 - **角点顺序风险.** 平板和槽道回调会跨 k 写鬼层；如果第四阶段清理不覆盖这些角点，`plate`/`channel` 结果会漂移。缓解：AE3 逐位对比；U2 先写顺序测试再迁移主链。
 - **`zero_state_ghosts` 交互风险.** 平板历史口径会在准备后清零非周期鬼层；通用远场如果误用同一开关，会把 Dirichlet 鬼层清掉。缓解：R4 明确组合语义，U1 加显式断言。
-- **模块导入安全风险.** 任意 `module` 字符串可能导入仓库外代码。缓解：KTD7 的仓库根校验；错误信息只打印模块名，不执行模块顶层 I/O。
+- **脚本加载安全风险.** 裸文件名如果拼接成路径，可能跳出固定目录。缓解：KTD7 的目录与文件名校验；错误信息只打印文件名，不执行目录扫描。
 - **签名迁移风险.** 删除 `rk3_step(_stages)` 的 `bc_apply` 会影响 `experiment/compare_ocfd_jax.py` 与旧测试。缓解：U2 一次性迁移所有仓库内调用，并用 `rg` 复核无残留。
 - **Ev 顺序风险.** 状态顺序改变后，`viscous_rhs` 的 Ev 填充仍按轴级 `bcs`，混合出流侧依赖 `fill_mixed_outflow`。缓解：本步不重写 Ev 公式；AE3 只要求状态与 `du` 保持，Ev 差异必须单独报告。
 
@@ -194,24 +194,24 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 **Verification.** `python -m pytest experiment/test_step2_boundary.py experiment/test_step4n_boundary.py -q`；再跑一份 `plate`/`channel` 一步 NPZ 对比。
 
-### U3. `specificboundary` JSON 与加载器
+### U3. `specificboundary` JSON 与脚本加载器
 
-**Goal.** 为 `input.json` 增加正式 `specificboundary` 入口，并在 JIT 前把工厂返回的特殊边界接入现有校验链。
+**Goal.** 为 `input.json` 增加正式 `specificboundary` 入口，并在 JIT 前把脚本返回的特殊边界接入现有校验链。
 
 **Requirements.** R10, R11, R12, R13, AE4, AE5.
 
 **Dependencies.** U1, U2.
 
-**Files.** `src/runtime_config.py`; `src/init.py`; `src/specific_boundary.py`; `experiment/test_step4n_boundary.py`; `experiment/test_step3_config.py`.
+**Files.** `src/runtime_config.py`; `src/init.py`; `src/specific_boundary.py`; `src/special_boundaries/__init__.py`; `src/special_boundaries/README.md`; `experiment/test_step4n_boundary.py`; `experiment/test_step3_config.py`.
 
-**Approach.** 在 `src/runtime_config.py` 的 `allowed_top` 增加 `specificboundary`，按独立顶层块解析，不并入 `_SCHEMA`：校验 `module` / `function` 为非空字符串，`params` 为对象，未知字段报错；写入 `values["specificboundary"]` 与 `sources`。在 `resolve_args` 合并后，如果最终 `case` 是 `plate` 或 `channel` 且存在 `specificboundary`，直接报冲突。新增 `src/specific_boundary.py::load_specific_boundary(spec, case)`：校验模块名为点号标识符，导入模块，校验模块文件位于仓库根之下，取公开可调用属性，调用 `factory(case, params)`，再校验返回对象的 `name` / `faces` / `apply`。`src/init.py::prepare` 在 `build_case` 后、`from_case` 前调用加载器，检查 `plate` / `channel_bc` / `special_boundary` 互斥，然后挂载 `case["special_boundary"]` 与 `case["bc_apply"]`。
+**Approach.** 在 `src/runtime_config.py` 的 `allowed_top` 增加 `specificboundary`，按独立顶层值解析，不并入 `_SCHEMA`：值必须是非空字符串，写入 `values["specificboundary"]` 与 `sources`；不是对象，因此没有 `module` / `function` / `params` 子字段。在 `resolve_args` 合并后，如果最终 `case` 是 `plate` 或 `channel` 且存在 `specificboundary`，直接报冲突。新增 `src/specific_boundary.py::load_specific_boundary(name, case)`：校验 `name` 是裸 `.py` 文件名（无目录、无 `..`、后缀为 `.py`），在固定目录 `src/special_boundaries/` 下解析并确认父目录未跳出；用 `importlib.util.spec_from_file_location` 以唯一加载名加载，取公开入口 `build_special_boundary(case)`，调用后校验返回对象的 `name` / `faces` / `apply`。`src/init.py::prepare` 在 `build_case` 后、`from_case` 前调用加载器，检查 `plate` / `channel_bc` / `special_boundary` 互斥，然后挂载 `case["special_boundary"]` 与 `case["bc_apply"]`。
 
-**Patterns to follow.** `src/runtime_config.py::load_config` 的未知字段错误风格；`src/runtime_config.py::resolve_args` 的来源记录；`src/mesh_data.py::from_case` 对 `special_boundary` 的现有校验；`src/README.md` 第 7.2 节的 `SimpleNamespace` 示例。
+**Patterns to follow.** `src/runtime_config.py::load_config` 的未知字段错误风格；`src/runtime_config.py::resolve_args` 的来源记录；`src/mesh_data.py::from_case` 对 `special_boundary` 的现有校验；`src/README.md` 第 7.2 节的 `SimpleNamespace` 示例。测试脚本可放在 `experiment/fixtures/special_boundaries/`，通过 monkeypatch `SPECIAL_BOUNDARY_DIR` 指向测试目录，避免向生产目录写测试文件。
 
 **Test Scenarios.**
 
-- 合法 JSON 块加载测试工厂，`from_case` 通过，`case["bc_apply"]` 是工厂的 `apply`。
-- `module` 缺失、`function` 缺失、`params` 不是对象、模块不在仓库根、函数不存在、返回对象缺 `apply` 分别报错。
+- 合法的 `specificboundary` 文件名字符串加载测试脚本，`from_case` 通过，`case["bc_apply"]` 是脚本返回对象的 `apply`。
+- 文件名为空、是对象、含 `/` 或 `\`、含 `..`、后缀不是 `.py`、文件不存在、脚本缺少 `build_special_boundary(case)`、返回对象缺 `apply` 分别报错。
 - `specificboundary` 与 `plate` / `channel` 同时出现时在 JIT 前报错。
 - `specificboundary` + 另一轴 `FARFIELD` 能通过 `from_case` 与 `prepare`。
 - JSON 顶层出现 `boundary.specific` 或 `specific boundary` 仍按未知字段报错，确保正式 key 唯一。
@@ -228,7 +228,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 **Files.** `src/README.md`; `11-16 我建议先对齐的.md`; `docs/plans/2026-11-18-001-feat-cgns-single-block-read-plan.md`; `experiment/test_step2_boundary.py`; `experiment/test_step4n_boundary.py`.
 
-**Approach.** 更新 `src/README.md` 第 7.2 节：通用边界列表加入 `FARFIELD`；说明 `prepare` 四阶段；把 `special_boundary` 的“回调后由执行配置填充”改成“常规填充后叠加特殊回调”；把 `input.json` 的 `specificboundary` 写成正式入口，并标注仓库内模块限制。路线图在第 4 步与第 5 步之间插入“第 4.n 步”摘要，指向本计划。Step 4 计划的 deferred 条目把 `boundary.specific` 改为 `specificboundary`，并指向本计划；`BCFarfield` 的读取层实现仍保留在 Step 4 后续，不写成已解决。迁移 `test_step2_boundary.py` 中 `execution.apply` 与 `rk3_step_stages(bc_apply=...)` 的旧断言。最后用 `rg` 复核 `bc_apply=` / `execution.apply` / `boundary.specific` 无残留（`case["bc_apply"]` 数据字段本身保留）。
+**Approach.** 更新 `src/README.md` 第 7.2 节：通用边界列表加入 `FARFIELD`；说明 `prepare` 四阶段；把 `special_boundary` 的“回调后由执行配置填充”改成“常规填充后叠加特殊回调”；把 `input.json` 的 `specificboundary` 写成正式入口，并标注“只填 `src/special_boundaries/` 下的 `.py` 文件名，入口函数固定为 `build_special_boundary(case)`”。路线图在第 4 步与第 5 步之间插入“第 4.n 步”摘要，指向本计划。Step 4 计划的 deferred 条目把 `boundary.specific` 改为 `specificboundary`，并指向本计划；`BCFarfield` 的读取层实现仍保留在 Step 4 后续，不写成已解决。迁移 `test_step2_boundary.py` 中 `execution.apply` 与 `rk3_step_stages(bc_apply=...)` 的旧断言。最后用 `rg` 复核 `bc_apply=` / `execution.apply` / `boundary.specific` 无残留（`case["bc_apply"]` 数据字段本身保留）。
 
 **Patterns to follow.** `src/README.md` 第 7.1/7.2 节的条目结构；路线图第 4 步/第 5 步的“当前进度/验收标准”格式；`docs/plans/2026-11-18-001-...` 的 deferred 列表。
 
@@ -263,7 +263,7 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 - `BoundaryExecution.prepare` 按“常规 → 特殊 → callback+halo → 常规角点清理”执行；同一轴一侧特殊、另一侧出流的 custom case 通过。
 - `build_rhs` 是唯一状态准备点；`rk3_step` / `rk3_step_stages` 不再接收 `bc_apply`；在 `jax.disable_jit()` 下整步状态准备次数为 4，JIT 下不再出现旧的 RK 外层重复调用。
 - `plate` / `channel` 的一步 `cons` 与三个 `du` 与改动前 NPZ 逐位一致；若不一致，报告具体差异位置并停止，不静默放宽。
-- `input.json` 的 `specificboundary` 正式可用；合法工厂加载，非法模块/函数/参数/冲突在 JIT 前报错。
+- `input.json` 的 `specificboundary` 正式可用，值只填一个 `.py` 文件名；合法脚本加载，非法文件名/缺失入口/冲突在 JIT 前报错。
 - `--filter` + `FARFIELD` 的未迁移组合在 JIT 前报错，不出现运行时 `fill_halos_i` 未知边界错误。
 - `src/README.md`、路线图、Step 4 deferred 三处文档一致；不再出现 `boundary.specific` 作为正式入口。
 - `experiment` 全量测试通过；已知跳过/失败项在报告中如实列出。
@@ -277,20 +277,14 @@ Step 4.n 把边界执行统一成一次 `prepare`：先按六侧 `executor` 填�
 
 ```json
 {
-  "specificboundary": {
-    "module": "opencfd_jax.src.user_boundary",
-    "function": "build_special_boundary",
-    "params": {
-      "inlet_state": [0.25, 0.0, 0.0, 0.0, 1.0]
-    }
-  }
+  "specificboundary": "my_boundary.py"
 }
 ```
 
-工厂返回对象应满足现有入口契约：
+脚本放在 `src/special_boundaries/my_boundary.py`，固定入口返回现有 `special_boundary` 契约：
 
 ```python
-def build_special_boundary(case, params):
+def build_special_boundary(case):
     return SimpleNamespace(
         name="user-special",
         faces=(FaceBoundary(...), ...),  # 必须按 i-/i+/j-/j+/k-/k+ 六侧给出
@@ -298,10 +292,12 @@ def build_special_boundary(case, params):
     )
 ```
 
+脚本参数（如来流状态、壁面温度）由脚本自身或 `case` 提供；本步不在 JSON 里再开 `params` 键。
+
 ### 本步不解决的问题
 
 - `BCFarfield` 的 `BCDataSet` 来流参数读取。
 - 每面不同远场状态。
 - 特征边界/无反射远场。
-- `specificboundary` 的 CLI 覆盖与仓库外脚本加载。
+- `specificboundary` 的 CLI 覆盖、脚本参数化与仓库外脚本加载。
 - 特殊边界的 `Ev` 新物理模型。
