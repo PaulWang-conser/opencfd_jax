@@ -166,7 +166,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     f = cons
     if fill_state_halos:
         if faces is not None:
-            f = fill_faces(f, faces, grid, farfield=farfield)
+            f = fill_faces(f, faces, grid)
         else:
             f = fill_halos_i(f, bcs[0], grid.ni, farfield=farfield)
             if bcs[1] == WALL:

@@ -18,7 +18,7 @@ _REPO_TAX = Path(__file__).resolve().parents[2]
 if str(_REPO_TAX) not in sys.path:
     sys.path.insert(0, str(_REPO_TAX))
 
-from opencfd_jax.src import cases, mesh_data, main
+from opencfd_jax.src import boundary, cases, mesh_data, main
 from opencfd_jax.src.fields import (INFLOW, OUTFLOW, PERIODIC, PLATE,
                                     WALL, Grid)
 
@@ -88,16 +88,22 @@ def test_description_reuses_case_objects(built):
     assert mesh_data.from_case(built["sod"]).coords is None
 
 
-def test_plate_axis_mapping_and_dif_bound_unchanged(built):
-    """U1：平板保留 dif_axis_map=(0,2,1) 与 DIF_BOUND 的物理轴含义。"""
+def test_plate_axis_mapping_and_dif_bound_derived_from_faces(built):
+    """U1：平板保留 dif_axis_map=(0,2,1)；边界带改由边界 kind 派生。"""
     desc = mesh_data.from_case(built["plate"])
     assert desc.dif_axis_map == (0, 2, 1)
+    # 算例侧旧字段仍留档，但执行配置里的带由 faces 派生。
     assert desc.dif_bound == (0, 0, 0, 0, 1, 0)
-    # 原码 k- 对应 JAX j-：j- 开边界带，j+ 关；i/k 全关。
-    assert desc.face("j-").dif_band is True
-    assert desc.face("j+").dif_band is False
+    # 非周期且非 INFLOW 才开：i- 入口（INFLOW）关；i+ 出流、j- 壁面、j+ 远场开。
     assert desc.face("i-").dif_band is False
+    assert desc.face("i+").dif_band is True
+    assert desc.face("j-").dif_band is True
+    assert desc.face("j+").dif_band is True
     assert desc.face("k-").dif_band is False
+    assert desc.face("k+").dif_band is False
+    execution = boundary.build_execution(built["plate"], desc)
+    # 原码次序 (x-,x+,y-,y+,z-,z+)，map=(0,2,1)：i→x，j→z，k→y。
+    assert execution.band == (0, 1, 0, 0, 1, 1)
 
 
 def test_compare_style_step_override_is_visible(built):

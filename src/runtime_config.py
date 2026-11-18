@@ -41,6 +41,7 @@ _SCHEMA = {
         "Ama": ("number", "Ama"),
         "ref_t": ("number", "ref_t"),
         "pr": ("number", "pr"),
+        "tw": ("number", "tw"),
     },
     "numerics": {
         "scheme": ("str", "scheme"),
@@ -59,6 +60,7 @@ _SCHEMA = {
     },
     "case": {
         "name": ("str", "case"),
+        "inflow_profile": ("path", "inflow_profile"),
         "p_grad": ("number", "p_grad"),
         "forcing_work": ("forcing", "forcing_work"),
         "plate_x0": ("number", "plate_x0"),

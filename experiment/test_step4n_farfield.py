@@ -122,9 +122,12 @@ def test_single_sided_cgns_farfield_does_not_require_opposite_face():
     q = block.grid.alloc().at[:, :, LAP, :].set(10.0)
     q = execution.prepare(q)
     layer = FAR.astype(q.dtype).reshape(5, 1, 1, 1)
-    assert jnp.all(q[:, :, LAP + block.grid.nj - 1:, :] == layer)
+    ni, nj, nk = block.grid.ni, block.grid.nj, block.grid.nk
+    # FARFIELD 只写内区范围内的边界点（最后一层内点），鬼层与角点由 halo 清零。
+    assert jnp.all(q[:, LAP:LAP + nk, LAP + nj - 1:LAP + nj, LAP:LAP + ni] == layer)
+    assert jnp.all(q[:, :, LAP + nj:, :] == 0.0)
     # j- 边界内点没有被远场覆盖，说明只填了 j+ 这一面。
-    assert jnp.all(q[:, :, LAP, :] == 10.0)
+    assert jnp.all(q[:, LAP:LAP + nk, LAP, LAP:LAP + ni] == 10.0)
 
 
 def test_default_cgns_farfield_is_plus_x_free_stream(tmp_path):
@@ -159,13 +162,15 @@ def test_prepare_runs_special_boundary_after_general_ghosts():
     execution = BoundaryExecution("custom", (PERIODIC, WALL, PERIODIC),
                                   special, faces, grid=grid, farfield=FAR)
     q = execution.prepare(grid.alloc())
-    assert seen == [float(FAR[0])]   # 回调执行时常规远场鬼层已经填好
+    assert seen == [0.0]              # 回调执行时远场鬼层已由 halo 清零
     assert jnp.all(q[..., LAP + grid.nj:, :] == 99.0)
-    assert jnp.all(q[..., LAP + grid.nj - 1, :] == FAR.reshape(5, 1, 1))
+    ni, nj, nk = grid.ni, grid.nj, grid.nk
+    assert jnp.all(q[:, LAP:LAP + nk, LAP + nj - 1, LAP:LAP + ni]
+                   == FAR.reshape(5, 1, 1))
 
 
 def test_callback_face_gets_general_outflow_before_special():
-    """callback 面也先按 kind 填普通鬼层，再由特殊回调覆盖。"""
+    """callback 面也按 kind 先清零普通鬼层，再由特殊回调覆盖。"""
     grid = Grid(4, 5, 6)
     faces = (
         FaceBoundary("i-", 0, "outflow", "callback", False),
@@ -185,7 +190,7 @@ def test_callback_face_gets_general_outflow_before_special():
                                   special, faces, grid=grid)
     q = grid.alloc().at[:, :, :, LAP].set(7.0)
     q = execution.prepare(q)
-    assert seen == [7.0]
+    assert seen == [0.0]             # OUTFLOW 不写鬼层，halo 已清零
     assert jnp.all(q[..., LAP] == 7.0)
     assert jnp.all(q[..., :LAP] == 88.0)
 

@@ -52,9 +52,9 @@ def build_rhs(case, args, execution=None):
     vis_order = {"CD6": 6, "CD8": 8}[args.vis_order]
     src = case.get("source")
     metrics = desc.metrics
-    dif_bound = desc.dif_bound
+    # 边界带由边界 kind 派生（execution.band）；仅在执行配置缺席时回落到旧字段。
+    dif_bound = execution.band if execution.band is not None else desc.dif_bound
     dif_axis_map = desc.dif_axis_map
-    plate_ghosts = args.case == "plate"
     farfield = execution.farfield
     faces = execution.faces
     if getattr(args, "filter", False) and farfield is not None:
@@ -63,8 +63,8 @@ def build_rhs(case, args, execution=None):
 
     def rhs(q):
         """计算当前 RK 子步状态 ``q`` 的总右端项 ``du = L(q)``。"""
-        # 常规 halo 先填；特殊回调随后覆盖它接管的鬼胞。RHS 不再重复填状态。
-        q = execution.prepare(q, zero_state_ghosts=plate_ghosts)
+        # halo（周期复制/非周期清零）→ 边界点赋值 → 特殊回调，三步集合不重叠。
+        q = execution.prepare(q)
         du = inviscid_rhs(q, grid, gamma=gamma, bcs=bcs, axes=axes, dx=dxs,
                           scheme=args.scheme, weno_tv=weno_tv, metrics=metrics,
                           dif_bound=dif_bound, zero_state_ghosts=False,
@@ -75,7 +75,7 @@ def build_rhs(case, args, execution=None):
             du = du + viscous_rhs(q, grid, params, bcs, axes=axes, dx=dxs,
                                   order=vis_order, metrics=metrics,
                                   dif_bound=dif_bound,
-                                  zero_state_ghosts=plate_ghosts,
+                                  zero_state_ghosts=False,
                                   dif_axis_map=dif_axis_map,
                                   boundary_execution=execution,
                                   farfield=farfield, faces=faces,
@@ -110,6 +110,11 @@ def build_parser(explicit_only=False):
     add("--plate-x1", type=float, default=0.25)
     add("--plate-h", type=float, default=0.12)
     add("--plate-dif-bound", default="0 0 0 0 1 0")
+    add("--inflow-profile", default=None,
+        help="入口剖面文件（OCFD 1D 格式：首行表头，其后 y rho u v T）；"
+             "空着表示用自由来流常数，剖面必须与网格 j 点逐点对应")
+    add("--tw", type=float, default=None,
+        help="壁面温度（无量纲，对应原码 IBC 壁面的 Tw）；缺省与来流同温")
     add("--mesh-format", default=None, choices=runtime_config.MESH_FORMATS,
         help="网格格式：builtin（程序内置网格）或 cgns（单块 CGNS/HDF5）")
     add("--mesh", default=None,

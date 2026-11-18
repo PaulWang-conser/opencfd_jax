@@ -65,7 +65,7 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
     # 原码声速和分裂内核覆盖含鬼层区域，先准备状态，再逐点计算分裂通量。
     if fill_state_halos:
         if faces is not None:
-            cons = fill_faces(cons, faces, grid, farfield=farfield)
+            cons = fill_faces(cons, faces, grid)
         else:
             cons = fill_halos_i(cons, bcs[0], grid.ni, farfield=farfield)
             if bcs[1] == WALL:
@@ -150,7 +150,7 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
         raise ValueError("inviscid_rhs requires dx (physical step size)")
     dxs = (dx, dx, dx) if isinstance(dx, (int, float)) else dx
     if fill_state_halos and faces is not None:
-        cons = fill_faces(cons, faces, grid, farfield=farfield)
+        cons = fill_faces(cons, faces, grid)
         if zero_state_ghosts:
             cons = zero_nonperiodic_ghosts(cons, bcs, preserve_inflow=True)
         fill_state_halos = False

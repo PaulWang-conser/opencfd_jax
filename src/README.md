@@ -97,10 +97,10 @@ JSON 只分六组，外加顶层 `precision`：
 | 组 | 字段 |
 |---|---|
 | `mesh` | `format`（`builtin`/`cgns`）、`file` |
-| `physics` | `Re`、`Ama`、`ref_t`、`pr` |
+| `physics` | `Re`、`Ama`、`ref_t`、`pr`、`tw`（壁温，无量纲，缺省与来流同温） |
 | `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv`、`filter`、`nstep_filter`、`filter_s0`、`filter_rth` |
 | `time` | `dt`（必填）、`end_time`、`end_step` |
-| `case` | `name`、`p_grad`、`forcing_work`、`plate_x0`、`plate_x1`、`plate_h` |
+| `case` | `name`、`inflow_profile`（OCFD 1D 剖面文件，空着用自由来流常数）、`p_grad`、`forcing_work`、`plate_x0`、`plate_x1`、`plate_h` |
 | `output` | `dir`、`kstep_show`、`kstep_save` |
 
 优先级：程序默认值 → JSON → 显式命令行。显式与否由“参数是否出现在命令行”判断，
@@ -239,15 +239,16 @@ Q(n+1) = 1/3 Qn + 2/3 [Q** + dt L(Q**)]
 
 
 ```
-1. 若算例提供 bc_apply，先施加专用物理边界
-2. 计算无粘右端项 inviscid_rhs
-3. 若算例需要，叠加 viscous_rhs
-4. 叠加 cases.apply_forcing 的通用体积力
-5. 若算例提供 source，再叠加专用源项（channel 体积力）
+0. execution.prepare(q)：填鬼层 → 写边界点 → 特殊回调（见 7.2）
+1. 计算无粘右端项 inviscid_rhs
+2. 若算例需要，叠加 viscous_rhs
+3. 叠加 cases.apply_forcing 的通用体积力
+4. 若算例提供 source，再叠加专用源项（channel 体积力）
 返回 du，但不在这里更新 Q
 ```
 
-边界函数也会在 RK 状态组合后再次调用，保证下一子步使用满足边界条件的状态。
+边界只在 `prepare` 里走一遍：鬼层、边界点、特殊回调各管一层，互不重写。
+RK 外层不再重复调用 `bc_apply`（旧的重复调用已被去掉）。
 
 
 
@@ -371,10 +372,11 @@ du = -(F_right - F_left) / h
 | 类型        | 文件                        | 具体处理                                 |
 | --------- | ------------------------- | ------------------------------------ |
 | 周期边界      | `boundary.py`             | 从对侧内区环绕复制鬼胞                          |
-| 零梯度出流     | `boundary.py`             | 复制最靠近边界的内点值                          |
-| 槽道双壁      | `channel.py`              | 壁面无滑移；压力 / 温度按壁面类型外推；写入等温或绝热壁状态及镜像鬼胞 |
-| 平板入口 / 出口 | `plate.py`                | 入口写 Dirichlet 守恒量剖面，出口鬼层零梯度          |
-| 平板下壁 / 顶部 | `plate.py`                | 下壁无滑移等温并镜像，顶部写均匀自由来流                 |
+| 零梯度出流     | `boundary.py`             | **不赋值**：鬼层清零 + 该侧开单侧带（方式 A）          |
+| 槽道双壁      | `channel.py`              | 只写壁面层；压力 / 温度按壁面类型外推；鬼层清零（不镜像）      |
+| 平板入口      | `boundary.py` + `plate.py` | 通用 INFLOW：写边界点 + 四层鬼层同一剖面，可来自 1D 剖面文件 |
+| 平板出口      | `boundary.py`             | 不赋值，鬼层清零 + 单侧带                      |
+| 平板下壁 / 顶部 | `plate.py` / `boundary.py` | 下壁只写壁面点（ρ 两点外推 + 无滑移 + ρ Cv Tw）；顶部远场只写最后一层内点 |
 | 通用体积力     | `cases.py::apply_forcing` | 动量源 `rho*G`，可选能量做功源 `rho*u*G`        |
 | 槽道专用体积力   | `channel.py::body_force`  | 按 `ChannelBC.F` 生成源项；是否做功由 `work` 控制 |
 
@@ -389,8 +391,9 @@ du = -(F_right - F_left) / h
 
 * `grid`、`dxs`、`axes`、`bcs`：直接复用算例字典里的对象/值；
 * 六侧 `FaceBoundary`：每侧语义（periodic/outflow/wall/inflow/farfield）、当前
-  执行来源（`halo` / `callback` / `callback+halo`）和该侧的 DIF_BOUND 开关；
+  执行来源（`halo` / `callback` / `callback+halo`）和该侧的边界带开关；
 * `dif_bound`、`dif_axis_map`：保留原码六标志与 JAX 轴映射（平板仍是 `(0,2,1)`）；
+  但**执行用的带不再读这六个标志**，改由各面的 kind 派生（见 7.2）；
 * `metrics`、`coords`：只有算例真的提供时才引用；没有就保持 `None`，不伪造。
 
 描述现在由 `boundary.build_execution` 转成唯一一份 `BoundaryExecution`，`main.py`
@@ -427,16 +430,48 @@ LAP 鬼胞坐标并计算 CD6 度量。
 * 校验 `case["bcs"]`、六侧 `FaceBoundary` 与 `bc_apply` 是否同源；
 * 拒绝“有回调但无专属标记”“多个专属标记同时存在”“固定六侧与 bcs 矛盾”
   “通用 WALL 不在计算 j 方向”等组合，未知组合直接报错，不静默改成出流；
-* 返回 `BoundaryExecution(mode, bcs, callback, faces, ...)`，`mode` 为
+* 返回 `BoundaryExecution(mode, bcs, callback, faces, inflow, band, ...)`，`mode` 为
   `generic` / `channel` / `plate` / `custom`。
 
-**新增通用边界**：在 `boundary.py` 的 `_GENERIC_AXIS_FILLERS` 注册填充函数并加入
-`GENERIC_KINDS`，再让 `mesh_data._generic_faces` 能描述对应语义。通用 WALL 目前仅
-支持计算 j 方向；通用 `FARFIELD` 只写被标记的那个面，把该侧边界第一层内点和
-`2*LAP` 鬼层写成同一个来流状态，粘性 Ev 鬼层按零梯度复制。执行顺序由
-`BoundaryExecution.prepare(q)` 统一：先按六侧 `executor` 填常规 halo，再调用特殊回调；
-特殊回调最后写入的鬼胞不会被常规填充再次覆盖。`filtering.py` 的滤波尚未接入
-`FARFIELD`，`main.build_rhs` 在启用 `--filter` 时对远场算例直接报错。
+### 7.2.1 三层分工：鬼层、边界点、特殊回调
+
+`BoundaryExecution.prepare(q)` 固定三段，后段可以覆盖前段，但职责不交叉：
+
+| 层 | 谁负责 | 做什么 |
+| --- | --- | --- |
+| 1. 鬼层 | `fill_faces` | 周期面复制对侧内区；INFLOW **保持**（等第 2 层写）；其余（WALL/OUTFLOW/FARFIELD 及所有非周期面）**清零** |
+| 2. 边界点 | `write_faces` | INFLOW 写边界点 + 四层鬼层（同一剖面）；FARFIELD 只写最后一层内点；WALL/OUTFLOW/PERIODIC 不赋值 |
+| 3. 特殊回调 | 算例 `bc_apply` | 只在常规赋值之后改局部区域（加射流、改壁面点…），继承该面的 band，自己不设 band |
+
+口径依据：原码 `OCFD_bc()` 只在六个块边界面调 `pri_to_cons_kernel`（单层平面），
+`commen_kernel.cu` 注明 "eyes on cells WITHOUT LAPs"，即鬼胞没人赋值就是 0；唯一的例外
+是入口 `do_u2d_inlet_kernel`，它用 `for(i=0;i<=LAP;i++)` 把入口平面 + 4 层鬼一起写，
+所以 INFLOW 单列一支。
+
+没有算例回调的通用 WALL（`executor="halo"`，poiseuille 这类验证算例）仍按原码镜像鬼层，
+它没有别的途径写壁面；带回调的壁面（plate/channel）鬼层清零、壁面点由回调写。
+
+### 7.2.2 边界带由 kind 派生
+
+`dif_band(kind) = kind not in (PERIODIC, INFLOW)`，六侧凑成原码 `DIF_BOUND` 的
+`(x-,x+,y-,y+,z-,z+)` 次序，经 `dif_axis_map` 折成 `(lo_i,hi_i,lo_j,hi_j,lo_k,hi_k)`。
+理由是两者绑定的：非周期面鬼层清零，中心差分会跨边界读到 0 产生假梯度，必须开单侧带；
+周期面鬼层是对侧有效值，开带反而降精度。算例字典里的 `dif_bound` 只留档，执行不再读它。
+（注意：这比原码 in 文件更严格——原码只对 in 文件里标 1 的面开带，例如平板的 `0 0 0 0 1 0`
+只开下壁；本实现按上面的绑定关系给所有非周期面开带。）
+
+### 7.2.3 INFLOW 剖面
+
+`write_faces` 对 INFLOW 面写“边界点 + 四层鬼层”，剖面来源按优先级：
+
+1. `case["inflow"]`：用户给的剖面（形状 `(5, nk, nj)`），平板可由
+   `--inflow-profile` / `input.json` 的 `case.inflow_profile` 指定 OCFD 1D 文件
+   （`inflow.py`：首行表头，其后 `y rho u v T`，`w≡0`，与格点逐点对应、不插值，
+   点数不等于 `nj` 直接 `SetupError`）；
+2. 没有剖面文件时回落到 `case["farfield"]` 自由来流常数；
+3. 两者都没有（旧式特殊入口）时不赋值，整段交给算例回调。
+
+`filtering.py` 的滤波尚未接入 `FARFIELD`，`main.build_rhs` 在启用 `--filter` 时对远场算例直接报错。
 
 **新增 case 特殊边界**：case 侧显式提供一个对象，并同时把它的 `apply` 设为
 `case["bc_apply"]`：
@@ -454,12 +489,14 @@ case["bc_apply"] = special.apply
 ```
 
 约束：回调面所在轴的轴级 `bcs` 必须是 `INFLOW`/`PLATE`（no-op 占位）；同轴另一侧
-可设为 `OUTFLOW` halo，常规填充先填两侧，特殊回调最后覆盖它接管的鬼胞；粘性
-通量阶段按面填对应出流侧的 Ev 鬼层，特殊侧的 Ev 暂时保留原值。没有回调的轴只能是
-`PERIODIC`/`OUTFLOW`/`WALL`/`FARFIELD`，其 halo 面的 `kind` 必须等于轴级 `bcs`；
-`WALL` 仍只允许计算 j 方向。`special_boundary` 不能与 `plate`/`channel_bc` 同时出现。
-当前这是**显式导入**入口，不做动态注册；回调只允许数组运算，不得把 I/O 放进 JIT。
-槽道三点压力外推和平板两点外推在 `boundary.py` 中分别保留原有公式。
+可设为 `OUTFLOW` halo。常规层只写该面 kind 允许的东西（INFLOW 写边界点+鬼层，其余
+不赋值，鬼层一律先清零），特殊回调在之后覆盖它接管的局部区域（例如在远场首层加激波）。
+清鬼层由 `fill_faces` 处理，回调不需要也不应该自己清；粘性 Ev 鬼层按面填（周期复制、
+其余清零）。没有回调的轴只能是 `PERIODIC`/`OUTFLOW`/`WALL`/`FARFIELD`，其 halo 面的
+`kind` 必须等于轴级 `bcs`；`WALL` 仍只允许计算 j 方向。`special_boundary` 不能与
+`plate`/`channel_bc` 同时出现。当前这是**显式导入**入口，不做动态注册；回调只允许
+数组运算，不得把 I/O 放进 JIT。槽道三点压力外推和平板两点外推在 `boundary.py` 中
+分别保留原有公式。
 
 ***
 
@@ -607,7 +644,8 @@ python -m opencfd_jax.src.main --case plate `
 | `viscous.py`       | 物性、CD6/CD8、单侧导数、应力与粘性通量散度         |
 | `mesh_cgns.py`     | CGNS/HDF5 单块读取、执行子集校验、BlockMesh 适配与度量（第 4 步） |
 | `channel.py`       | 内部槽道壁面/体积力库；不再是 CLI 算例               |
-| `plate.py`         | 平板入口、出口、下壁和顶部自由来流条件               |
+| `plate.py`         | 平板形态封装：自由来流常数、入口剖面形状、`apply` = 只写壁面点 |
+| `inflow.py`        | OCFD 1D 入口剖面文件读取（`y rho u v T`，`w≡0`，不插值） |
 | `mesh.py`          | 原码网格 / 场读取、坐标补层、曲线网格度量（内部库）         |
 | `mesh_data.py`     | 单块网格与六侧边界的只读描述（第 1 步）             |
 | `infile.py`        | 原码 in 文件键值解析（内部库；无正式入口）              |

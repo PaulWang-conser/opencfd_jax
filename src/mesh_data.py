@@ -149,21 +149,21 @@ def _as_ints(raw, name, length=None):
 
 
 def _dif_band(dif_bound, axis, side, dif_axis_map):
-    """按原码六标志（i-/i+/j-/j+/k-/k+）和方向映射取该侧开关。"""
-    if dif_bound is None:
-        return False
-    original_axis = dif_axis_map[axis]
-    index = 2 * original_axis + (1 if side == "+" else 0)
-    return bool(dif_bound[index])
+    """边界带由 kind 派生：非周期且非 INFLOW 才开（见 boundary.dif_band）。
+
+    保留 ``dif_bound`` 参数只为兼容旧调用；算例不再手写 DIF_BOUND。
+    """
+    del dif_bound, axis, side, dif_axis_map
+    return None
 
 
 def _face(side, kind, executor, dif_bound, dif_axis_map, detail="",
           thermal=None, params=None):
-    """构造一个面侧描述，统一推导 axis 与 dif_band。"""
+    """构造一个面侧描述，统一推导 axis 与 dif_band（由 kind 决定）。"""
     side = normalize_side(side)
     axis = side_axis(side)
     return FaceBoundary(side=side, axis=axis, kind=kind, executor=executor,
-                        dif_band=_dif_band(dif_bound, axis, side[1], dif_axis_map),
+                        dif_band=kind not in (PERIODIC, INFLOW),
                         detail=detail, thermal=thermal,
                         params={} if params is None else params)
 
@@ -174,17 +174,23 @@ def _thermal_for_tw(tw):
 
 
 def _plate_faces(dif_bound, dif_axis_map, Tw=1.0):
-    """平板：i 两侧不对称，j 下壁/上远场，k 周期；全部由 plate.apply 写状态。"""
+    """平板：i 两侧不对称，j 下壁/上远场，k 周期。
+
+    鬼层由 ``fill_faces`` 统一处理（非周期清零），边界点按面写：入口剖面交给
+    通用 INFLOW（边界点 + 四层鬼层），下壁由 ``plate.apply`` 写壁面点，顶部由
+    通用 FARFIELD 写单点，出口不赋值（方式 A：单侧带 + 零鬼层）。
+    """
     return (
         _face("i-", INFLOW, _EXEC_CALLBACK, dif_bound, dif_axis_map,
-              "入口 Dirichlet 剖面（plate.apply）", params={"profile": "inflow"}),
+              "入口剖面：边界点 + 四层鬼层（通用 INFLOW）",
+              params={"profile": "inflow"}),
         _face("i+", OUTFLOW, _EXEC_CALLBACK, dif_bound, dif_axis_map,
-              "出口零梯度鬼层（plate.apply）"),
+              "出口不赋值：鬼层清零 + 单侧带（方式 A）"),
         _face("j-", WALL, _EXEC_CALLBACK, dif_bound, dif_axis_map,
-              "无滑移等温壁 + 镜像鬼胞（plate.apply）",
+              "无滑移等温壁：只写壁面点，鬼层清零（plate.apply）",
               thermal="isothermal", params={"Tw": float(Tw)}),
         _face("j+", FARFIELD, _EXEC_CALLBACK, dif_bound, dif_axis_map,
-              "顶部自由来流 Dirichlet（plate.apply）"),
+              "顶部远场：只写最后一层内点（通用 FARFIELD）"),
         _face("k-", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
         _face("k+", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
     )
@@ -201,10 +207,10 @@ def _channel_faces(channel_bc, dif_bound, dif_axis_map):
         _face("i-", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
         _face("i+", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
         _face("j-", WALL, _EXEC_CALLBACK_HALO, dif_bound, dif_axis_map,
-              f"下壁无滑移{_thermal_for_tw(Tw_bottom)}壁（ChannelBC.apply + fill_wall_j）",
+              f"下壁无滑移{_thermal_for_tw(Tw_bottom)}壁：只写壁面层，鬼层清零（ChannelBC.apply）",
               thermal=_thermal_for_tw(Tw_bottom), params={"Tw": Tw_bottom}),
         _face("j+", WALL, _EXEC_CALLBACK_HALO, dif_bound, dif_axis_map,
-              f"上壁无滑移{_thermal_for_tw(Tw_top)}壁（ChannelBC.apply + fill_wall_j）",
+              f"上壁无滑移{_thermal_for_tw(Tw_top)}壁：只写壁面层，鬼层清零（ChannelBC.apply）",
               thermal=_thermal_for_tw(Tw_top), params={"Tw": Tw_top}),
         _face("k-", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),
         _face("k+", PERIODIC, _EXEC_HALO, dif_bound, dif_axis_map, "周期"),

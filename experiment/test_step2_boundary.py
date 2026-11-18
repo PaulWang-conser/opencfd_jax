@@ -193,53 +193,50 @@ def test_channel_two_wall_temperatures_and_one_adiabatic_side():
 # ---------------------------------------------------------------- U1 平板边界
 
 def test_plate_inlet_outlet_wall_far_and_corners():
-    """U1：平板入口物理点、出口鬼层、下壁两点外推、顶部远场与角点顺序。"""
+    """U1：入口写剖面+鬼层、出口鬼层清零、下壁两点外推、顶部远场单点。"""
     case = _plate_case()
     grid, phys = case["grid"], case["params"]
     ni, nj = grid.ni, grid.nj
-    far = plate.far_state(rho=1.0, u=1.0, T=1.0, Cv=phys.Cv)
+    execution = boundary.build_execution(case)
     q = _cons_nonuniform(grid, phys)
-    q = q.at[:, LAP:LAP + grid.nk, LAP:LAP + nj, :LAP + 1].set(
-        case["plate"]["inflow"][:, :, :, None])
-    q = q.at[:, :, :, LAP + ni:].set(q[:, :, :, LAP + ni - 1:LAP + ni])
-    out = np.asarray(plate.apply(q, grid, phys, inflow=case["plate"]["inflow"],
-                                 far=far, Tw=1.0))
+    out = np.asarray(execution.prepare(q))
     out_q = np.asarray(q)
     nj_in = LAP + nj
+    kz, ix_in = slice(LAP, LAP + grid.nk), slice(LAP, LAP + ni)
 
-    # 入口：x- 鬼层 + 第一个内区物理点 = 入口剖面；y 两端随后分别被
+    # 入口：x- 四层鬼层 + 第一个内区物理点 = 入口剖面；y 两端随后分别被
     # 下壁无滑移/顶部远场覆盖，故比较内部物理行。
     np.testing.assert_array_equal(
         out[:, LAP:LAP + grid.nk, LAP + 1:nj_in - 1, :LAP + 1],
         np.broadcast_to(np.asarray(case["plate"]["inflow"])[:, :, 1:-1, None],
                         (5, grid.nk, nj - 2, LAP + 1)))
-    # 出口：四个鬼层复制最后一个内点；y 两端随后分别被壁面/顶部覆盖。
-    outlet = out[:, LAP:LAP + grid.nk, LAP + 1:nj_in - 1, LAP + ni:]
-    last = out_q[:, LAP:LAP + grid.nk, LAP + 1:nj_in - 1,
-                LAP + ni - 1:LAP + ni]
-    np.testing.assert_array_equal(
-        outlet, np.broadcast_to(last, outlet.shape))
+    # 出口：方式 A，不开左行点、鬼层由 halo 清零。
+    np.testing.assert_array_equal(out[:, :, :, LAP + ni:], 0.0)
 
-    # 下壁：两点压力外推 + 无滑移 + rhoE=rho Cv Tw
-    rho, _, T = channel.primitive(q, phys)
+    # 下壁：两点压力外推 + 无滑移 + rhoE=rho Cv Tw（只在内区窗口内比较）
+    # 壁面回调在入口写完之后执行，故外推基线要用“已写入口”的状态。
+    q_in = boundary.write_faces(boundary.fill_faces(q, execution.faces, grid),
+                                execution.faces, grid,
+                                inflow=execution.inflow, farfield=execution.farfield)
+    rho, _, T = channel.primitive(q_in, phys)
     rho_np, T_np = np.asarray(rho), np.asarray(T)
     rho_w = (4.0 * rho_np[:, LAP + 1, :] * T_np[:, LAP + 1, :]
              - rho_np[:, LAP + 2, :] * T_np[:, LAP + 2, :]) / 3.0
-    np.testing.assert_allclose(out[0, :, LAP, :], rho_w, rtol=0, atol=1e-13)
-    np.testing.assert_array_equal(out[1:4, :, LAP, :], 0.0)
-    np.testing.assert_allclose(out[4, :, LAP, :], rho_w * phys.Cv, rtol=0, atol=1e-13)
+    np.testing.assert_allclose(out[0, kz, LAP, ix_in], rho_w[kz, ix_in],
+                               rtol=0, atol=1e-13)
+    np.testing.assert_array_equal(out[1:4, kz, LAP, ix_in], 0.0)
+    np.testing.assert_allclose(out[4, kz, LAP, ix_in],
+                               rho_w[kz, ix_in] * phys.Cv, rtol=0, atol=1e-13)
 
-    # 顶部：末内点 + 四层鬼胞全部写远场常数；角点也归远场
-    top = out[:, :, nj_in - 1:, :]
+    # 顶部：只写最后一层内点（内区横向窗口），四层鬼胞保持 0。
     np.testing.assert_array_equal(
-        top, np.broadcast_to(np.asarray(far).reshape(5, 1, 1, 1), top.shape))
+        out[:, kz, nj_in - 1, ix_in],
+        np.broadcast_to(np.asarray(execution.farfield).reshape(5, 1, 1),
+                        (5, grid.nk, ni)))
+    np.testing.assert_array_equal(out[:, :, nj_in:, :], 0.0)
 
-    # 下壁角点：先写入口/出口，再做 y 镜像，因此 x 鬼层处也遵守镜像符号。
-    for i in range(LAP):
-        src = 2 * LAP - i
-        np.testing.assert_array_equal(out[0, :, i, :], out[0, :, src, :])
-        np.testing.assert_array_equal(out[4, :, i, :], out[4, :, src, :])
-        np.testing.assert_array_equal(out[1:4, :, i, :], -out[1:4, :, src, :])
+    # 壁面鬼层不再镜像，整体为 0。
+    np.testing.assert_array_equal(out[:, :, :LAP, :], 0.0)
 
 
 # ---------------------------------------------------------------- U1 Ev / 滤波
@@ -546,7 +543,8 @@ def test_special_inlet_and_outflow_share_axis():
     q = case["cons0"].at[..., LAP + case["grid"].ni - 1].set(0.75)
     actual = execution.apply(q)
     np.testing.assert_array_equal(np.asarray(actual[0, ..., :LAP]), 0.25)
-    np.testing.assert_array_equal(np.asarray(actual[..., LAP + case["grid"].ni:]), 0.75)
+    # OUTFLOW 走方式 A：不复制末点，鬼层被 halo 清零。
+    np.testing.assert_array_equal(np.asarray(actual[..., LAP + case["grid"].ni:]), 0.0)
     args = argparse.Namespace(case="sod", scheme="UP7", vis_order="CD6",
                               viscous=False, weno_tv=False)
     got = main.build_rhs(case, args)(case["cons0"])

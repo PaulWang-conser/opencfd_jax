@@ -245,7 +245,7 @@ def build_case(args):
         # 底板无滑移等温壁，x 上侧零梯度，z 周期。边界层从入口（前缘）自然发展。
         # 无量纲口径：ρ∞=T∞=U∞=1 ⇒ μ(T=1)=1/Re（与 Ref_T 无关）、ν=1/Re、
         # Re_x = x·Re、M∞ = U∞/sqrt(γ R T) = Ama。验收基准是 blasius.py。
-        from . import blasius, channel, plate
+        from . import blasius, channel, inflow, plate
         ni = int(_dimension(args, "ni", 256))
         nj = int(_dimension(args, "nj", 64))
         x0 = float(getattr(args, "plate_x0", 0.1))
@@ -263,11 +263,21 @@ def build_case(args):
         zeros = np.zeros((nk, nj, ni))
         cons = channel.cons_from_primitive((rho0 * ones, U * ones, zeros, zeros,
                                            T0 * ones), grid, params)
-        # 入口与顶面共用同一个远场状态（用户要求的简化口径）
-        inflow = plate.inflow_from_profile(
-            rho0 * np.ones((nk, nj)), U * np.ones((nk, nj)),
-            np.zeros((nk, nj)), np.zeros((nk, nj)),
-            T0 * np.ones((nk, nj)), params.Cv)
+        # 壁面温度：由 input.json 的 physics.tw 给；缺省与来流同温（绝热壁极限）。
+        tw = getattr(args, "tw", None)
+        tw = T0 if tw is None else float(tw)
+        # 入口：给了剖面文件就按剖面（OCFD 1D 格式，与格点逐点对应、不插值），
+        # 空着就是均匀来流常数；两种口径都只依赖壁法向 y。
+        prof_path = getattr(args, "inflow_profile", None)
+        if prof_path:
+            prof = jnp.asarray(inflow.read_inflow_profile(prof_path, nj,
+                                                          params.Cv))
+            inflow_state = jnp.broadcast_to(prof[:, None, :], (5, nk, nj))
+        else:
+            inflow_state = plate.inflow_from_profile(
+                rho0 * np.ones((nk, nj)), U * np.ones((nk, nj)),
+                np.zeros((nk, nj)), np.zeros((nk, nj)),
+                T0 * np.ones((nk, nj)), params.Cv)
         far = plate.far_state(rho=rho0, u=U, T=T0, Cv=params.Cv)
         raw = getattr(args, "plate_dif_bound", None)
         dif_bound = (0, 0, 0, 0, 0, 0)
@@ -277,10 +287,11 @@ def build_case(args):
                     dxs=(dx, dy, dx), axes=(0, 1), params=params,
                     forcing=None, gamma=params.gamma,
                     bc_apply=lambda q: plate.apply(q, grid, params,
-                                                   inflow=inflow, far=far, Tw=T0),
+                                                   far=far, Tw=tw),
+                    inflow=inflow_state,
                     metrics=None, dif_bound=dif_bound, dif_axis_map=(0, 2, 1),
                     plate=dict(x0=x0, x1=x1, H=H, dx=dx, dy=dy, xc=xc, yc=yc,
-                               U=U, nu=nu, inflow=inflow, far=far, Tw=T0),
+                               U=U, nu=nu, inflow=inflow_state, far=far, Tw=tw),
                     farfield=far)
 
     raise ValueError(f"unknown case: {args.case}")
