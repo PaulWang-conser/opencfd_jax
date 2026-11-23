@@ -57,7 +57,8 @@ def _du_from_faces(F):
     return -(F[..., 1:] - F[..., :-1])
 
 
-def up7_rhs_along_last_axis(fp, fm, h=1.0, bound=None):
+def up7_rhs_along_last_axis(fp, fm, h=1.0, bound=None, band_eps=None,
+                            stable=False):
     """单方向 UP7 通量差分。
 
     fp/fm: (..., nx+2*LAP) 已填好鬼胞的正/负分裂通量场。
@@ -65,12 +66,15 @@ def up7_rhs_along_last_axis(fp, fm, h=1.0, bound=None):
     （符号与 1/h 因子对应 OCFD_Schemes.cu:306 的
     -Ajac*(tmp_r-tmp_l)/hx_d，直角均匀网格 Ajac=1）。
     bound: None 或 (lo, hi)，两侧是否按 DIF_BOUND 走原码边界带。
+    band_eps: 通量单位下的边界带 epsilon（CGNS 口径按方向除以 s²，见
+    ``_weno7_face_P``）；None 时用模块常量。
     返回 (..., nx)。
     """
     Fp = _face_flux_along_last_axis(fp, UP7_P_COEFFS, UP7_P_OFF_LO)
     Fm = _face_flux_along_last_axis(fm, UP7_M_COEFFS, UP7_M_OFF_LO)
     if bound is not None and (bound[0] or bound[1]):
-        Fp, Fm = flux_band_faces(Fp, Fm, fp, fm, lo=bool(bound[0]), hi=bool(bound[1]))
+        Fp, Fm = flux_band_faces(Fp, Fm, fp, fm, lo=bool(bound[0]), hi=bool(bound[1]),
+                                 band_eps=band_eps, stable=stable)
     return _du_from_faces(Fp + Fm) / h
 
 
@@ -304,8 +308,14 @@ def _nnd2_face_P(g):
 _WENO5_EPS = 1e-6
 
 
-def _weno5_face_P(g):
-    """用五点和 WENO-Z 非线性权重构正通量的末轴界面值。"""
+def _weno5_face_P(g, eps=None, stable=False):
+    """用五点和 WENO-Z 非线性权重构正通量的末轴界面值。
+
+    eps: 通量单位下的 epsilon 底数（None 时读模块常量）；CGNS 口径按方向
+    除以 s²（见 ``_weno7_face_P`` 的说明）。
+    stable: FP32 用——分子分母同除 min(e12+S)^4（代数等价），防
+    (ε/s²)⁴ 在平坦模板下溢、大通量模板溢出。
+    """
     s0, s1, s2, s3, s4 = _slice8(g, -2)[:5]
     S0 = 13.0 * (s2 - 2.0 * s3 + s4) ** 2 + 3.0 * (3.0 * s2 - 4.0 * s3 + s4) ** 2
     S1 = 13.0 * (s1 - 2.0 * s2 + s3) ** 2 + 3.0 * (s1 - s3) ** 2
@@ -313,10 +323,18 @@ def _weno5_face_P(g):
     q03 = 2.0 * s2 + 5.0 * s3 - s4
     q13 = -s1 + 5.0 * s2 + 2.0 * s3
     q23 = 2.0 * s0 - 7.0 * s1 + 11.0 * s2
-    e12 = 12.0 * _WENO5_EPS
-    a0 = 3.0 * (e12 + S1) ** 2 * (e12 + S2) ** 2
-    a1 = 6.0 * (e12 + S0) ** 2 * (e12 + S2) ** 2
-    a2 = (e12 + S0) ** 2 * (e12 + S1) ** 2
+    e12 = 12.0 * (_WENO5_EPS if eps is None else eps)
+    if stable:
+        # 同 WENO7：d_i·(m/b_i)²（FP32 安全，见 _weno7_face_P）
+        m = jnp.minimum(jnp.minimum(e12 + S0, e12 + S1), e12 + S2)
+        a0 = 3.0 * (m / (e12 + S0)) ** 2
+        a1 = 6.0 * (m / (e12 + S1)) ** 2
+        a2 = (m / (e12 + S2)) ** 2
+    else:
+        # FP64 保持旧运算树（(e12+S)**2 原式；改写乘法结合会移舍入位置）
+        a0 = 3.0 * (e12 + S1) ** 2 * (e12 + S2) ** 2
+        a1 = 6.0 * (e12 + S0) ** 2 * (e12 + S2) ** 2
+        a2 = (e12 + S0) ** 2 * (e12 + S1) ** 2
     return (a0 * q03 + a1 * q13 + a2 * q23) / (6.0 * (a0 + a1 + a2))
 
 
@@ -324,8 +342,20 @@ def _weno5_face_P(g):
 _WENO7_EPS = 3.456e-4
 
 
-def _weno7_face_P(g):
-    """用七点、四候选模板和 WENO-Z 权重构正通量的末轴界面值。"""
+def _weno7_face_P(g, eps=None, stable=False):
+    """用七点、四候选模板和 WENO-Z 权重构正通量的末轴界面值。
+
+    eps: 该方向的 epsilon（通量单位下的值），None 时读模块常量
+    （运行时读取，兼容诊断脚本改写 ``schemes._WENO7_EPS``）。
+    CGNS 单块口径下 JAX 分裂通量 = OCFD 通量 / s（s 为另两轴 (N-1)
+    乘积），β 是通量二次式，故需传 eps = _WENO7_EPS / s²
+    （solver._rhs_along_axis 的 flux_scale）。
+    stable: FP32 用——权重分子分母同除 min(ε+S)^6（代数等价），
+    避免大通量模板权重乘积溢出（真实 plate 出口模板曾达 1e88）
+    与平坦模板 ε⁶ 下溢。FP64 缺省 False，运算路径逐位不变。
+    """
+    if eps is None:
+        eps = _WENO7_EPS
     s0, s1, s2, s3, s4, s5, s6 = _slice8(g, -3)[:7]
     t0 = -2.0 * s0 + 9.0 * s1 - 18.0 * s2 + 11.0 * s3
     t1 = -6.0 * s0 + 24.0 * s1 - 30.0 * s2 + 12.0 * s3
@@ -345,11 +375,24 @@ def _weno7_face_P(g):
     S3 = 960.0 * t0 ** 2 + 1040.0 * t1 ** 2 + 1043.0 * t2 ** 2 + 80.0 * t0 * t2
     # 原码 OCFD_Schemes.cu:643-646 直接写 (3.456e-4 + S)，加性项就是 epsilon 本身，
     # 不能再平方（平方后 1.19e-7 与原码差 2900 倍，会在通量很小的贴壁带放大成 1e-4 量级）。
-    e = _WENO7_EPS
-    a0 = (e + S1) * (e + S1) * (e + S2) * (e + S2) * (e + S3) * (e + S3)
-    a1 = 12.0 * (e + S0) * (e + S0) * (e + S2) * (e + S2) * (e + S3) * (e + S3)
-    a2 = 18.0 * (e + S0) * (e + S0) * (e + S1) * (e + S1) * (e + S3) * (e + S3)
-    a3 = 4.0 * (e + S0) * (e + S0) * (e + S1) * (e + S1) * (e + S2) * (e + S2)
+    e = eps
+    b0, b1, b2, b3 = e + S0, e + S1, e + S2, e + S3
+    if stable:
+        # FP32 数值安全：分子分母同乘 m²（代数恒等）⇒ a_i → d_i·(m/b_i)²，
+        # m = min(b)。小量除大量：m/b_i ≤ 1 恒不上溢（1/b_i² 形式在 s 巨大
+        # 时 1/e² 可超 FP32 上限）；b_i 悬殊时该项趋零是良性（该候选权重
+        # 本应≈0）；分母 Σ ≥ min(d) 恒正——argmin(b) 的候选贡献
+        # d·(m/b_min)² = d·1（最小 b 可落在权重系数最小的候选上）。
+        m = jnp.minimum(jnp.minimum(b0, b1), jnp.minimum(b2, b3))
+        a0 = (m / b0) ** 2
+        a1 = 12.0 * (m / b1) ** 2
+        a2 = 18.0 * (m / b2) ** 2
+        a3 = 4.0 * (m / b3) ** 2
+    else:
+        a0 = b1 * b1 * b2 * b2 * b3 * b3
+        a1 = 12.0 * b0 * b0 * b2 * b2 * b3 * b3
+        a2 = 18.0 * b0 * b0 * b1 * b1 * b3 * b3
+        a3 = 4.0 * b0 * b0 * b1 * b1 * b2 * b2
     am = a0 + a1 + a2 + a3
     p = ((-3.0 * s0 + 13.0 * s1 - 23.0 * s2 + 25.0 * s3) * a0
          + (s1 - 5.0 * s2 + 13.0 * s3 + 3.0 * s4) * a1
@@ -359,8 +402,11 @@ def _weno7_face_P(g):
 
 
 # ---- OMP6（307-309，OCFD_Schemes.cu:937-1002；P off -3..4，8 点）----
-def _omp6_face_P(g, omp6_flag):
-    """按指定 OMP6 参数档重构正通量界面值，并在检测到外插极值时施加限制器。"""
+def _omp6_face_P(g, omp6_flag, thr=None):
+    """按指定 OMP6 参数档重构正通量界面值，并在检测到外插极值时施加限制器。
+
+    thr: 极值判据阈值（通量平方单位；CGNS 口径按方向除以 s²，2026-11-23 补）。
+    """
     s = _slice8(g, -3)
     s0, s1, s2, s3, s4, s5, s6, s7 = s
     if omp6_flag == 1:
@@ -381,7 +427,7 @@ def _omp6_face_P(g, omp6_flag):
               - 60.0 * m * s0) / 60.0
     m_nnd = s3 + minmod2(s4 - s3, s3 - s2)
     # 极值点检测：限制器仅在 mid_nf 落在 s3 与 NND 值之外时启用
-    cond = (mid_nf - s3) * (mid_nf - m_nnd) >= 1.0e-10
+    cond = (mid_nf - s3) * (mid_nf - m_nnd) >= (1.0e-10 if thr is None else thr)
     m_ = s2 + s4 - 2.0 * s3
     n_ = s3 + s5 - 2.0 * s4
     tmp_ = 4.0 * m_ - n_
@@ -401,7 +447,7 @@ def _omp6_face_P(g, omp6_flag):
     return jnp.where(cond, mid_limited, mid_nf)
 
 
-def _omp6_face_M(g, omp6_flag):
+def _omp6_face_M(g, omp6_flag, thr=None):
     """OMP6 M 面重构（OCFD_Schemes.cu:1028-1093，模板 off -4..3）。
 
     不能用翻转复用 P：minmod4 与 fmin/fmax 夹逼链对翻转不对称。
@@ -429,7 +475,7 @@ def _omp6_face_M(g, omp6_flag):
               + (1.0 + 360.0 * m + 60.0 * mid) * s6
               - 60.0 * m * s7) / 60.0
     m_nnd = s4 + minmod2(s3 - s4, s4 - s5)
-    cond = (mid_nf - s4) * (mid_nf - m_nnd) >= 1.0e-10
+    cond = (mid_nf - s4) * (mid_nf - m_nnd) >= (1.0e-10 if thr is None else thr)
     m_ = s5 + s3 - 2.0 * s4
     n_ = s4 + s2 - 2.0 * s3
     tmp_ = 4.0 * m_ - n_
@@ -470,13 +516,17 @@ def _band_S_lift(f0, f1, f2):
 
 def flux_band_faces(Fp, Fm, fp, fm, lo=True, hi=True,
                     p_template=(-3, 4), m_template=(-4, 3),
-                    m_boundary="m"):
+                    m_boundary="m", band_eps=None, stable=False):
     """按 OCFD 的模板范围和边界宏覆盖 P/M 面值。
 
     模板是 CUDA 内核传给边界宏的 (ka1, kb1)，相对该内核节点；
     P 节点为面左侧，M 节点为面右侧。m_boundary="p" 对应 WENO7
     的 M 内核调用 P 宏。新增格式应声明自己的两个模板和宏类型。
     当前边界宏只定义到 P 的 coords=3、M 的 coords=3 及相应上界。
+
+    band_eps: 通量单位下的 epsilon 底数（内部乘 12），None 时读模块
+    常量；与主模板同理，CGNS 单块口径下需按方向除以 s²
+    （见 _weno7_face_P 的说明）。
     """
     if m_boundary not in ("p", "m"):
         raise ValueError("m_boundary 必须是 p 或 m")
@@ -490,7 +540,7 @@ def flux_band_faces(Fp, Fm, fp, fm, lo=True, hi=True,
     n = fp.shape[-1] - 2 * LAP
     if n < 6:
         raise ValueError("启用面通量边界带至少需要 6 个节点")
-    e = 12.0 * _BAND_EP
+    e = 12.0 * (_BAND_EP if band_eps is None else band_eps)
 
     def reconstruct(g, base, kind, branch):
         # stencil[-ka-2] 指向 base-2；实际只取各分支用到的值。
@@ -525,14 +575,36 @@ def flux_band_faces(Fp, Fm, fp, fm, lo=True, hi=True,
         if kind == "m" and branch == "lo0":
             return q2 / 6.0
         if (kind == "p" and branch == "lo2") or (kind == "m" and branch == "hi3"):
-            w0, w1 = 3.0 / (e + s0)**2, 6.0 / (e + s1)**2
+            # 双候选：FP32 下 1/(e+s)² 在平坦+大 s 时溢出（1/e² 可超上限，
+            # 终审 P1 实测 P 面 2/15 非有限）——stable 时同样 d_i·(m/b_i)²
+            b0, b1 = e + s0, e + s1
+            if stable:
+                m = jnp.minimum(b0, b1)
+                w0, w1 = 3.0 * (m / b0) ** 2, 6.0 * (m / b1) ** 2
+            else:
+                w0, w1 = 3.0 / b0**2, 6.0 / b1**2
             return (w0*q0 + w1*q1) / (6.0*(w0 + w1))
         if (kind == "p" and branch == "hi2") or (kind == "m" and branch == "lo1"):
-            w1, w2 = 6.0 / (e + s1)**2, 1.0 / (e + s2)**2
+            b1, b2 = e + s1, e + s2
+            if stable:
+                m = jnp.minimum(b1, b2)
+                w1, w2 = 6.0 * (m / b1) ** 2, (m / b2) ** 2
+            else:
+                w1, w2 = 6.0 / b1**2, 1.0 / b2**2
             return (w1*q1 + w2*q2) / (6.0*(w1 + w2))
-        w0 = 3.0 * (e + s1)**2 * (e + s2)**2
-        w1 = 6.0 * (e + s0)**2 * (e + s2)**2
-        w2 = (e + s0)**2 * (e + s1)**2
+        # 完整三候选：FP32 下 (e+s)^4 在大通量模板溢出（~1e42 > 上限）、
+        # 平坦模板下溢——分子分母同除 min(e+s)^4（代数等价，stable 时）。
+        if stable:
+            # 同 WENO7：d_i·(m/b_i)²（FP32 安全，见 _weno7_face_P）
+            m = jnp.minimum(jnp.minimum(e + s0, e + s1), e + s2)
+            w0 = 3.0 * (m / (e + s0)) ** 2
+            w1 = 6.0 * (m / (e + s1)) ** 2
+            w2 = (m / (e + s2)) ** 2
+        else:
+            # FP64 保持旧运算树（(e+s)**2 原式）
+            w0 = 3.0 * (e + s1) ** 2 * (e + s2) ** 2
+            w1 = 6.0 * (e + s0) ** 2 * (e + s2) ** 2
+            w2 = (e + s0) ** 2 * (e + s1) ** 2
         return (w0*q0 + w1*q1 + w2*q2) / (6.0*(w0 + w1 + w2))
 
     def apply(faces, g, template, kind, node_shift):
@@ -568,30 +640,48 @@ def _rhs_from_faces(face):
 # ---- 格式注册表：scheme 名 → (face_P, face_M) ----
 def make_flux_rhs(face_P, face_M, p_template, m_template, m_boundary="m"):
     """注册自定义面重构时，声明 OCFD P/M 模板及 M 所用边界宏。"""
-    def rhs_along_last_axis(fp, fm, h=1.0, bound=None, **kwargs):
-        """重构 P/M 面通量，按需覆盖边界带，并返回除以步长后的通量散度。"""
-        Fp = face_P(fp, **kwargs)
-        Fm = face_M(fm, **kwargs)
+    def rhs_along_last_axis(fp, fm, h=1.0, bound=None, eps=None, band_eps=None,
+                            thr=None, stable=False):
+        """重构 P/M 面通量，按需覆盖边界带，并返回除以步长后的通量散度。
+
+        eps/band_eps/thr: 通量单位下的主模板 epsilon、边界带 epsilon 和
+        限制器阈值（已含 s² 换算）；各 face 只声明自己认识的形参
+        （WENO5/WENO7 收 eps/stable，OMP6 收 thr），不传即维持原常量。
+        stable: FP32 用（权重归一化，见 _weno7_face_P）。
+        """
+        face_kwargs = {} if eps is None else {"eps": eps}
+        if thr is not None:
+            face_kwargs["thr"] = thr
+        if stable:
+            face_kwargs["stable"] = True
+        Fp = face_P(fp, **face_kwargs)
+        Fm = face_M(fm, **face_kwargs)
         if bound is not None and (bound[0] or bound[1]):
+            band_kwargs = {} if band_eps is None else {"band_eps": band_eps}
             Fp, Fm = flux_band_faces(Fp, Fm, fp, fm,
                                      lo=bool(bound[0]), hi=bool(bound[1]),
                                      p_template=p_template, m_template=m_template,
-                                     m_boundary=m_boundary)
+                                     m_boundary=m_boundary, stable=stable,
+                                     **band_kwargs)
         return _du_from_faces(Fp + Fm) / h
     return rhs_along_last_axis
 
 
-_nnd2_face_M = _face_M_from_P(_nnd2_face_P)
+# NND2 不接受分发参数（eps/stable 等）：包装成吞参函数再 flip，
+# 否则 FP32 下 stable=True 经翻转包装传回原函数会 TypeError（终审 P1）
+_nnd2_face_P_kw = lambda g, **_: _nnd2_face_P(g)  # noqa: E731
+_nnd2_face_M = _face_M_from_P(_nnd2_face_P_kw)
 _weno5_face_M = _face_M_from_P(_weno5_face_P)
 _weno7_face_M = _face_M_from_P(_weno7_face_P)
 
 SOLVE_SCHEMES = {
-    "NND2": make_flux_rhs(_nnd2_face_P, _nnd2_face_M, (-2, 2), (-2, 2)),
+    "NND2": make_flux_rhs(_nnd2_face_P_kw,
+                          _nnd2_face_M, (-2, 2), (-2, 2)),
     "WENO5": make_flux_rhs(_weno5_face_P, _weno5_face_M, (-2, 2), (-2, 2)),
     "WENO7": make_flux_rhs(_weno7_face_P, _weno7_face_M, (-3, 3), (-3, 3), "p"),
-    "OMP6-1": make_flux_rhs(lambda g: _omp6_face_P(g, 1), lambda g: _omp6_face_M(g, 1), (-3, 4), (-4, 3)),
-    "OMP6-2": make_flux_rhs(lambda g: _omp6_face_P(g, 2), lambda g: _omp6_face_M(g, 2), (-3, 4), (-4, 3)),
-    "OMP6-3": make_flux_rhs(lambda g: _omp6_face_P(g, 3), lambda g: _omp6_face_M(g, 3), (-3, 4), (-4, 3)),
+    "OMP6-1": make_flux_rhs(lambda g, thr=None, **_: _omp6_face_P(g, 1, thr), lambda g, thr=None, **_: _omp6_face_M(g, 1, thr), (-3, 4), (-4, 3)),
+    "OMP6-2": make_flux_rhs(lambda g, thr=None, **_: _omp6_face_P(g, 2, thr), lambda g, thr=None, **_: _omp6_face_M(g, 2, thr), (-3, 4), (-4, 3)),
+    "OMP6-3": make_flux_rhs(lambda g, thr=None, **_: _omp6_face_P(g, 3, thr), lambda g, thr=None, **_: _omp6_face_M(g, 3, thr), (-3, 4), (-4, 3)),
 }
 
 # 原码 in 文件的 SCHEME_INVIS 名字 → 本模块的键。

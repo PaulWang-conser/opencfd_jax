@@ -190,7 +190,7 @@ def test_callback_face_gets_general_outflow_before_special():
                                   special, faces, grid=grid)
     q = grid.alloc().at[:, :, :, LAP].set(7.0)
     q = execution.prepare(q)
-    assert seen == [7.0]             # OUTFLOW 鬼层 = 边界点复制，随后由回调覆盖
+    assert seen == [0.0]             # OUTFLOW 保留初始鬼层，随后由回调覆盖
     assert jnp.all(q[..., LAP] == 7.0)
     assert jnp.all(q[..., :LAP] == 88.0)
 

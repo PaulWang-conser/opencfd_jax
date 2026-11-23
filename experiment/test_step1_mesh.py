@@ -98,12 +98,12 @@ def test_plate_axis_mapping_and_dif_bound_derived_from_faces(built):
     assert desc.face("i-").dif_band is False
     assert desc.face("i+").dif_band is False
     assert desc.face("j-").dif_band is True
-    assert desc.face("j+").dif_band is True
+    assert desc.face("j+").dif_band is False  # 显式 plate_dif_bound="0 0 0 0 1 0" 生效（2026-11-23）
     assert desc.face("k-").dif_band is False
     assert desc.face("k+").dif_band is False
     execution = boundary.build_execution(built["plate"], desc)
     # 原码次序 (x-,x+,y-,y+,z-,z+)，map=(0,2,1)：i→x，j→z，k→y。
-    assert execution.band == (0, 0, 0, 0, 1, 1)
+    assert execution.band == (0, 0, 0, 0, 1, 0)
 
 
 def test_compare_style_step_override_is_visible(built):

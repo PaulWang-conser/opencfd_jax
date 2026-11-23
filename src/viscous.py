@@ -188,6 +188,9 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     E_int = rhoE / dsafe - 0.5 * (u * u + v * v + w * w)
     T = E_int / params.Cv
     T = jnp.where(T > 0.0, T, 1.0)
+    ghost = jnp.ones_like(d, dtype=bool).at[grid.inner()[1:]].set(False)
+    empty = (d == 0) & (rhou == 0) & (rhov == 0) & (rhow == 0) & (rhoE == 0)
+    T = jnp.where(ghost & empty, 0.0, T)
     if zero_state_ghosts and fill_state_halos:
         # 派生温度的物理鬼层在原码中为零，导数必须读取这个值。
         T = zero_nonperiodic_ghosts(T, bcs, preserve_inflow=True)

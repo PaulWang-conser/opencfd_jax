@@ -15,12 +15,14 @@ du 的符号约定（OCFD_Schemes.cu:306 核实）：
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, WALL, fill_faces,
                        fill_halos_i, fill_halos_j, fill_halos_k, fill_wall_j,
                        zero_nonperiodic_ghosts)
 from .fields import array_axis
-from .schemes import (SOLVE_SCHEMES, steger_warming, up7_rhs_along_last_axis,
+from .schemes import (_BAND_EP, _WENO5_EPS, _WENO7_EPS, SOLVE_SCHEMES,
+                    steger_warming, up7_rhs_along_last_axis,
                     weno7_symbo_rhs_along_last_axis)
 from .viscous import dif_bound_for_axis
 
@@ -47,10 +49,26 @@ def _inner_slice_moved(axis, grid):
     return (slice(None),) + slices
 
 
+def flux_scales_for(grid, dxs, metrics):
+    """按度量口径推断各方向的分裂通量尺度 s_axis（不换算时返回 None）。
+
+    CGNS 单块（dxs=(1,1,1) 且带度量）下，JAX 的计算坐标就是物理坐标本身，
+    而 OCFD 把坐标归一到 [0,1] 用 hx=1/(N-1)；两端分裂通量差
+    s_axis = ∏_{m≠axis}(N_m - 1)。直角算例（无度量）与 channel
+    （dxs=1/(N-1)，与 OCFD hx 同单位）通量单位一致，不换算。
+    """
+    if metrics is None or tuple(float(d) for d in dxs) != (1.0, 1.0, 1.0):
+        return None
+    dims = (grid.ni, grid.nj, grid.nk)
+    return tuple(int(np.prod([dims[m] - 1 for m in range(3) if m != axis]))
+                 for axis in range(3))
+
+
 def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
                     scheme="UP7", weno_tv=None, bound=None, metric=None,
                     zero_flux_ghosts=False, zero_state_ghosts=False,
-                    farfield=None, faces=None, fill_state_halos=True):
+                    farfield=None, faces=None, fill_state_halos=True,
+                    flux_scale=1.0):
     """单方向无粘 RHS：分裂 → 鬼胞填充 → 面通量 → 差分 → 铺回全场。
 
     scheme: "UP7" 或 "WENO7-SYMBO"；weno_tv: None 或 (limiter, tv_max)。
@@ -61,6 +79,11 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
     这不符合 OCFD 的通量分裂流程，平板对齐时应保持 False。
     faces: 可选的六侧描述；给出时按面填常规鬼层，支持同轴两侧不同 kind。
     fill_state_halos: False 表示调用方已经在 prepare 中填好状态，跳过状态填充。
+    flux_scale: 该方向 JAX/OCFD 分裂通量的单位比 s（见 flux_scales_for）。
+            β 是通量二次式，WENO5/WENO7 主模板、所有边界带 epsilon 和
+            OMP6 极值判据阈值都除以 s²，使权重与 OCFD 同口径（Step 4.9
+            定点复算：差 1.04 → 2.65e-13）。UP7 无 epsilon、只换算边界带；
+            WENO7-SYMBO 未接入换算，s≠1 时明确拒绝。
     """
     # 原码声速和分裂内核覆盖含鬼层区域，先准备状态，再逐点计算分裂通量。
     if fill_state_halos:
@@ -91,16 +114,39 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
         fm = fm.at[..., :LAP].set(0.0).at[..., -LAP:].set(0.0)
 
     du_vars = []
+    # epsilon 尺度换算：WENO5/WENO7 主模板与所有边界带按 s² 换算，OMP6 的
+    # 极值判据阈值是通量平方单位同样换算。FP32 额外传 stable=True：
+    # 权重分子分母同除 min(ε+S)^k（代数等价）——曾实测真实 plate 出口
+    # 模板的未归一化权重 ~1e88 超 FP32 上限、平坦模板 ε⁶ 下溢（Astra 复审）。
+    eps_kwargs = {}
+    if flux_scale != 1.0:
+        s2 = float(flux_scale) ** 2
+        eps_kwargs = {"band_eps": _BAND_EP / s2}
+        if scheme == "WENO7":
+            eps_kwargs["eps"] = _WENO7_EPS / s2
+        elif scheme == "WENO5":
+            eps_kwargs["eps"] = _WENO5_EPS / s2
+        elif scheme.startswith("OMP6"):
+            eps_kwargs["thr"] = 1.0e-10 / s2
+    stable = fp.dtype == jnp.float32
     for var in range(NVARS):
         if scheme == "UP7":
-            du_var = up7_rhs_along_last_axis(fp[var], fm[var], dxs[axis], bound=bound)
+            du_var = up7_rhs_along_last_axis(fp[var], fm[var], dxs[axis], bound=bound,
+                                             band_eps=eps_kwargs.get("band_eps"),
+                                             stable=stable)
         elif scheme == "WENO7-SYMBO":
+            if flux_scale != 1.0:
+                raise ValueError(
+                    "WENO7-SYMBO 尚未接入 flux_scale 换算（主模板 ε、"
+                    "tv_max_cap 与边界带 band_eps 均未按 s 换算）；"
+                    "该格式与 CGNS 度量口径组合待其自身对拍启动时补齐")
             tv = weno_tv if weno_tv is not None else (None, None)
             du_var = weno7_symbo_rhs_along_last_axis(
                 fp[var], fm[var], dxs[axis], tv_limiter=tv[0], tv_max_cap=tv[1],
                 bound=bound)
         elif scheme in SOLVE_SCHEMES:
-            du_var = SOLVE_SCHEMES[scheme](fp[var], fm[var], dxs[axis], bound=bound)
+            du_var = SOLVE_SCHEMES[scheme](fp[var], fm[var], dxs[axis], bound=bound,
+                                           stable=stable, **eps_kwargs)
         else:
             raise ValueError(f"unknown scheme: {scheme}")
         du_vars.append(du_var)
@@ -118,7 +164,7 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
                 scheme="UP7", weno_tv=None, metrics=None, dif_bound=None,
                 zero_flux_ghosts=False, zero_state_ghosts=False,
                 dif_axis_map=(0, 1, 2), farfield=None, faces=None,
-                fill_state_halos=True):
+                fill_state_halos=True, flux_scale=None):
     """无粘 RHS。bcs 与 axes 均按计算方向 (i,j,k) 排列；
     dx: 该方向的计算空间步长（直角算例可与物理步长一致；标量或三元组，
     与 axes 中的方向对应取用；
@@ -140,6 +186,9 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
     farfield: 通用 FARFIELD 的 5 分量来流状态；按面填充时只写远场那一侧。
     faces: 可选六侧描述；给出时按面填状态鬼层，避免轴级 bcs 把对侧也当成远场。
     fill_state_halos: False 表示状态已在 ``BoundaryExecution.prepare`` 中准备好。
+    flux_scale: 各方向 JAX/OCFD 分裂通量的单位比（标量或三元组，按 axes
+    中的方向取用；None 或 1 表示不换算）。见 flux_scales_for 与
+    ``_rhs_along_axis`` 的 docstring。
 
     1D 算例用 axes=(0,)；3D 用 (0,1,2)。返回与 cons 同 shape 的 du，
     鬼胞区为 0。
@@ -149,6 +198,10 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
     if dx is None:
         raise ValueError("inviscid_rhs requires dx (physical step size)")
     dxs = (dx, dx, dx) if isinstance(dx, (int, float)) else dx
+    if flux_scale is None:
+        flux_scale = 1.0
+    scales = (flux_scale, flux_scale, flux_scale) if isinstance(
+        flux_scale, (int, float)) else tuple(flux_scale)
     if fill_state_halos and faces is not None:
         cons = fill_faces(cons, faces, grid)
         if zero_state_ghosts:
@@ -169,7 +222,8 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
                                            zero_flux_ghosts=zero_flux_ghosts,
                                            zero_state_ghosts=zero_state_ghosts,
                                            farfield=farfield, faces=faces,
-                                           fill_state_halos=fill_state_halos))
+                                           fill_state_halos=fill_state_halos,
+                                           flux_scale=scales[axis]))
     if metrics is not None:
         # 只看内区；鬼胞区 du 恒为 0，乘任何有限 Ajac 仍是 0
         du = du * metrics["Ajac"]

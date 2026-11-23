@@ -60,8 +60,8 @@ def test_band_is_derived_from_kind_not_from_case():
 def test_halo_mode_splits_periodic_keep_copy_zero():
     assert halo_mode(PERIODIC) == "periodic"
     assert halo_mode(INFLOW) == "keep"
-    # 出口零梯度 = 鬼层取边界点那一层；壁面/远场鬼层清零、边界点单独赋值
-    assert halo_mode(OUTFLOW) == "copy"
+    # 出口保留已有鬼层；壁面/远场鬼层清零、边界点单独赋值。
+    assert halo_mode(OUTFLOW) == "keep"
     assert halo_mode(WALL) == "zero"
     assert halo_mode(FARFIELD) == "zero"
 
@@ -115,12 +115,14 @@ def test_inflow_keeps_its_ghosts_until_it_writes_them():
         np.asarray(q[:, LAP:LAP + nk, LAP:LAP + nj, :LAP + 1]), expect)
 
 
-def test_farfield_zeroes_ghosts_and_outflow_copies_boundary_point():
-    """远场：鬼层清零 + 只写最后一层内点（开带，模板不读鬼胞）；出口：鬼层=边界点。"""
+def test_farfield_zeroes_ghosts_and_outflow_keeps_existing_state():
+    """远场清零鬼层并写边界点；出口保留初始鬼层。"""
     grid = _grid()
     nk, ni = grid.nk, grid.ni
     far = np.array([1.0, 1.0, 0.0, 0.0, 179.07142857142858])
-    q = write_faces(fill_faces(grid.alloc(), _faces(), grid), _faces(), grid,
+    initial = grid.alloc().at[:, LAP:LAP + nk, LAP + 1:LAP + grid.nj - 1,
+                              LAP + ni:].set(9.0)
+    q = write_faces(fill_faces(initial, _faces(), grid), _faces(), grid,
                     farfield=far)
     q = fill_faces(q, _faces(), grid)        # 与 prepare 一致：写点后再填
     nj_in = LAP + grid.nj
@@ -128,11 +130,8 @@ def test_farfield_zeroes_ghosts_and_outflow_copies_boundary_point():
         np.asarray(q[:, LAP:LAP + nk, nj_in - 1, LAP:LAP + ni]),
         np.broadcast_to(far.reshape(5, 1, 1), (5, nk, ni)))
     assert np.all(np.asarray(q[:, LAP:LAP + nk, nj_in:, LAP:LAP + ni]) == 0.0)
-    expect_i = np.broadcast_to(
-        np.asarray(q[:, LAP:LAP + nk, LAP:LAP + grid.nj, LAP + ni - 1:LAP + ni]),
-        (5, nk, grid.nj, LAP))
     np.testing.assert_array_equal(
-        np.asarray(q[:, LAP:LAP + nk, LAP:LAP + grid.nj, LAP + ni:]), expect_i)
+        np.asarray(q[:, LAP:LAP + nk, LAP + 1:LAP + grid.nj - 1, LAP + ni:]), 9.0)
 
 
 def _ns(**kw):
@@ -149,8 +148,8 @@ def _ns(**kw):
 def test_plate_band_derived_and_inflow_constant(tmp_path):
     case = cases.build_case(_ns())
     execution = build_execution(case)
-    # 壁面与远场开带；i+ 出口走零梯度鬼层、不开带；周期不开。
-    assert execution.band == (0, 0, 0, 0, 1, 1)
+    # 壁面与远场开带；i+ 出口保留鬼层、不开带；周期不开。
+    assert execution.band == (0, 0, 0, 0, 1, 0)  # 显式口径生效（2026-11-23）
     assert np.asarray(execution.inflow)[0, 0, 0] == 1.0
 
 

@@ -54,7 +54,7 @@ PLATE = "plate"
 WALL = "wall"
 FARFIELD = "farfield"
 
-GENERIC_KINDS = (PERIODIC, OUTFLOW, WALL, FARFIELD)
+GENERIC_KINDS = (PERIODIC, OUTFLOW, WALL, FARFIELD, INFLOW)
 SIX_SIDES = SIDES
 
 # 守恒量 var 轴符号：(rho, rho*u, rho*v, rho*w, rho*E)
@@ -68,14 +68,9 @@ EV_WALL_SIGNS = {
 }
 _EV_WALL_SIGNS = EV_WALL_SIGNS
 
-# 鬼层归属：周期复制 / 零梯度复制 / 保持（由 INFLOW 写入）/ 清零。
-# 口径来自原码 + 三个算例的逐位对拍（2026-11-18）：
-# - 周期面：复制对侧，鬼层是对侧有效值；
-# - 出口 / 远场：物理要求就是**零梯度 / 常数延拓**，鬼层等于边界点，是有效值；
-#   清零会让中心模板读到 0，在均匀流里造出假通量（sod/plate 出口实测 −11%）；
-# - INFLOW：唯一把鬼层当物理延拓用的边界（``do_u2d_inlet_kernel`` 写 i=0..LAP）；
-# - WALL：没有算例回调的镜像壁面保留原码镜像；有回调的壁面鬼层清零、由回调写
-#   边界点，边界带（单侧）负责该侧差分。
+# 周期面复制对侧；入口由边界赋值；出口保留已有状态鬼层。
+# 原版 INIT_STAT=1 时出口初值为零，INIT_STAT=0 时可为非零。
+# 壁面和远场鬼层清零，边界点另行赋值。
 HALO_PERIODIC = "periodic"
 HALO_COPY = "copy"
 HALO_KEEP = "keep"
@@ -87,11 +82,11 @@ WALL_BAND_EXECUTORS = ("callback", "callback+halo")
 
 
 def halo_mode(kind):
-    """该 kind 的鬼层由谁负责：周期复制、出口零梯度复制、壁面/远场清零、INFLOW 保持。"""
+    """状态鬼层：周期复制，入口与出口保持，壁面与远场清零。"""
     if kind == PERIODIC:
         return HALO_PERIODIC
     if kind == OUTFLOW:
-        return HALO_COPY
+        return HALO_KEEP
     if kind == INFLOW:
         return HALO_KEEP
     # 壁面与远场：鬼层清零，边界点单独赋值，该侧开单侧差分带。
@@ -101,9 +96,7 @@ def halo_mode(kind):
 def dif_band(kind, executor="halo"):
     """该面是否开边界单侧带（原码 DIF_BOUND 的逐侧开关）。
 
-    壁面与远场靠“鬼层清零 + 边界点赋值”工作，中心模板会跨边界读到 0，
-    必须换单侧；周期（鬼层是对侧内区）、入口（鬼层是剖面）、出口（鬼层是
-    边界点延拓）三类鬼层本身合法，中心差分成立，开带反而降精度。
+    当前缺省为壁面和远场开带，周期、入口和出口不开带。
     """
     del executor
     return kind in (WALL, FARFIELD)
@@ -116,7 +109,7 @@ def dif_bound_from_faces(faces, dif_axis_map=(0, 1, 2)):
     for face in tuple(faces):
         original = dif_axis_map[int(face.axis)]
         flags[2 * original + (1 if face.side.endswith("+") else 0)] = (
-            1 if dif_band(face.kind, face.executor) else 0)
+            1 if face.dif_band else 0)
     return tuple(flags)
 
 
@@ -145,8 +138,7 @@ def fill_halos_i(f, bc, ni, farfield=None):
         f = f.at[..., :LAP].set(f[..., ni:ni + LAP])
         f = f.at[..., LAP + ni:].set(f[..., LAP:LAP + LAP])
     elif bc == OUTFLOW:
-        f = f.at[..., :LAP].set(f[..., LAP:LAP + 1])
-        f = f.at[..., LAP + ni:].set(f[..., LAP + ni - 1:LAP + ni])
+        pass
     elif bc == FARFIELD:
         layer = _farfield_layer(f, farfield)
         f = f.at[..., :LAP + 1].set(layer)
@@ -164,8 +156,7 @@ def fill_halos_j(f, bc, nj, farfield=None):
         f = f.at[..., :LAP, :].set(f[..., nj:nj + LAP, :])
         f = f.at[..., LAP + nj:, :].set(f[..., LAP:LAP + LAP, :])
     elif bc == OUTFLOW:
-        f = f.at[..., :LAP, :].set(f[..., LAP:LAP + 1, :])
-        f = f.at[..., LAP + nj:, :].set(f[..., LAP + nj - 1:LAP + nj, :])
+        pass
     elif bc == FARFIELD:
         layer = _farfield_layer(f, farfield)
         f = f.at[..., :LAP + 1, :].set(layer)
@@ -183,8 +174,7 @@ def fill_halos_k(f, bc, nk, farfield=None):
         f = f.at[:, :LAP, :, :].set(f[:, nk:nk + LAP, :, :])
         f = f.at[:, LAP + nk:, :, :].set(f[:, LAP:LAP + LAP, :, :])
     elif bc == OUTFLOW:
-        f = f.at[:, :LAP, :, :].set(f[:, LAP:LAP + 1, :, :])
-        f = f.at[:, LAP + nk:, :, :].set(f[:, LAP + nk - 1:LAP + nk, :, :])
+        pass
     elif bc == FARFIELD:
         layer = _farfield_layer(f, farfield)
         f = f.at[:, :LAP + 1, :, :].set(layer)
@@ -305,18 +295,15 @@ def apply_plate_bc(cons, grid, phys, inflow=None, far=None, Tw=1.0):
     ni, nj, nk = (grid_extent(grid, 0), grid_extent(grid, 1),
                   grid_extent(grid, 2))
     del ni, nk
-    kz, jy, ix = _interior_window(grid)
-    del kz, jy, ix
-    # 与旧链一致：壁面点铺满整行（含横向鬼层），角落鬼胞因此与壁面延拓自洽。
-    full = slice(None)
+    kz, _, ix = _interior_window(grid)
 
     # 下壁边界点：rho 由 ρT 两点外推、无滑移、ρE = ρ Cv Tw（IBC=124 系数）
     rho, _, T = primitive(cons, phys)
     rho_w = (4.0 * rho[:, LAP + 1, :] * T[:, LAP + 1, :]
              - rho[:, LAP + 2, :] * T[:, LAP + 2, :]) / (3.0 * Tw)
-    cons = cons.at[0, full, LAP, full].set(rho_w)
-    cons = cons.at[1:4, full, LAP, full].set(0.0)
-    cons = cons.at[4, full, LAP, full].set(rho_w * phys.Cv * Tw)
+    cons = cons.at[0, kz, LAP, ix].set(rho_w[kz, ix])
+    cons = cons.at[1:4, kz, LAP, ix].set(0.0)
+    cons = cons.at[4, kz, LAP, ix].set(rho_w[kz, ix] * phys.Cv * Tw)
     return cons
 
 
@@ -338,14 +325,7 @@ def _face_extent(face, grid):
 
 
 def _fill_face_halos(f, face, grid):
-    """按单个面的 kind 填状态鬼层：周期复制、出口零梯度复制、INFLOW 保持、壁面/远场清零。
-
-    ``HALO_COPY``（出口）把**边界点**广播到四层鬼层：出口零梯度，鬼层 = 边界点。
-
-    壁面与远场一律清零：这两个面的边界点由单独一层赋值（回调写壁面点、
-    远场常数写最后一层内点），该侧同时开单侧差分带（见 :func:`dif_band`），
-    所以鬼层不需要也不应该有物理值。
-    """
+    """按面的规则填状态鬼层；出口保持已有值。"""
     mode = halo_mode(face.kind)
     if mode == HALO_KEEP:
         return f
@@ -375,12 +355,9 @@ def _fill_face_halos(f, face, grid):
 
 
 def fill_faces(f, faces, grid):
-    """填鬼层：先清零、再周期复制、最后零梯度复制。
+    """按面填状态鬼层：先清零，再周期复制；入口和出口保持。
 
-    阶段顺序有意义：清零必须在周期复制之前（否则会把别的面的零值搬回来），
-    复制类必须在 ``write_faces`` 之后（远场鬼层要复制刚写好的常数边界点）。
-    INFLOW 面保持原值，由 :func:`write_faces` 写剖面。本函数不接收边界参数，
-    只认 kind。
+    入口剖面由 :func:`write_faces` 写入。其他面的操作可能作用于交界鬼层。
     """
     faces = tuple(faces)
     if not faces:
@@ -454,14 +431,9 @@ def _write_wall_point(cons, face, grid, phys):
 
 
 def _face_lateral(face, grid):
-    """写边界点时沿横向铺开的 slice：不裁横向鬼层。
-
-    与旧链 ``apply_plate_bc`` 一致：远场常数和壁面点铺满整行/整列（含横向鬼
-    层），这样角落鬼胞与“边界点延拓”自洽；INFLOW 剖面仍只用内区窗口，因为
-    旧链写入口也只写 ``LAP:ny_in`` / ``LAP:nz_in``。
-    """
-    del grid, face
-    return slice(None), slice(None), slice(None)
+    """边界点仅写横向内区，交界鬼层由相邻面处理。"""
+    del face
+    return _interior_window(grid)
 
 
 def write_faces(cons, faces, grid, inflow=None, farfield=None, phys=None):
@@ -553,6 +525,11 @@ def fill_ev_axis(f, axis, bc, nxi, is_ev=False):
     避免把槽道镜像误用于其他方向。FARFIELD 的粘性通量按零梯度处理：远场
     状态是 Dirichlet 常量，Ev 的鬼层直接复制边界内层。
     """
+    if bc in (OUTFLOW, INFLOW):
+        moved = jnp.moveaxis(f, 3 - axis, -1)
+        moved = moved.at[..., :LAP].set(0.0)
+        moved = moved.at[..., LAP + nxi:].set(0.0)
+        return jnp.moveaxis(moved, -1, 3 - axis)
     if bc == FARFIELD:
         if axis == 0:
             f = f.at[..., :LAP].set(f[..., LAP:LAP + 1])
@@ -591,14 +568,8 @@ def _mirror_ev_wall_halos(f, side, n, signs):
 
 
 def _fill_ev_face(f, face, grid, signs=None):
-    """填 4 分量 Ev 鬼层，规则与状态鬼层同构。
-
-    - 周期：复制对侧；
-    - 出口：零梯度（复制边界点那一层）；
-    - INFLOW：保持；
-    - 壁面 / 远场：清零（边界点单独赋值，该侧差分走单侧带，只读内点）。
-    """
-    mode = halo_mode(face.kind)
+    """填 Ev 鬼层；入口和出口按本次原版参考初始化为零。"""
+    mode = HALO_ZERO if face.kind in (OUTFLOW, INFLOW) else halo_mode(face.kind)
     if mode == HALO_KEEP:
         return f
     axis = int(face.axis)
@@ -626,13 +597,13 @@ def _fill_ev_face(f, face, grid, signs=None):
 
 
 def fill_ev_faces(f, faces, grid):
-    """按六侧描述填 Ev 鬼层：清零 → 周期复制 → 零梯度复制。"""
+    """按六侧描述填 Ev 鬼层：先清零，再周期复制。"""
     faces = tuple(faces)
     if not faces:
         return f
     for mode in (HALO_ZERO, HALO_PERIODIC, HALO_COPY):
         for face in faces:
-            if halo_mode(face.kind) == mode:
+            if (HALO_ZERO if face.kind in (OUTFLOW, INFLOW) else halo_mode(face.kind)) == mode:
                 f = _fill_ev_face(f, face, grid)
     return f
 
@@ -668,9 +639,8 @@ class BoundaryExecution:
     def prepare(self, q, zero_state_ghosts=False):
         """按“边界点赋值 → 鬼层 → 特殊回调”准备一次状态。
 
-        顺序有依赖：``write_faces`` 先写边界点（INFLOW 剖面、FARFIELD 常数），
-        ``fill_faces`` 再把出口/远场的鬼层按零梯度复制成刚写的那个值；周期面
-        与清零面互不干扰。特殊回调最后覆盖它接管的局部区域。
+        ``write_faces`` 先写边界点，``fill_faces`` 再处理周期和清零面；
+        出口鬼层保持原值。特殊回调最后覆盖它接管的局部区域。
 
         ``zero_state_ghosts`` 仅为旧调用兼容保留：鬼层规则已经统一到 halo，
         不再按算例开关。
@@ -688,18 +658,10 @@ class BoundaryExecution:
         return q if self.callback is None else self.callback(q)
 
     def fill_mixed_outflow(self, q, axis=None):
-        """对含特殊回调的轴，仅填充其普通出流侧的鬼层。"""
+        """清零指定方向普通出口的粘性通量鬼层。"""
         for face in self.mixed_outflow:
-            if axis is not None and face.axis != axis:
-                continue
-            moved = jnp.moveaxis(q, 3 - face.axis, -1)
-            n = (grid_extent(self.grid, 0), grid_extent(self.grid, 1),
-                 grid_extent(self.grid, 2))[face.axis]
-            if face.side.endswith("-"):
-                moved = moved.at[..., :LAP].set(moved[..., LAP:LAP + 1])
-            else:
-                moved = moved.at[..., LAP + n:].set(moved[..., LAP + n - 1:LAP + n])
-            q = jnp.moveaxis(moved, -1, 3 - face.axis)
+            if axis is None or face.axis == axis:
+                q = _fill_ev_face(q, face, self.grid)
         return q
 
 
@@ -753,7 +715,12 @@ def _require_callback(case, label):
 
 
 def validate_special_sides(faces, bcs):
-    """校验 case 特殊边界的六侧与轴级 bcs 是否一致，并返回原元组。"""
+    """校验 case 特殊边界的六侧结构与方向限制，并返回原元组。
+
+    六侧 faces 是权威描述；轴级 ``bcs`` 只是低侧代表值（供旧调用方读取），
+    **不再**要求逐面 kind 与之一致——CGNS 的同轴异类正负面
+    （如 i- 出流、i+ 远场）是合法配置，曾在此被误拒（终审 P2）。
+    """
     if len(faces) != 6 or tuple(f.side for f in faces) != SIX_SIDES:
         raise ValueError(
             f"special_boundary.faces 必须按 {SIX_SIDES} 顺序给出六侧")
@@ -761,23 +728,20 @@ def validate_special_sides(faces, bcs):
         axis_faces = [f for f in faces if f.axis == axis]
         callback_faces = [f for f in axis_faces
                           if f.executor in ("callback", "callback+halo")]
-        halo_faces = [f for f in axis_faces if f.executor == "halo"]
         if callback_faces and bc not in (INFLOW, PLATE):
             raise ValueError(
                 f"special_boundary axis={axis} 有回调面，轴级 bcs 必须是 "
                 f"INFLOW/PLATE（no-op 占位），得到 {bc!r}")
-        if not callback_faces and bc not in (PERIODIC, OUTFLOW, FARFIELD):
+        if not callback_faces and bc not in (PERIODIC, OUTFLOW, FARFIELD, WALL):
+            # WALL 无回调面是合法组合（通用 WALL 的状态鬼层由 fill_faces 清零、
+            # Ev 侧另有规则；Poiseuille 派生六侧曾在此被误拒——2026-11-23 Astra 复审）
             raise ValueError(
                 f"special_boundary axis={axis} 没有回调面，轴级 bcs 只能是 "
-                f"PERIODIC/OUTFLOW/FARFIELD，得到 {bc!r}")
-        for face in halo_faces:
-            if callback_faces and face.kind == OUTFLOW:
-                continue
-            if face.kind != bc:
-                raise ValueError(
-                    f"special_boundary {face.side} 的 halo 描述 {face.kind!r} "
-                    f"与轴级 bcs {bc!r} 不一致")
+                f"PERIODIC/OUTFLOW/FARFIELD/WALL，得到 {bc!r}")
         if bc == WALL and axis != 1:
+            raise ValueError("special_boundary 的 WALL 只支持计算 j 方向")
+    for face in faces:
+        if face.kind == WALL and face.axis != 1:
             raise ValueError("special_boundary 的 WALL 只支持计算 j 方向")
     return faces
 
@@ -903,6 +867,10 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
         if not isinstance(getattr(special, "name", None), str):
             raise ValueError("special_boundary 需要字符串 name")
         marker_faces = tuple(getattr(special, "faces", ()))
+        if not marker_faces:
+            # faces 可选：缺省继承按算例派生的六侧描述（2026-11-23 ⑥ 入口；
+            # 脚本只写 bc_apply 时不必抄六侧——给出时仍须逐侧一致）
+            marker_faces = tuple(faces.values())
         validate_special_sides(marker_faces, bcs)
         if marker_faces != tuple(faces.values()):
             raise ValueError("special_boundary.faces 与已构造的六侧描述不一致")

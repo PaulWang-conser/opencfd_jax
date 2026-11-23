@@ -148,22 +148,23 @@ def _as_ints(raw, name, length=None):
     return values
 
 
-def _dif_band(dif_bound, axis, side, dif_axis_map):
-    """旧签名：边界带改由 kind + executor 派生（见 ``boundary.dif_band``）。
-
-    保留 ``dif_bound`` 参数只为兼容旧调用；算例不再手写 DIF_BOUND。
-    """
-    del dif_bound, axis, side, dif_axis_map
-    return None
-
-
 def _face(side, kind, executor, dif_bound, dif_axis_map, detail="",
           thermal=None, params=None):
-    """构造一个面侧描述，统一推导 axis 与 dif_band（由 kind 决定）。"""
+    """构造一个面侧描述；显式 dif_bound 优先，缺省按 kind 派生。
+
+    dif_bound 为 None 时按 ``boundary.dif_band(kind)`` 派生（壁面/远场开带）；
+    给出时按原码次序逐侧读取——`--plate-dif-bound` 与 in 文件的 DIF_BOUND
+    必须真的生效（曾静默被 kind 派生覆盖，2026-11-23 修）。
+    """
     side = normalize_side(side)
     axis = side_axis(side)
+    if dif_bound is None:
+        band = dif_band(kind, executor)
+    else:
+        band = bool(dif_bound[2 * dif_axis_map[axis]
+                               + (1 if side.endswith("+") else 0)])
     return FaceBoundary(side=side, axis=axis, kind=kind, executor=executor,
-                        dif_band=dif_band(kind, executor),
+                        dif_band=band,
                         detail=detail, thermal=thermal,
                         params={} if params is None else params)
 
@@ -185,7 +186,7 @@ def _plate_faces(dif_bound, dif_axis_map, Tw=1.0):
               "入口剖面：边界点 + 四层鬼层（通用 INFLOW）",
               params={"profile": "inflow"}),
         _face("i+", OUTFLOW, _EXEC_CALLBACK, dif_bound, dif_axis_map,
-              "出口不赋值：鬼层清零 + 单侧带（方式 A）"),
+              "出口不赋值：保持已有状态鬼层"),
         _face("j-", WALL, _EXEC_CALLBACK, dif_bound, dif_axis_map,
               "无滑移等温壁：只写壁面点，鬼层清零（plate.apply）",
               thermal="isothermal", params={"Tw": float(Tw)}),
@@ -339,12 +340,19 @@ def from_case(case: Mapping) -> BlockMesh:
         if not isinstance(getattr(special_marker, "name", None), str):
             raise ValueError("special_boundary 需要字符串 name")
         raw_faces = tuple(getattr(special_marker, "faces", ()))
-        if len(raw_faces) != 6 or tuple(f.side for f in raw_faces) != SIDES:
-            raise ValueError(
-                f"special_boundary.faces 必须按 {SIDES} 顺序给出六侧")
-        if not all(isinstance(f, FaceBoundary) for f in raw_faces):
-            raise ValueError("special_boundary.faces 必须是 FaceBoundary")
-        faces = validate_special_sides(raw_faces, bcs)
+        if not raw_faces:
+            # faces 可选：优先继承已解析的 case["faces"]（CGNS 路径的六侧
+            # 带异类正负面/壁温/逐侧带标志，_generic_faces 会丢——Astra 复审），
+            # 无则按 bcs 派生
+            faces = tuple(case["faces"]) if case.get("faces") else _generic_faces(
+                bcs, dif_bound, dif_axis_map)
+        else:
+            if len(raw_faces) != 6 or tuple(f.side for f in raw_faces) != SIDES:
+                raise ValueError(
+                    f"special_boundary.faces 必须按 {SIDES} 顺序给出六侧")
+            if not all(isinstance(f, FaceBoundary) for f in raw_faces):
+                raise ValueError("special_boundary.faces 必须是 FaceBoundary")
+            faces = validate_special_sides(raw_faces, bcs)
     elif plate_marker is not None:
         if not callable(case.get("bc_apply")):
             raise ValueError(

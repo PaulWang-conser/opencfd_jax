@@ -31,10 +31,11 @@ from .mesh_data import BlockMesh, FaceBoundary
 _BC_OUTFLOW = ("BCExtrapolate", "BCOutflow", "BCOutflowSubsonic",
                "BCOutflowSupersonic")
 _BC_WALL = ("BCWall",)
-_BC_SYMMETRY = ("BCSymmetryPlane",)
+_BC_SYMMETRY = ("BCSymmetryPolar",)
+_BC_INFLOW = ("BCInflow",)
 _BC_FARFIELD = ("BCFarfield",)
 
-_BC_EXECUTABLE = _BC_OUTFLOW + _BC_WALL + _BC_SYMMETRY + _BC_FARFIELD
+_BC_EXECUTABLE = _BC_OUTFLOW + _BC_WALL + _BC_SYMMETRY + _BC_FARFIELD + _BC_INFLOW
 
 
 class CgnsError(ValueError):
@@ -48,6 +49,8 @@ class CgnsBC:
     name: str
     bc_type: str
     point_range: tuple[tuple[int, int, int], tuple[int, int, int]]
+    family: str | None = None
+    original_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -177,6 +180,13 @@ def _check_location(group, name: str) -> None:
         raise CgnsError(f"{name} 使用 PointList；本步只接受 PointRange")
     if "Periodic_t" in group:
         raise CgnsError(f"{name} 使用 Periodic_t；本步只接受整面 identity 1to1")
+    # 标准 CGNS 把周期信息挂在 GridConnectivity1to1_t → GridConnectivityProperty_t
+    # → Periodic_t，直接子节点查不到；不下钻会漏检带周期的连接（2026-11-23 复审）。
+    for prop in (v for v in group.values() if _label(v) == "GridConnectivityProperty_t"):
+        if any(_label(v) == "Periodic_t" for v in prop.values()):
+            raise CgnsError(
+                f"{name} 的 GridConnectivityProperty 下有 Periodic_t；"
+                "本步只接受整面 identity 1to1")
 
 
 def _zone_nodes(base):
@@ -213,9 +223,24 @@ def _read_bcs(zone, vertex, zone_name: str) -> tuple[CgnsBC, ...]:
         if "PointRange" not in node:
             raise CgnsError(f"{zone_name}/{name} 缺少 PointRange")
         bc_type = _text(node)
+        original_type = bc_type
+        family = None
+        if bc_type == "FamilySpecified":
+            family_nodes = [v for v in node.values() if _label(v) == "FamilyName_t"]
+            if len(family_nodes) != 1:
+                raise CgnsError(f"{zone_name}/{name}: FamilySpecified 需要唯一 FamilyName")
+            family = _text(family_nodes[0])
+            base = zone.parent
+            if family not in base or _label(base[family]) != "Family_t":
+                raise CgnsError(f"{zone_name}/{name}: 找不到 Family {family!r}")
+            family_bcs = [v for v in base[family].values() if _label(v) == "FamilyBC_t"]
+            if len(family_bcs) != 1:
+                raise CgnsError(f"{zone_name}/{name}: Family {family!r} 需要唯一 FamilyBC")
+            bc_type = _text(family_bcs[0])
         lo, hi = _range(_data(node["PointRange"]), f"{zone_name}/{name}")
         _check_extent(lo, hi, vertex, f"{zone_name}/{name}")
-        bcs.append(CgnsBC(name=name, bc_type=bc_type, point_range=(lo, hi)))
+        bcs.append(CgnsBC(name=name, bc_type=bc_type, point_range=(lo, hi),
+                          family=family, original_type=original_type))
     return tuple(bcs)
 
 
@@ -358,20 +383,26 @@ def _bc_kind(bc_type: str) -> str | None:
         return PERIODIC
     if bc_type in _BC_FARFIELD:
         return FARFIELD
+    if bc_type in _BC_INFLOW:
+        return INFLOW
     return None
 
 
-def _collect_sides(zone: CgnsZone) -> dict[str, tuple[str, str]]:
-    """把 BC 和整面 identity 1to1 收敛成 side -> (kind, source)。"""
-    vertex = zone.vertex_size
-    sides: dict[str, tuple[str, str]] = {}
+def _collect_sides(zone: CgnsZone) -> dict[str, tuple[str, str, str]]:
+    """把 BC 和整面 identity 1to1 收敛成 side -> (kind, source, origin)。
 
-    def put(side: str, kind: str, source: str):
+    origin 为 ``bc`` / ``conn``：周期配对要求两侧同为 Polar BC 或同为
+    自连接 1to1，混配不满足项目"BCSymmetryPolar 同轴整面成对"的约定。
+    """
+    vertex = zone.vertex_size
+    sides: dict[str, tuple[str, str, str]] = {}
+
+    def put(side: str, kind: str, source: str, origin: str):
         """登记一个 side；同一侧重复来源直接报错。"""
         if side in sides:
             raise CgnsError(
                 f"{zone.name}/{side} 同时由 {sides[side][1]} 和 {source} 定义")
-        sides[side] = (kind, source)
+        sides[side] = (kind, source, origin)
 
     for bc in zone.bcs:
         lo, hi = bc.point_range
@@ -384,7 +415,8 @@ def _collect_sides(zone: CgnsZone) -> dict[str, tuple[str, str]]:
         if kind is None:
             raise CgnsError(
                 f"{zone.name}/{bc.name} 的 BCType={bc.bc_type!r} 不在本步执行子集")
-        put(side, kind, bc.name)
+        source = f"{bc.name} (Family={bc.family})" if bc.family else bc.name
+        put(side, kind, source, "bc")
 
     for conn in zone.connections:
         if conn.donor_zone != zone.name:
@@ -410,7 +442,7 @@ def _collect_sides(zone: CgnsZone) -> dict[str, tuple[str, str]]:
             raise CgnsError(
                 f"{zone.name}/{conn.name} 的 side={side} donor={donor_side}；"
                 "不是同一轴的对侧整面")
-        put(side, PERIODIC, conn.name)
+        put(side, PERIODIC, conn.name, "conn")
     return sides
 
 
@@ -427,6 +459,14 @@ def _validate_executable(zone: CgnsZone) -> None:
         if lo is None or hi is None:
             raise CgnsError(
                 f"{zone.name} 的 {name} 轴缺少一侧边界：{name}-={lo}, {name}+={hi}")
+        if (lo[0] == PERIODIC) != (hi[0] == PERIODIC):
+            raise CgnsError(f"{zone.name} 的 {name} 轴周期边界必须同轴成对：{lo}, {hi}")
+        # 周期两侧必须同来源：一面 BCSymmetryPolar、对面 identity 1to1 自连接
+        # 的混配曾能通过 kind 配对（2026-11-23 复审反例），不满足 Polar 约定。
+        if lo[0] == PERIODIC and hi[0] == PERIODIC and lo[2] != hi[2]:
+            raise CgnsError(
+                f"{zone.name} 的 {name} 轴周期两侧来源不同（{lo[2]}/{hi[2]}）；"
+                "BCSymmetryPolar 必须同轴正负整面成对，不与 1to1 自连接混配")
         if lo[0] == WALL and axis != 1:
             raise CgnsError(f"{zone.name} 的壁面只支持 j 方向，得到 {name} 轴")
         if hi[0] == WALL and axis != 1:
@@ -451,6 +491,8 @@ def to_block_mesh(zone: CgnsZone, axes: Iterable[int] = (0, 1, 2),
 
     # 轴级 bcs 只是代表值；真正的执行语义在六侧 faces。
     bcs = tuple(sides[AXIS_NAMES[a] + "-"][0] for a in range(3))
+    # DIF_BOUND 由边条 kind 派生（4.9.13 口径：CGNS 边条驱动，WALL/FARFIELD
+    # 开带；plate 的"远场关带"由 cases 的 plate-CGNS 分支按面覆盖）
     faces = []
     for side in SIDES:
         kind = sides[side][0]

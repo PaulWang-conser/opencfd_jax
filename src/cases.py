@@ -156,6 +156,12 @@ def build_case(args):
                 if explicit.get(name) == "cli" and int(value) != got:
                     raise ValueError(
                         f"显式 --{name}={value} 与 CGNS VertexSize 的 {got} 不一致")
+            # CGNS 路径边条驱动（4.9.13 口径）：DIF_BOUND 由程序按 kind 派生，
+            # 不接受手填六元组——显式拒绝而非静默忽略（2026-11-23 Astra 复审）。
+            if getattr(args, "plate_dif_bound", None) is not None:
+                raise ValueError(
+                    "--plate-dif-bound 只用于内置 plate；CGNS 网格的边界带"
+                    "由边条 kind 派生（WALL/FARFIELD 开带），不支持手填")
             block = mesh_cgns.build_cgns_block(zone, axes=(0, 1))
             grid = block.grid
             G = args.p_grad
@@ -218,6 +224,9 @@ def build_case(args):
             raw = inp.get(key, default)
             return tuple(int(float(x)) for x in raw.replace(",", " ").split())
         jac_bound = _ints("JAC_BOUND", "1 1 1")[:3]
+        # DIF_BOUND 缺省 = 全零，对齐原版（parameters.c 的 D0_bound 为静态
+        # 存储期数组，缺键时不写入、六位保持零）。槽道壁面带需 in 文件显式
+        # 给出（库内 channel in 均显式写了 "0 0 1 1 0 0" 类值）。
         dif_bound = _ints("DIF_BOUND", "0 0 0 0 0 0")[:6]
         bcs = (PERIODIC, WALL, PERIODIC)
         periodic = tuple(b == PERIODIC for b in bcs)
@@ -246,6 +255,46 @@ def build_case(args):
         # 无量纲口径：ρ∞=T∞=U∞=1 ⇒ μ(T=1)=1/Re（与 Ref_T 无关）、ν=1/Re、
         # Re_x = x·Re、M∞ = U∞/sqrt(γ R T) = Ama。验收基准是 blasius.py。
         from . import blasius, channel, inflow, plate
+        if getattr(args, "mesh_format", "builtin") == "cgns":
+            from dataclasses import replace
+            from . import mesh_cgns
+            if getattr(args, "plate_dif_bound", None) is not None:
+                raise ValueError(
+                    "--plate-dif-bound 只用于内置 plate；CGNS 网格的边界带"
+                    "由边条 kind 派生（WALL 开带、FARFIELD 关带），不支持手填")
+            keys = ("boundary_inflow", "boundary_farfield", "boundary_wall_temperature")
+            missing = [key for key in keys if getattr(args, key, None) is None]
+            if missing:
+                raise ValueError(f"plate CGNS 缺少 boundary 参数: {missing}")
+            if args.boundary_wall_temperature <= 0:
+                raise ValueError("plate CGNS 等温壁的 boundary.wall_temperature 必须大于 0")
+            zone = mesh_cgns.read_cgns_zone(args.mesh, zone=getattr(args, "cgns_zone", None))
+            explicit = getattr(args, "config_sources", {})
+            for name, got in (("ni", zone.ni), ("nj", zone.nj), ("nk", zone.nk)):
+                value = getattr(args, name, None)
+                if explicit.get(name) == "cli" and int(value) != got:
+                    raise ValueError(
+                        f"显式 --{name}={value} 与 CGNS VertexSize 的 {got} 不一致")
+            block = mesh_cgns.build_cgns_block(zone, axes=(0, 1, 2))
+            grid = block.grid
+            def state(value):
+                rho, u, v, w, T = (value[k] for k in ("rho", "u", "v", "w", "T"))
+                return jnp.asarray([rho, rho*u, rho*v, rho*w,
+                                    rho*(params.Cv*T + 0.5*(u*u + v*v + w*w))])
+            initial = state(args.boundary_inflow)
+            cons = grid.alloc().at[grid.inner()].set(initial.reshape(5, 1, 1, 1))
+            inlet = initial.reshape(5, 1, 1)
+            far = state(args.boundary_farfield)
+            faces = tuple(replace(f, thermal="isothermal",
+                                  params={"Tw": args.boundary_wall_temperature})
+                          if f.kind == WALL else
+                          replace(f, dif_band=False) if f.kind == FARFIELD else f
+                          for f in block.faces)
+            return dict(grid=grid, cons0=cons, bcs=block.bcs, faces=faces,
+                        dxs=block.dxs, axes=block.axes, params=params,
+                        forcing=None, gamma=params.gamma, metrics=block.metrics,
+                        coords=block.coords, dif_bound=block.dif_bound,
+                        dif_axis_map=block.dif_axis_map, inflow=inlet, farfield=far)
         ni = int(_dimension(args, "ni", 256))
         nj = int(_dimension(args, "nj", 64))
         x0 = float(getattr(args, "plate_x0", 0.1))
@@ -280,7 +329,10 @@ def build_case(args):
                 T0 * np.ones((nk, nj)), params.Cv)
         far = plate.far_state(rho=rho0, u=U, T=T0, Cv=params.Cv)
         raw = getattr(args, "plate_dif_bound", None)
-        dif_bound = (0, 0, 0, 0, 0, 0)
+        # 显式六开关逐侧生效；缺省按算例：plate 取 OCFD 口径 0 0 0 0 1 0
+        # （远场不开带），其余算例 None = 按 kind 派生（2026-11-23：CLI 缺省
+        # 曾全局生效，CGNS poiseuille 误吃 plate 口径）
+        dif_bound = (0, 0, 0, 0, 1, 0) if args.case == "plate" else None
         if raw:
             dif_bound = tuple(int(float(t)) for t in str(raw).replace(",", " ").split())[:6]
         return dict(grid=grid, cons0=cons, bcs=(INFLOW, PLATE, PERIODIC),

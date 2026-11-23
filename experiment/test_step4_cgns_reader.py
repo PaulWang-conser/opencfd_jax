@@ -72,6 +72,52 @@ def test_real_sample_raw_read_keeps_all_bc_types():
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="缺少 Grid/samples/multi_hdf5.cgns")
 def test_real_sample_strict_mode_rejects_non_executable_bc():
-    # BCFarfield 已接入可执行子集；该样例仍在 Klo 处因非整面 patch 被拒绝。
-    with pytest.raises(CgnsError, match="不是整面"):
+    # symmetry plane 不再视作周期；该样例在第一个此类边条处被拒绝。
+    with pytest.raises(CgnsError, match="BCSymmetryPlane"):
         read_cgns_zone(SAMPLE, zone="Zone 1", validate=True)
+
+
+# ---- 2026-11-23 忠实性复审补的负例（路线图 Step 4 拒绝清单） ----
+
+def _fixture_copy(tmp_path, ni=8, nj=8, nk=4):
+    """在临时目录生成标准 fixture 的副本，供负例篡改。"""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1]))
+    from Grid.make_cgns_fixture import build_fixture
+    path = tmp_path / "neg.cgns"
+    build_fixture(path, ni=ni, nj=nj, nk=nk)
+    return path
+
+
+def test_rejects_periodic_property_under_1to1(tmp_path):
+    """GridConnectivityProperty/Periodic 层级不许漏检（曾只查直接子节点）。"""
+    import h5py
+    path = _fixture_copy(tmp_path)
+    with h5py.File(path, "r+") as f:
+        node = f["Base/Zone 1/ZoneGridConnectivity/1to1Ilo"]
+        prop = node.create_group("GridConnectivityProperty")
+        prop.attrs["label"] = np.bytes_("GridConnectivityProperty_t")
+        per = prop.create_group("Periodic")
+        per.attrs["label"] = np.bytes_("Periodic_t")
+    with pytest.raises(CgnsError, match="Periodic_t"):
+        read_cgns_zone(path)
+
+
+def test_rejects_mixed_polar_bc_and_conn_periodic_pair(tmp_path):
+    """一面 BCSymmetryPolar、对面 identity 1to1 的混配必须被拒绝。"""
+    import h5py
+    path = _fixture_copy(tmp_path)
+    with h5py.File(path, "r+") as f:
+        zone = f["Base/Zone 1"]
+        del zone["ZoneGridConnectivity/1to1Ihi"]
+        node = zone["ZoneBC"].create_group("IhiPolar")
+        node.attrs["label"] = np.bytes_("BC_t")
+        node.create_dataset(
+            " data", data=np.frombuffer(b"BCSymmetryPolar", dtype=np.int8))
+        rng = node.create_group("PointRange")
+        rng.attrs["label"] = np.bytes_("IndexRange_t")
+        rng.create_dataset(
+            " data", data=np.asarray([[8, 1, 1], [8, 8, 4]], dtype=np.int32))
+    with pytest.raises(CgnsError, match="来源不同"):
+        read_cgns_zone(path)
