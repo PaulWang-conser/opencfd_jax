@@ -1,0 +1,13 @@
+{
+  "case": {"name": "plate"},
+  "mesh": {"format": "cgns", "file": "../../Grid/testcgnstest_ystr.cgns"},
+  "boundary": {
+    "inflow": {"rho": 1.0, "u": 1.0, "v": 0.0, "w": 0.0, "T": 1.0},
+    "farfield": {"rho": 1.0, "u": 1.0, "v": 0.0, "w": 0.0, "T": 1.0},
+    "wall_temperature": 1.0, "outlet_ghost": "copy"
+  },
+  "physics": {"Re": 1000.0, "Ama": 2.0, "ref_t": 288.15, "pr": 0.72},
+  "numerics": {"scheme": "WENO7", "vis_order": "CD8", "viscous": true},
+  "time": {"dt": 0.005, "end_time": 30.0, "end_step": 6000},
+  "output": {"dir": "e1-B-copy", "kstep_show": 1000, "kstep_save": 1000}
+}
