@@ -1,9 +1,14 @@
 """算例注册表与初值（从旧入口模块抽出；对应 OCFD_init.cu 的 init + 各算例初值）。
 
-每个 case 返回一个 dict，核心键包括：grid / cons0 / bcs / dxs / axes / params /
-forcing / gamma；按算例还可包含 bc_apply / source / metrics / dif_bound /
-plate 等边界、源项、曲线网格或几何信息。主循环据此统一装配计算流程。
+每个 case 返回一个 ``CaseSpec``（Mapping 兼容的算例协议）：必选
+grid / cons0 / bcs / dxs / axes / params，可选 bc_apply / source / metrics /
+faces / dif_bound / plate 等边界、源项、曲线网格或几何信息。
+主循环据此统一装配计算流程。
 """
+
+from collections.abc import MutableMapping
+from dataclasses import dataclass, fields
+from typing import Any
 
 import numpy as np
 
@@ -98,6 +103,95 @@ def make_initial_tg(grid, params, A=1.0):
     return cons
 
 
+# ---------------------------------------------------------------------------
+# CaseSpec：算例协议（Step 5 交付 1）
+# 必选六项是求解器主链真正依赖的最小集；其余为可选语义（缺省 None/恒等）。
+# 兼容策略：实现 Mapping 协议（含下标写），既有 case["x"]/case.get("x")/
+# case["x"] = v 的读写方（init 挂回调、compare 覆盖步长、各测试）零改动。
+# gamma 不再独立传：统一取 params.gamma（__post_init__ 归一，旧读者透明）。
+# 构建期只做 dataclass 能承担的轻校验；六侧顺序/FARFIELD 状态/回调配套
+# 等结构性规则仍由 from_case/build_execution 负责，不在两处重复。
+# ---------------------------------------------------------------------------
+@dataclass
+class CaseSpec(MutableMapping):
+    """一次算例装配的完整描述（Mapping 兼容，协议见上）。"""
+
+    grid: Any
+    cons0: Any
+    bcs: tuple
+    dxs: tuple
+    axes: tuple
+    params: Any
+    # ---- 可选语义 ----
+    gamma: float = None                      # post_init 归一为 params.gamma
+    forcing: Any = None                      # ("x", G) 或 None
+    forcing_work: bool = True
+    source: Any = None                       # 源项回调 source(q)
+    bc_apply: Any = None                     # 特殊边界回调
+    metrics: Any = None
+    coords: Any = None
+    faces: Any = None                        # 六侧 FaceBoundary（CGNS 等）
+    dif_bound: Any = None
+    dif_axis_map: tuple = (0, 1, 2)
+    inflow: Any = None
+    farfield: Any = None
+    plate: Any = None                        # builtin plate 的私有参数包
+    channel_bc: Any = None                   # channel 兼容边界（内部库）
+    special_boundary: Any = None             # specificboundary 挂载点
+    needs_viscous: bool = False              # 算例声明强制粘性（main 统一判定）
+    scheme_invis: Any = None
+    scheme_vis: Any = None
+
+    _FIELDS = None  # 占位，类级缓存见 keys()
+
+    def __post_init__(self):
+        if self.gamma is None:
+            self.gamma = self.params.gamma
+        for name in ("grid", "cons0", "bcs", "dxs", "axes", "params"):
+            if getattr(self, name) is None:
+                raise ValueError(f"CaseSpec 必选字段 {name} 为 None")
+        if len(self.bcs) != 3:
+            raise ValueError(f"bcs 需要 3 个轴级代表值，得到 {self.bcs!r}")
+        if not self.axes or len(set(self.axes)) != len(self.axes):
+            raise ValueError(f"axes 必须是 0/1/2 的非空无重复子集：{self.axes!r}")
+        if tuple(self.cons0.shape) != tuple(self.grid.shape):
+            raise ValueError(
+                f"cons0 形状 {tuple(self.cons0.shape)} 与 grid 全场 "
+                f"{tuple(self.grid.shape)} 不一致（须含鬼胞五分量）")
+
+    # ---- Mapping 协议（读写兼容既有调用方） ----
+    def __getitem__(self, key):
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            raise KeyError(key) from None
+
+    def __setitem__(self, key, value):
+        if not hasattr(type(self), key) and not hasattr(self, key):
+            raise KeyError(f"CaseSpec 无字段 {key!r}")
+        object.__setattr__(self, key, value)
+
+    def __delitem__(self, key):
+        raise NotImplementedError("CaseSpec 字段不可删除")
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
+    def keys(self):
+        if CaseSpec._FIELDS is None:
+            CaseSpec._FIELDS = tuple(f.name for f in fields(self))
+        return CaseSpec._FIELDS
+
+    def __contains__(self, key):
+        return key in self.keys()
+
+    def __iter__(self):
+        return iter(self.keys())
+
+    def __len__(self):
+        return len(self.keys())
+
+
 def build_case(args):
     """按 ``args.case`` 创建网格、物性、初始守恒量、边界和源项的完整算例字典。
 
@@ -128,7 +222,7 @@ def build_case(args):
         grid = Grid(ni=ni, nj=nj, nk=nk)
         dx = 1.0 / ni
         cons = make_initial_sod(grid, dx, gamma=gamma)
-        return dict(grid=grid, cons0=cons, bcs=(OUTFLOW, PERIODIC, PERIODIC),
+        return CaseSpec(grid=grid, cons0=cons, bcs=(OUTFLOW, PERIODIC, PERIODIC),
                     dxs=(dx, dx, dx), axes=(0,), params=params,
                     forcing=None, gamma=gamma)
 
@@ -138,7 +232,7 @@ def build_case(args):
         grid = Grid(ni=ni, nj=nj, nk=nk)
         dx = 2.0 * np.pi / ni
         cons = make_initial_tg(grid, params)
-        return dict(grid=grid, cons0=cons, bcs=(PERIODIC,) * 3,
+        return CaseSpec(grid=grid, cons0=cons, bcs=(PERIODIC,) * 3,
                     dxs=(dx, dx, 0.0), axes=(0, 1), params=params,
                     forcing=None, gamma=gamma)
 
@@ -171,7 +265,7 @@ def build_case(args):
             fw = getattr(args, "forcing_work", True)
             if isinstance(fw, str):
                 fw = fw.strip().lower() not in ("off", "0", "false", "no")
-            return dict(grid=grid, cons0=cons, bcs=block.bcs,
+            return CaseSpec(grid=grid, cons0=cons, bcs=block.bcs,
                         dxs=block.dxs, axes=(0, 1), params=params,
                         faces=block.faces,
                         forcing=("x", G), forcing_work=bool(fw), gamma=gamma,
@@ -188,7 +282,7 @@ def build_case(args):
         fw = getattr(args, "forcing_work", True)
         if isinstance(fw, str):
             fw = fw.strip().lower() not in ("off", "0", "false", "no")
-        return dict(grid=grid, cons0=cons, bcs=(PERIODIC, WALL, PERIODIC),
+        return CaseSpec(grid=grid, cons0=cons, bcs=(PERIODIC, WALL, PERIODIC),
                     dxs=(dx, 1.0 / nj, dx), axes=(0, 1), params=params,
                     forcing=("x", G), forcing_work=bool(fw), gamma=gamma)
 
@@ -240,7 +334,7 @@ def build_case(args):
                       for k, v in coords.items()}
             metrics = mesh.compute_metrics_from_coords(
                 padded, dxs, order=6, jac_bound=jac_bound, periodic=periodic)
-        return dict(grid=grid, cons0=cons, bcs=bcs,
+        return CaseSpec(grid=grid, cons0=cons, bcs=bcs,
                     dxs=dxs, axes=(0, 1, 2), params=params, forcing=None,
                     gamma=params.gamma,
                     bc_apply=lambda q: bc.apply(q, grid, params),
@@ -290,7 +384,7 @@ def build_case(args):
                           if f.kind == WALL else
                           replace(f, dif_band=False) if f.kind == FARFIELD else f
                           for f in block.faces)
-            return dict(grid=grid, cons0=cons, bcs=block.bcs, faces=faces,
+            return CaseSpec(grid=grid, cons0=cons, bcs=block.bcs, faces=faces,
                         dxs=block.dxs, axes=block.axes, params=params,
                         forcing=None, gamma=params.gamma, metrics=block.metrics,
                         coords=block.coords, dif_bound=block.dif_bound,
@@ -335,7 +429,7 @@ def build_case(args):
         dif_bound = (0, 0, 0, 0, 1, 0) if args.case == "plate" else None
         if raw:
             dif_bound = tuple(int(float(t)) for t in str(raw).replace(",", " ").split())[:6]
-        return dict(grid=grid, cons0=cons, bcs=(INFLOW, PLATE, PERIODIC),
+        return CaseSpec(grid=grid, cons0=cons, bcs=(INFLOW, PLATE, PERIODIC),
                     dxs=(dx, dy, dx), axes=(0, 1), params=params,
                     forcing=None, gamma=params.gamma,
                     bc_apply=lambda q: plate.apply(q, grid, params,
