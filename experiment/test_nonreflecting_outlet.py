@@ -22,7 +22,7 @@ CGNS 边条按项目约定分配：``BCOutflowSupersonic`` → ``nonreflecting``
      只差舍入；
   5. CGNS 映射与端到端一步可跑；
   6. 无反射对照所用网格的来源可复建：派生脚本的缺省参数加源网格，只改出口
-     边条的类型，坐标逐位相同。
+     边条的类型，坐标相同；脚本失败时不破坏已有的产物。
 """
 
 import json
@@ -209,8 +209,9 @@ def test_cgns_outflow_supersonic_maps_to_nonreflecting(tmp_path):
 def test_nonreflecting_grid_is_derived_from_recorded_source(tmp_path):
     """无反射对照所用网格的来源：派生脚本的缺省参数加源网格。
 
-    只改 dom-5 的类型，坐标与源网格逐位相同，其余五面不变；源文件不可被覆盖。
+    只改 dom-5 的类型，坐标与源网格相同，其余五面不变；源文件不可被覆盖。
     产物不记哈希：来源由入库的源网格、脚本、配置和已验证的重跑确定。
+    失败时不得破坏已有的产物（Astra 第十五轮）：边条名敲错，输出文件应原样保留。
     """
     import subprocess
     script = REPO / "Grid" / "override_cgns_bc.py"
@@ -225,6 +226,12 @@ def test_nonreflecting_grid_is_derived_from_recorded_source(tmp_path):
         "inflow", "outflow", "wall", "farfield", "periodic", "periodic")
     assert tuple(f.kind for f in mesh_cgns.to_block_mesh(b).faces) == (
         "inflow", NR, "wall", "farfield", "periodic", "periodic")
+    # 边条名敲错：报错退出，已有产物不变，临时文件不留
+    good = out.read_bytes()
+    bad = subprocess.run([sys.executable, str(script), "--out", str(out), "--bc", "dom-99"],
+                         capture_output=True)
+    assert bad.returncode != 0 and out.read_bytes() == good
+    assert not out.with_name(out.name + ".tmp").exists()
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.run([sys.executable, str(script), "--out", str(src)],
                        check=True, capture_output=True)
