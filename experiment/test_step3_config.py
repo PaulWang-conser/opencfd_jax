@@ -156,11 +156,11 @@ def test_cgns_mesh_rejects_non_poiseuille(tmp_path):
 def test_negative_switch_overrides_json(tmp_path):
     cfg = write_json(tmp_path, {
         "case": {"name": "sod"},
-        "numerics": {"viscous": True, "filter": True},
+        "numerics": {"viscous": True, "weno_tv": True},
     })
-    args = parse(["--config", cfg, "--no-viscous", "--no-filter"])
+    args = parse(["--config", cfg, "--no-viscous", "--no-weno-tv"])
     assert args.viscous is False
-    assert args.filter is False
+    assert args.weno_tv is False
 
 
 def test_positive_and_negative_switch_conflict(tmp_path):

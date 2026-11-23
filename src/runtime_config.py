@@ -43,15 +43,16 @@ _SCHEMA = {
         "pr": ("number", "pr"),
         "tw": ("number", "tw"),
     },
+    "boundary": {
+        "inflow": ("state", "boundary_inflow"),
+        "farfield": ("state", "boundary_farfield"),
+        "wall_temperature": ("number", "boundary_wall_temperature"),
+    },
     "numerics": {
         "scheme": ("str", "scheme"),
         "vis_order": ("str", "vis_order"),
         "viscous": ("bool", "viscous"),
         "weno_tv": ("bool", "weno_tv"),
-        "filter": ("bool", "filter"),
-        "nstep_filter": ("int", "nstep_filter"),
-        "filter_s0": ("number", "filter_s0"),
-        "filter_rth": ("number", "filter_rth"),
     },
     "time": {
         "dt": ("dt", "dt"),
@@ -76,7 +77,10 @@ _SCHEMA = {
 
 # 字段只在列出的算例中生效；其余算例出现即报错，避免静默忽略。
 _CASE_SCOPE = {
-    "mesh.file": {"poiseuille"},
+    "mesh.file": {"poiseuille", "plate"},
+    "boundary.inflow": {"plate"},
+    "boundary.farfield": {"plate"},
+    "boundary.wall_temperature": {"plate"},
     "case.p_grad": {"poiseuille"},
     "case.forcing_work": {"poiseuille"},
     "case.plate_x0": {"plate"},
@@ -148,6 +152,11 @@ def _resolve_out_dir(value: str, directory: Path) -> str:
 
 
 def _validate_value(kind: str, value: Any, dotted: str, directory: Path) -> Any:
+    if kind == "state":
+        keys = ("rho", "u", "v", "w", "T")
+        if not isinstance(value, dict) or set(value) != set(keys):
+            raise ConfigError(f"{dotted} 需要 rho/u/v/w/T 五个字段")
+        return {k: _check_number(value[k], f"{dotted}.{k}") for k in keys}
     if kind == "str":
         return _check_string(value, dotted)
     if kind == "path":
@@ -176,9 +185,9 @@ def _validate_value(kind: str, value: Any, dotted: str, directory: Path) -> Any:
 def _validate_applicability(values: dict[str, Any], case: str) -> None:
     """JSON 中已给出的字段是否适用于最终生效的算例。"""
     fmt = values.get("mesh_format")
-    if fmt == "cgns" and case != "poiseuille":
+    if fmt == "cgns" and case not in ("poiseuille", "plate"):
         raise ConfigError(
-            f"{case} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille")
+            f"{case} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille/plate")
     for dotted, allowed in _CASE_SCOPE.items():
         section, name = dotted.split(".")
         dest = _SCHEMA[section][name][1]
@@ -212,6 +221,10 @@ def _semantic_checks(values: dict[str, Any], sources: dict[str, str],
         raise ConfigError("mesh.file 只在 mesh.format=\"cgns\" 时可用")
     if fmt == "cgns" and "mesh" not in values:
         raise ConfigError("mesh.format=\"cgns\" 需要 mesh.file")
+    if fmt == "cgns" and case == "plate":
+        missing = [k for k in ("boundary_inflow", "boundary_farfield", "boundary_wall_temperature") if k not in values]
+        if missing:
+            raise ConfigError(f"plate CGNS 缺少 boundary 参数: {missing}")
 
     _validate_applicability(values, case)
 
@@ -245,10 +258,20 @@ def load_config(path: str | os.PathLike[str],
     values: dict[str, Any] = {}
     sources: dict[str, str] = {}
 
-    allowed_top = set(_SCHEMA) | {"precision"}
+    allowed_top = set(_SCHEMA) | {"precision", "specificboundary"}
     unknown = sorted(set(raw) - allowed_top)
     if unknown:
         raise ConfigError(f"未知顶层字段：{unknown}")
+
+    # specificboundary 是顶层字符串（src/special_boundaries/ 下的脚本名，
+    # 4.n 规格）：不走节→字段机制，单独解析。
+    if "specificboundary" in raw:
+        value = raw["specificboundary"]
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(
+                "specificboundary 需要是 src/special_boundaries/ 下的脚本名字符串")
+        values["specificboundary"] = value.strip()
+        sources["specificboundary"] = "specificboundary"
 
     for section, spec in _SCHEMA.items():
         block = raw.get(section)
@@ -332,9 +355,9 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
         raise ConfigError("mesh.file 只在 mesh.format=\"cgns\" 时可用")
     if fmt == "cgns" and not merged.get("mesh"):
         raise ConfigError("mesh.format=\"cgns\" 需要 mesh.file")
-    if fmt == "cgns" and merged.get("case", "sod") != "poiseuille":
+    if fmt == "cgns" and merged.get("case", "sod") not in ("poiseuille", "plate"):
         raise ConfigError(
-            f"{merged.get('case')} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille")
+            f"{merged.get('case')} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille/plate")
 
     # 网格尺寸只保留 i/j/k 入口。JSON 不提供维数（Step 3 口径），
     # 命令行与默认值必须给出正整数。

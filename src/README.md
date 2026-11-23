@@ -1,6 +1,6 @@
 # OpenCFD-JAX 计算流程说明
 
-这套代码用 **JAX + NumPy** 求解五个守恒变量的可压缩流动方程，提供 Sod 激波管、Taylor–Green 涡、Poiseuille 槽道流和平板边界层四个命令行算例。代码包含无粘通量、可选粘性项、物理边界、体积力、三阶 Runge–Kutta 时间推进、激波滤波、诊断和 NPZ 存盘。单块 CGNS/HDF5 结构网格只在 `poiseuille` 上接入；`channel` 不再是命令行算例，只保留为内部壁面库。
+这套代码用 **JAX + NumPy** 求解五个守恒变量的可压缩流动方程，提供 Sod 激波管、Taylor–Green 涡、Poiseuille 槽道流和平板边界层四个命令行算例。代码包含无粘通量、可选粘性项、物理边界、体积力、三阶 Runge–Kutta 时间推进和 NPZ 存盘（激波选择性滤波已于 2026-11-23 删除）。单块 CGNS/HDF5 结构网格在 `poiseuille` 与 `plate` 上接入；`channel` 不再是命令行算例，只保留为内部壁面库。
 
 阅读时只需要先记住一条主线：
 
@@ -15,7 +15,6 @@ main.py：组装右端项 L(Q) = 无粘项 + 粘性项 + 源项
    ↓
 solver.py：显式固定 dt + SSP-RK3 时间推进
    ↓
-filtering.py / ana.py：整步后的可选滤波与诊断
    ↓
 io.py：只保存物理内区的守恒量 NPZ
 ```
@@ -48,8 +47,7 @@ output/sod-istep-00000100.npz
 ...
 ```
 
-输出文件名以 `-istep-` 加至少八位步号结尾；旧基准的 `_stepNNNNNN` 文件保持原名，由
-`experiment/check_step0.py` 按步号映射比较。
+输出文件名以 `-istep-` 加至少八位步号结尾。历史 JAX 基准已从工作区删除，不再用于验收。
 
 程序默认使用 FP64。常用控制参数：
 
@@ -69,7 +67,6 @@ output/sod-istep-00000100.npz
 | `--viscous`               | 对 Sod、Taylor–Green、平板启用粘性项；Poiseuille 始终计算粘性项            |
 | `--vis-order`             | 粘性导数格式：`CD6` 或 `CD8`                                    |
 | `--Re --Ama --ref-t --pr` | Reynolds 数、参考 Mach 数、有量纲参考温度和 Prandtl 数                 |
-| `--filter`                | 启用整步后的激波选择性滤波                                           |
 | `--kstep-show`            | 每隔多少整步打印一次诊断                                            |
 | `--kstep-save`            | 每隔多少整步保存一次；最后一个整步也会保存                                   |
 | `--out-dir`               | 输出目录，默认 `output`                                        |
@@ -98,13 +95,13 @@ JSON 只分六组，外加顶层 `precision`：
 |---|---|
 | `mesh` | `format`（`builtin`/`cgns`）、`file` |
 | `physics` | `Re`、`Ama`、`ref_t`、`pr`、`tw`（壁温，无量纲，缺省与来流同温） |
-| `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv`、`filter`、`nstep_filter`、`filter_s0`、`filter_rth` |
+| `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv` |
 | `time` | `dt`（必填）、`end_time`、`end_step` |
 | `case` | `name`、`inflow_profile`（OCFD 1D 剖面文件，空着用自由来流常数）、`p_grad`、`forcing_work`、`plate_x0`、`plate_x1`、`plate_h` |
 | `output` | `dir`、`kstep_show`、`kstep_save` |
 
 优先级：程序默认值 → JSON → 显式命令行。显式与否由“参数是否出现在命令行”判断，
-不靠与默认值比较。需要显式关闭 JSON 里的布尔项时用 `--no-viscous`、`--no-filter`、
+不靠与默认值比较。需要显式关闭 JSON 里的布尔项时用 `--no-viscous`、
 `--no-weno-tv`。`time.cfl`、`--cfl`、`--adaptive-dt` 均已删除；运行必须给出固定 `dt`。
 
 网格文件名决定输出前缀：给了 `--mesh`/`mesh.file` 就用文件名去最后一个扩展名
@@ -188,7 +185,6 @@ CGNS 路径只适用于 `poiseuille`：`mesh.file` 指向 HDF5/CGNS 文件，`me
 | 4  | 组装单个 RK 子步的右端项  | `main.py::build_rhs`                | 形成 JIT 函数 `rhs(q)`，组合边界、无粘、粘性和源项；滤波不放入其中        |
 | 5  | 确定时间步长          | `main.py::run`                    | 只接受显式固定 `dt`；不再有 CFL 自适应或 `compute_dt` |
 | 6  | 执行一个 SSP-RK3 整步 | `solver.py::rk3_step_stages`       | 三次计算右端项，三次组合状态；每个子步的 `rhs` 先 `execution.prepare`，再算 RHS |
-| 7  | 可选激波滤波          | `filtering.py::shock_filter`       | 每个 `nstep_filter` 整步执行一次，不在 RK 子步内执行            |
 | 8  | 打印诊断            | `ana.py::diagnostic_line`          | 输出时间、步数、耗时、内区平均 `rho*E` 和全场 NaN 标志              |
 | 9  | 保存结果            | `io.py::save_npz`                  | 将五个内区分量及时间、步数、格式和物性元信息写入 NPZ                    |
 | 10 | 重复推进            | `main.py::run`                     | 回到步骤 5，直到达到终止时间或最大步数                            |
@@ -372,10 +368,10 @@ du = -(F_right - F_left) / h
 | 类型        | 文件                        | 具体处理                                 |
 | --------- | ------------------------- | ------------------------------------ |
 | 周期边界      | `boundary.py`             | 从对侧内区环绕复制鬼胞                          |
-| 零梯度出流     | `boundary.py`             | **不赋值**：出口边界点复制到四层鬼胞（方式 A），不开单侧带       |
+| 出流     | `boundary.py`             | 保持已有状态鬼层，不覆盖出口边界点；缺省不开单侧带       |
 | 槽道双壁      | `channel.py`              | 只写壁面层；压力 / 温度按壁面类型外推；鬼层清零 + 该侧单侧带      |
 | 平板入口      | `boundary.py` + `plate.py` | 通用 INFLOW：写边界点 + 四层鬼层同一剖面，可来自 1D 剖面文件 |
-| 平板出口      | `boundary.py`             | 不赋值，鬼层取出口边界点延拓（零梯度），不开带              |
+| 平板出口      | `boundary.py`             | 保持已有状态鬼层；CGNS plate 的初始出口鬼层为零              |
 | 平板下壁 / 顶部 | `plate.py` / `boundary.py` | 下壁只写壁面点（ρ 两点外推 + 无滑移 + ρ Cv Tw）；顶部远场只写最后一层内点，鬼层清零 + 该侧单侧带 |
 | 通用体积力     | `cases.py::apply_forcing` | 动量源 `rho*G`，可选能量做功源 `rho*u*G`        |
 | 槽道专用体积力   | `channel.py::body_force`  | 按 `ChannelBC.F` 生成源项；是否做功由 `work` 控制 |
@@ -410,12 +406,14 @@ du = -(F_right - F_left) / h
 LAP 鬼胞坐标并计算 CD6 度量。
 
 当前执行子集：三维 `Structured`、`Vertex` 坐标、整面 `BC`、同块 identity 1to1；
-`BCWall` 只映射 `WALL`，同一轴两侧整面 `BCSymmetryPlane` 才近似 `PERIODIC`，单侧
-对称面拒绝；`BCExtrapolate/BCOutflow*` 映射 `OUTFLOW`，`BCFarfield` 映射通用
-`FARFIELD`。`BCWallViscous*`、`BCInflow*` 只读不执行。CGNS 不解析
-`BCDataSet`；CGNS 的 `BCFarfield` 是**单面**执行：只有被标记为 `BCFarfield` 的那个面
-是远场，不要求同轴对侧也是远场。缺省来流由算例侧提供为
-`(rho=1, rho*u=1, rho*v=0, rho*w=0, rho*E=Cv*T+0.5)`，即物理 +x 方向均匀来流。
+支持通过 `FamilySpecified`、`FamilyName_t` 和 `FamilyBC_t` 解析边界类型。
+`BCWall` 映射 `WALL`，`BCInflow` 映射 `INFLOW`，`BCExtrapolate/BCOutflow*`
+映射 `OUTFLOW`，`BCFarfield` 映射单面的 `FARFIELD`。本项目约定
+`BCSymmetryPolar` 为周期，须同轴正负整面成对；`BCSymmetryPlane` 不支持。
+`BCWallViscous*` 和其他 `BCInflow*` 类型不在执行子集内。CGNS 不解析 `BCDataSet`。
+CGNS plate 的入口、远场原始量和壁温由 JSON 的 `boundary` 提供；
+其他算例的默认来流按各自配置确定。真实 plate 的分阶段对拍尚未完成，见
+`experiment/step49_progress_2026-11-19.md`。
 `validate=False` 保留所有原始 `BCType` 供诊断，但仍拒绝
 `CellCenter`、`Rind>0`、`PointList`、`Periodic_t` 和二维 zone。
 
@@ -439,31 +437,23 @@ LAP 鬼胞坐标并计算 CD6 度量。
 
 | 层 | 谁负责 | 做什么 |
 | --- | --- | --- |
-| 1. 边界点 | `write_faces` | INFLOW 写边界点 + 四层鬼层（同一剖面）；WALL 写壁面点（`thermal`/`Tw` 时按 IBC=124 外推）；FARFIELD 写最后一层内点（横向铺满整行）；OUTFLOW/PERIODIC 不赋值 |
-| 2. 鬼层 | `fill_faces` | 周期复制对侧内区；INFLOW **保持**；出口**取边界点那一层**（零梯度）；**壁面与远场清零** |
+| 1. 边界点 | `write_faces` | INFLOW 写边界点 + 四层鬼层（同一剖面）；WALL 写壁面点；FARFIELD 写最后一层内点；壁面和远场只写横向内区；OUTFLOW/PERIODIC 不赋值 |
+| 2. 鬼层 | `fill_faces` | 周期复制对侧内区；INFLOW 和出口保持已有值；壁面与远场清零 |
 | 3. 特殊回调 | 算例 `bc_apply` | 只在常规赋值之后改局部区域（加射流、改壁面点…），继承该面的 band，自己不设 band |
 
-三段顺序是 **写边界点 → 填鬼层 → 特殊回调**：鬼层要看到已经写好的边界点（出口要复制它），
-回调必须最后写，否则它盖上的鬼胞会被常规填充重写。
+三段顺序是 **写边界点 → 填鬼层 → 特殊回调**；回调最后写，避免其结果被常规填充重写。
 
 口径依据：原码 `OCFD_bc()` 只在六个块边界面调 `pri_to_cons_kernel`（单层平面），
-`commen_kernel.cu` 注明 "eyes on cells WITHOUT LAPs"，即鬼胞没人赋值就是 0；唯一的填鬼例外是
-入口 `do_u2d_inlet_kernel`（`for(i=0;i<=LAP;i++)`），所以 INFLOW 单列一支。壁面与远场因此是
-“**鬼层清零 + 边界点单独赋值 + 该侧单侧差分**”三件套：鬼层没有物理值，中心模板跨边界会读到
-0，靠边界带把模板换成单侧（`schemes.py::flux_band_faces` 的带内模板一律夹到内点，绝不读鬼胞）。
-出口在原码里**没有任何函数**，它的零梯度只能由鬼层承担：出口鬼层 = 出口边界点那一层，
-所以出口不需要开带。
+`commen_kernel.cu` 注明 "eyes on cells WITHOUT LAPs"，未被赋值的鬼胞保留初始化值；入口的填鬼是
+入口 `do_u2d_inlet_kernel`（`for(i=0;i<=LAP;i++)`），所以 INFLOW 单列一支。壁面与远场的状态鬼层清零、边界点单独赋值；是否使用单侧带由各面配置决定。
+本次原版 IBC=124 出口没有赋值函数，出口状态鬼层保留初始化值；`INIT_STAT=1` 参考中的值为零，`INIT_STAT=0` 可以不同。当前通用出口按此保持语义执行，算例负责初值，它并不等同零梯度出口。
 
 `fill_wall_j` / `fill_halos_j(WALL)` 这一对只服务槽道壁面这种整轴同类型的算例，
 按面路径不要用（`mesh_data` 给每侧单独的 `FaceBoundary`，双壁各自清零）。
 
-### 7.2.2 边界带由 kind 派生
+### 7.2.2 边界带按面配置
 
-`dif_band(kind) = kind in (WALL, FARFIELD)`，六侧凑成原码 `DIF_BOUND` 的
-`(x-,x+,y-,y+,z-,z+)` 次序，经 `dif_axis_map` 折成 `(lo_i,hi_i,lo_j,hi_j,lo_k,hi_k)`。
-理由：壁面/远场的鬼层是 0，中心模板跨边界读到 0 会产生假梯度，必须换单侧；
-周期（鬼层是对侧内区）、入口（鬼层是剖面）、出口（鬼层是边界点延拓）三类鬼层本身合法，
-开带只会把重构降成单侧、丢精度。算例字典里的 `dif_bound` 只留档，执行不再读它。
+构造 face 时 `dif_band(kind)` 为壁面和远场提供默认值；实际执行读取每个 `FaceBoundary.dif_band`，经 `dif_axis_map` 组成六侧 `DIF_BOUND`。CGNS plate 参考明确设置远场为 0、壁面为 1，以匹配当前 OCFD 参考配置；其他 case 可以根据自身口径设置。算例字典里的旧 `dif_bound` 只留档。
 
 ### 7.2.3 INFLOW 剖面
 
@@ -476,7 +466,6 @@ LAP 鬼胞坐标并计算 CD6 度量。
 2. 没有剖面文件时回落到 `case["farfield"]` 自由来流常数；
 3. 两者都没有（旧式特殊入口）时不赋值，整段交给算例回调。
 
-`filtering.py` 的滤波尚未接入 `FARFIELD`，`main.build_rhs` 在启用 `--filter` 时对远场算例直接报错。
 
 **新增 case 特殊边界**：case 侧显式提供一个对象，并同时把它的 `apply` 设为
 `case["bc_apply"]`：
@@ -496,9 +485,9 @@ case["bc_apply"] = special.apply
 约束：回调面所在轴的轴级 `bcs` 必须是 `INFLOW`/`PLATE`（no-op 占位）；同轴另一侧
 可设为 `OUTFLOW` halo。常规层只写该面 kind 允许的东西（INFLOW 写边界点+鬼层，壁面写
 壁面点，远场写最后一层内点，出口/周期不赋值），鬼层按 kind 填：周期复制、入口保持、
-出口取边界点那一层、壁面与远场清零；特殊回调在之后覆盖它接管的局部区域
+出口保持、壁面与远场清零；特殊回调在之后覆盖它接管的局部区域
 （例如在远场首层加激波）。鬼层由 `fill_faces` 处理，回调不需要也不应该自己清；
-粘性 Ev 鬼层按面同构填充（周期复制、出口取边界点、入口保持、壁面/远场清零）。
+粘性 Ev 鬼层按面填充（周期复制，入口、出口、壁面和远场清零）；非周期鬼层清零对应当前原版参考初始化口径。
 没有回调的轴只能是 `PERIODIC`/`OUTFLOW`/`WALL`/`FARFIELD`，其 halo 面的
 `kind` 必须等于轴级 `bcs`；`WALL` 仍只允许计算 j 方向。`special_boundary` 不能与
 `plate`/`channel_bc` 同时出现。当前这是**显式导入**入口，不做动态注册；回调只允许
@@ -507,69 +496,7 @@ case["bc_apply"] = special.apply
 
 ***
 
-## 8. 整步后的滤波、诊断和输出
-
-### 8.1 激波选择性滤波
-
-文件：`filtering.py`。
-
-只有提供 `--filter` 才启用，并且每隔 `--nstep-filter` 个**整步**执行一次：
-
-
-
-1. 从守恒量恢复压力。
-
-2. 用压力二阶差分构造 Ducros 式激波传感器。
-
-3. 在传感器达到阈值的区域施加四点选择性耗散。
-
-4. 按 `axes` 逐方向处理；周期方向环绕，其他方向采用端点复制。
-
-5. 可用 `mask` 限制滤波区域；正式运行默认全内区。
-
-相关强度参数为 `--filter-s0` 和 `--filter-rth`。
-
-### 8.2 诊断
-
-文件：`ana.py`。
-
-
-
-* `total_energy()`：计算内区平均 `rho*E`，不是总内能或动能。
-
-* `check_nan()`：检查含鬼胞的全场是否出现 NaN。
-
-* `diagnostic_line()`：生成主循环打印的一行诊断。
-
-### 8.3 NPZ 输出
-
-文件：`io.py`、`main.py`。
-
-每个结果文件包含：
-
-
-
-```
-cons_0 ... cons_4：五个守恒变量的物理内区，形状均为 (nk, nj, ni)
-_meta            ：JSON 元信息，包括 t、step、dt、case、N（实际 i 方向离散点数）、scheme、gamma、Re、Ama、Ref_T、Pr；CGNS 的 Re/Ama 取命令行/JSON 的实际物性
-```
-
-读取示例：
-
-
-
-```
-import numpy as np
-
-with np.load("output/sod-istep-00000100.npz") as data:
-    rho = data["cons_0"]
-    rho_u = data["cons_1"]
-    print(rho.shape, rho_u.shape)
-```
-
-
-
-***
+（激波选择性滤波模块已于 2026-11-23 按 jisen 决定整体删除；历史行为见 git 与 OCFD_filtering.cu。）
 
 ## 9. 四个命令行算例分别怎样进入主流程
 
@@ -580,7 +507,7 @@ with np.load("output/sod-istep-00000100.npz") as data:
 
 | 算例           | 初值和输入                                 | 求解方向与边界                  | 额外处理               | 验证辅助                              |
 | ------------ | ------------------------------------- | ------------------------ | ------------------ | --------------------------------- |
-| `sod`        | `make_initial_sod()` 生成左右常数态激波管       | x；x 出流，y/z 周期            | 默认无粘，可选滤波          | `exact_riemann.py` 提供 Riemann 精确解 |
+| `sod`        | `make_initial_sod()` 生成左右常数态激波管       | x；x 出流，y/z 周期            | 默认无粘                    | `exact_riemann.py` 提供 Riemann 精确解 |
 | `tg`         | `make_initial_tg()` 生成周期正余弦速度场        | x/y；周期边界                 | 可叠加粘性              | `tests/test_taylor_green.py`      |
 | `poiseuille` | 内置 `make_initial_poiseuille()`，或 CGNS `Vertex` 坐标 | x/y；x/z 周期，y 双壁          | 始终计算粘性；x 向恒体积力；CGNS 带曲线度量 | 稳态层流剖面；Step 4 NPZ 对齐 |
 | `plate`      | 均匀来流，边界层从入口向下游发展                      | x/y；入口 / 出口、下壁 / 顶部、z 周期 | 使用平板专用边界和鬼层口径      | `blasius.py` 提供相似解和 Cf 基准         |
@@ -656,7 +583,6 @@ python -m opencfd_jax.src.main --case plate `
 | `mesh.py`          | 原码网格 / 场读取、坐标补层、曲线网格度量（内部库）         |
 | `mesh_data.py`     | 单块网格与六侧边界的只读描述（第 1 步）             |
 | `infile.py`        | 原码 in 文件键值解析（内部库；无正式入口）              |
-| `filtering.py`     | 压力传感器与整步后的选择性激波滤波                 |
 | `ana.py`           | 平均总能量、NaN 检查和诊断行                  |
 | `io.py`            | NPZ 读写和通用原码 dat 读取                |
 | `compare.py`       | 原版 dump 转 NPZ、JAX 对照跑、逐场误差报告      |

@@ -7,7 +7,7 @@
         --Re 100 --end-time 2.0 --viscous
 
 主循环对齐原码：每步 dt_fn → RK3（+forcing）→ 每 Kstep_show 同步打印诊断
-（ana_residual/NAN）→ 每 Kstep_save 存 npz。滤波按原码节奏每 nstep_filter
+（ana_residual/NAN）→ 每 Kstep_save 存 npz
 步一次（整步级，非每子步）。除打印/存盘步外不阻塞 host。
 """
 
@@ -24,7 +24,7 @@ from .ana import check_nan, diagnostic_line
 from .cases import apply_forcing
 from .errors import RuntimeExecutionError, SetupError
 from .mesh_data import from_case
-from .solver import inviscid_rhs, rk3_step
+from .solver import flux_scales_for, inviscid_rhs, rk3_step
 from .viscous import viscous_rhs
 
 
@@ -52,24 +52,25 @@ def build_rhs(case, args, execution=None):
     vis_order = {"CD6": 6, "CD8": 8}[args.vis_order]
     src = case.get("source")
     metrics = desc.metrics
-    # 边界带由边界 kind 派生（execution.band）；仅在执行配置缺席时回落到旧字段。
+    # 边界带由每侧 face 决定；仅在执行配置缺席时回落到旧字段。
     dif_bound = execution.band if execution.band is not None else desc.dif_bound
     dif_axis_map = desc.dif_axis_map
     farfield = execution.farfield
     faces = execution.faces
-    if getattr(args, "filter", False) and farfield is not None:
-        raise ValueError(
-            "--filter 尚未接入通用 FARFIELD；请关闭滤波后再运行远场边界算例")
+    # CGNS 单块口径下 JAX/OCFD 分裂通量的单位比（另两轴 (N-1) 乘积）；
+    # 直角与 .in 网格口径返回 None，维持原 epsilon。
+    flux_scale = flux_scales_for(grid, dxs, metrics)
 
     def rhs(q):
         """计算当前 RK 子步状态 ``q`` 的总右端项 ``du = L(q)``。"""
-        # halo（周期复制/非周期清零）→ 边界点赋值 → 特殊回调，三步集合不重叠。
+        # 边界点赋值 → 周期/鬼层处理 → 特殊回调。
         q = execution.prepare(q)
         du = inviscid_rhs(q, grid, gamma=gamma, bcs=bcs, axes=axes, dx=dxs,
                           scheme=args.scheme, weno_tv=weno_tv, metrics=metrics,
                           dif_bound=dif_bound, zero_state_ghosts=False,
                           dif_axis_map=dif_axis_map, farfield=farfield,
-                          faces=faces, fill_state_halos=False)
+                          faces=faces, fill_state_halos=False,
+                          flux_scale=flux_scale)
         if args.viscous or args.case in ("poiseuille", "channel"):
             # viscous 的 dxs 是导数步长，必须全部合法
             du = du + viscous_rhs(q, grid, params, bcs, axes=axes, dx=dxs,
@@ -109,7 +110,11 @@ def build_parser(explicit_only=False):
     add("--plate-x0", type=float, default=0.05)
     add("--plate-x1", type=float, default=0.25)
     add("--plate-h", type=float, default=0.12)
-    add("--plate-dif-bound", default="0 0 0 0 1 0")
+    add("--plate-dif-bound", default=None,
+        help="显式 DIF_BOUND 六开关；缺省按算例：plate 用 OCFD 口径 "
+             "0 0 0 0 1 0，其余按 kind 派生")
+    add("--specificboundary", default=None,
+        help="src/special_boundaries/ 下的脚本名（与 plate/channel 互斥）")
     add("--inflow-profile", default=None,
         help="入口剖面文件（OCFD 1D 格式：首行表头，其后 y rho u v T）；"
              "空着表示用自由来流常数，剖面必须与网格 j 点逐点对应")
@@ -150,13 +155,6 @@ def build_parser(explicit_only=False):
     add("--viscous", action="store_true")
     add("--no-viscous", action="store_true",
         help="显式关闭粘性项（覆盖 JSON 的 true；channel/poiseuille 仍强制粘性）")
-    add("--filter", action="store_true",
-        help="启用激波滤波（每 nstep-filter 步一次）")
-    add("--no-filter", action="store_true",
-        help="显式关闭激波滤波（覆盖 JSON 的 true）")
-    add("--nstep-filter", type=int, default=100)
-    add("--filter-s0", type=float, default=1.0)
-    add("--filter-rth", type=float, default=1.0e-5)
     add("--kstep-show", type=int, default=50)
     add("--kstep-save", type=int, default=500)
     add("--out-dir", default="output")
@@ -167,7 +165,7 @@ def build_parser(explicit_only=False):
     return p
 
 
-_NEGATIVE_FLAGS = (("no_viscous", "viscous"), ("no_filter", "filter"),
+_NEGATIVE_FLAGS = (("no_viscous", "viscous"),
                    ("no_weno_tv", "weno_tv"))
 
 
@@ -259,7 +257,6 @@ def run(args):
               "OCFD Ama 缩放约定不匹配——粘性系数无物理意义（不 raise，"
               "保留灵活性）")
 
-    from .filtering import shock_filter
     t0 = time.time()
     t = 0.0
     step = 0
@@ -280,20 +277,6 @@ def run(args):
                 f"原始异常={type(exc).__name__}: {exc}") from exc
         t += dt
         step += 1
-        if args.filter and step % args.nstep_filter == 0:
-            try:
-                d_ = cons[0]
-                kin = 0.5 * (cons[1] ** 2 + cons[2] ** 2 + cons[3] ** 2) / d_
-                p_ = (gamma - 1.0) * (cons[4] - kin)      # 压力标量场（3 维）
-                cons = shock_filter(cons, p_, grid, s0=args.filter_s0,
-                                    rth=args.filter_rth, bcs=bcs,
-                                    axes=desc.axes)
-            except Exception as exc:
-                raise RuntimeExecutionError(
-                    "运行期错误（激波滤波）："
-                    f"case={args.case} step={step} t={t} dt={dt} "
-                    f"grid={grid.ni}x{grid.nj}x{grid.nk} "
-                    f"原始异常={type(exc).__name__}: {exc}") from exc
         if step % args.kstep_show == 0:
             print(diagnostic_line(cons, grid, t, step, time.time() - t0))
         if step % args.kstep_save == 0 or t >= args.end_time:

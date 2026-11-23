@@ -1,4 +1,8 @@
-# 第 0 步：固定当前基准（回归护栏）
+# 实验与验证记录
+
+**2026-11-19 当前要求：** 历史 JAX 基准已按 jisen 要求从工作区删除，以后不再用于对照或验收。以下 Step 0 清单、脚本及历史报告说明保留为历史记录；其中生成基准和比较七例的命令不再是当前工作流程。当前只用 plate 进行算例验证，对照来源清楚的 OCFD 参考；通用边界和其他接口仍按实际影响运行行为测试。见 [Step 4.9 分阶段参考](step49/README.md)。
+
+## 历史记录：第 0 步回归护栏
 
 对应 `11-16 我建议先对齐的.md` 第六节「第 0 步：固定当前基准」。这一步**不改任何功能**，
 只把当前程序的行为钉死：Sod / TG / Poiseuille / plate 各跑一小段，
@@ -28,11 +32,11 @@ Gridgen 读取、case 插件化、多块串行、多块粘性、I/O、多 GPU）
 | `plate_1step` | 平板边界层 1 步 | INFLOW/PLATE 非对称边界 + 零状态鬼层 + `dif_bound` 边界带 | 64×64×4 | 5.3 s |
 
 合计 4 条。`channel_1step` / `channel_small_100step` 已随旧 `.in` 与 OCFD 网格入口删除；
-它们的历史基准文件仍保留在 `baseline/` 供旧提交对照，但不再由当前入口生成。
+它们的历史基准文件已从当前工作区删除；历史提交仍保留记录。
 
 ## 用法
 
-在 `D:\Desktop\ocfd2jax` 下执行（基准与候选都写到 `experiment/` 里）：
+以下是旧脚本的历史用法，不是当前验收命令。当前工作区已删除历史 JAX 基准，缺省 `check_step0.py` 无法执行旧对照：
 
 ```powershell
 # 1) 已生成：重写基准（只在明确决定"基准该变"时才跑）
@@ -147,7 +151,6 @@ python -m pytest experiment/test_step1_mesh.py -q
 - 计算 i/j/k 周期与出流、四层鬼胞、角点覆盖次序；
 - 槽道三点壁面外推、不同壁温、单侧绝热；平板入口/出口/下壁/顶部及平板两点外推；
 - 状态壁面镜像、派生温度、Ev 的计算 j 符号与平板顶部复制；
-- 滤波启用时的周期/出流前后值，以及现有不支持的滤波边界报错；
 - 正式路径初态、三个 RHS 和末态的回调次数；`build_execution` 的冲突拒绝；
 - case 显式 `special_boundary` 对象 + `bc_apply` 的注入、六侧校验和阶段衔接。
 
@@ -160,7 +163,7 @@ python -m pytest experiment/test_step2_boundary.py -q
 总判定 PASS，七例全部 `max|diff|=0.000e+00`；全量套件用别名启动器运行，结果为
 `143 passed, 2 skipped, 1 xfailed`。
 
-滤波只支持周期/出流；通用 `WALL` 只支持 y 方向；槽道三点外推和平板两点外推仍留在
+（滤波相关验收项随模块于 2026-11-23 删除，历史记录见 git。）
 `channel.py` / `plate.py`。添加通用边界和 case 特殊边界的位置、参数与约束见
 `src/README.md` 第 7.2 节；边界带公式的核对材料见 `docs/boundary_scheme_notes.md`。
 `special_boundary` 是显式导入入口，不做动态注册，也不允许 I/O 进入 JIT。
@@ -285,10 +288,7 @@ experiment/
   compare_ocfd_jax.py     原码 dump vs JAX 的单步对拍（--dir/--scheme 可换口径）
   cases/channel_small.in  小网格槽道 in 文件（历史遗留，当前入口不再读取）
   cases/*.json            七条历史 Step 0 JSON；当前清单只引用 4 条
-  baseline/               基准数据（7 条用例、28.6 MB、可复现）
-    manifest.json         全局清单：环境、git、逐用例命令与哈希
-    STEP0.md              自动生成的摘要表
-    SELFCHECK.txt/json    生成基准当天"自比对 PASS"的证据
+  baseline/ocfd_plate/    历史 OCFD plate 参考、转换脚本和报告
   ocfd/channel_weno7/     原码 WENO7 口径的运行目录 + 对拍_单步.md
   ocfd/channel_up7/       原码 UP7 口径（逐层排查用，壁面带与 WENO7 共用）
 ```
@@ -296,7 +296,4 @@ experiment/
 两个 `ocfd/channel_*` 目录里只保留 `dump/parsed.npz`（各约 100 MB），
 原始文本 dump（各 724 MB）已删除，删掉 npz 会触发重新解析。
 
-`candidate/` 与 `candidate_json/` 是临时目录，已被 `.gitignore` 排除；`baseline/` 需要随仓库保管
-（去掉它，第 1~9 步就没有护栏了）。如果不想把 23 MB 的二进制入库，最低要求是
-**`manifest.json` 必须入库**（它含逐文件 sha256，换机后可用它判断"数据是否被动过"），
-数据本体可以留在本地磁盘或用 LFS。
+`candidate/` 与 `candidate_json/` 是历史临时目录；JAX 基准已删除，`baseline/ocfd_plate/` 的 OCFD 参考保留。

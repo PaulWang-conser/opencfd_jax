@@ -23,7 +23,7 @@ _REPO_TAX = Path(__file__).resolve().parents[2]
 if str(_REPO_TAX) not in sys.path:
     sys.path.insert(0, str(_REPO_TAX))
 
-from opencfd_jax.src import boundary, cases, channel, fields, filtering
+from opencfd_jax.src import boundary, cases, channel, fields
 from opencfd_jax.src import mesh_data, plate, main, solver, viscous
 from opencfd_jax.src.fields import (INFLOW, LAP, OUTFLOW, PERIODIC,
                                     PLATE, WALL, Grid)
@@ -125,12 +125,12 @@ def test_periodic_all_axes_four_layers_and_corners(axis):
 
 @pytest.mark.parametrize("axis", [0, 1, 2])
 def test_outflow_all_axes_four_layers_and_corners(axis):
-    """U1：i/j/k 出流四层鬼胞复制最近内点，含角点。"""
+    """i/j/k 出口保留原有鬼层和内区。"""
     grid = Grid(9, 8, 7)
     n = (grid.ni, grid.nj, grid.nk)[axis]
     f = _field(grid)
     got = np.asarray(_fill_axis(f, axis, OUTFLOW, n))
-    np.testing.assert_array_equal(got, _outflow_ref(np.asarray(f), axis, n))
+    np.testing.assert_array_equal(got, np.asarray(f))
 
 
 # ---------------------------------------------------------------- U1 槽道壁面
@@ -210,12 +210,10 @@ def test_plate_inlet_outlet_wall_far_and_corners():
         out[:, LAP:LAP + grid.nk, LAP + 1:nj_in - 1, :LAP + 1],
         np.broadcast_to(np.asarray(case["plate"]["inflow"])[:, :, 1:-1, None],
                         (5, grid.nk, nj - 2, LAP + 1)))
-    # 出口：方式 A，鬼层 = 出口边界点那一列（零梯度复制），不是清零。
-    ghost = np.asarray(out[:, :, :, LAP + ni:])
+    # 出口横向内区的鬼层保留原值；交界处仍由其他面的边界条件处理。
     np.testing.assert_array_equal(
-        ghost,
-        np.broadcast_to(np.asarray(out[:, :, :, LAP + ni - 1:LAP + ni]),
-                        ghost.shape))
+        out[:, kz, LAP + 1:nj_in - 1, LAP + ni:],
+        out_q[:, kz, LAP + 1:nj_in - 1, LAP + ni:])
 
     # 下壁：两点压力外推 + 无滑移 + rhoE=rho Cv Tw（只在内区窗口内比较）
     # 壁面回调在入口写完之后执行，故外推基线要用“已写入口”的状态。
@@ -301,21 +299,6 @@ def test_viscous_channel_uniform_state_is_fixed_point():
                                         axes=(0, 1, 2), dx=case["dxs"],
                                         order=8))
     np.testing.assert_allclose(du[grid.inner()], 0.0, atol=1e-13)
-
-
-def test_filter_supports_periodic_outflow_and_rejects_wall():
-    """U1：滤波的周期/出流路径可用；槽道 y 壁仍按现状报 unknown bc。"""
-    grid = Grid(16, 4, 4)
-    q = _field(grid)
-    p = q[0]
-    for bcs, axes in (((OUTFLOW, PERIODIC, PERIODIC), (0,)),
-                      ((PERIODIC,) * 3, (0, 1))):
-        out = filtering.shock_filter(q, p, grid, s0=0.3, rth=1e-5,
-                                     bcs=bcs, axes=axes)
-        assert np.all(np.isfinite(np.asarray(out)))
-    with pytest.raises(ValueError, match="unknown bc"):
-        filtering.shock_filter(q, p, grid, bcs=(PERIODIC, WALL, PERIODIC),
-                               axes=(1,))
 
 
 def test_callback_order_through_build_rhs_and_rk3():
@@ -535,7 +518,7 @@ def test_invalid_special_boundary_is_rejected_before_jit():
 
 
 def test_special_inlet_and_outflow_share_axis():
-    """特殊入口与普通出流组合时，右侧鬼层由内区末点复制。"""
+    """特殊入口与普通出流组合时，出口状态鬼层保持已有值。"""
     case, special = _special_case()
     faces = list(special.faces)
     faces[1] = mesh_data.FaceBoundary("i+", 0, OUTFLOW, "halo", False)
@@ -547,12 +530,10 @@ def test_special_inlet_and_outflow_share_axis():
     q = case["cons0"].at[..., LAP + case["grid"].ni - 1].set(0.75)
     actual = execution.apply(q)
     np.testing.assert_array_equal(np.asarray(actual[0, ..., :LAP]), 0.25)
-    # OUTFLOW 走方式 A（零梯度复制）：鬼层 = 出口边界点那一层。
+    # OUTFLOW 不覆盖原有状态鬼层。
     np.testing.assert_array_equal(
         np.asarray(actual[..., LAP + case["grid"].ni:]),
-        np.broadcast_to(np.asarray(actual[..., LAP + case["grid"].ni - 1:
-                                        LAP + case["grid"].ni]),
-                        np.asarray(actual[..., LAP + case["grid"].ni:]).shape))
+        np.asarray(q[..., LAP + case["grid"].ni:]))
     args = argparse.Namespace(case="sod", scheme="UP7", vis_order="CD6",
                               viscous=False, weno_tv=False)
     got = main.build_rhs(case, args)(case["cons0"])
@@ -560,8 +541,7 @@ def test_special_inlet_and_outflow_share_axis():
     ev = jnp.arange(4 * np.prod(case["grid"].shape[1:]), dtype=jnp.float64).reshape(
         (4,) + case["grid"].shape[1:])
     filled_ev = execution.fill_mixed_outflow(ev, axis=0)
-    expected_ev = np.repeat(np.asarray(ev[..., LAP + case["grid"].ni - 1:LAP + case["grid"].ni]), LAP, axis=-1)
-    np.testing.assert_array_equal(np.asarray(filled_ev[..., LAP + case["grid"].ni:]), expected_ev)
+    np.testing.assert_array_equal(np.asarray(filled_ev[..., LAP + case["grid"].ni:]), 0)
     args.viscous = True
     got_viscous = main.build_rhs(case, args)(case["cons0"])
     assert np.all(np.isfinite(np.asarray(got_viscous)))
