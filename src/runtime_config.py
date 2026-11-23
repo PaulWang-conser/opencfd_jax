@@ -350,8 +350,14 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
         merged["fp32"], merged["fp64"] = False, True
         sources["fp32"], sources["fp64"] = "cli", "cli"
 
-    if config is not None:
-        _validate_applicability(config.values, merged.get("case", "sod"))
+    # 适用范围按"JSON 显式值 ∪ 命令行显式值"校验，纯 CLI 也执行：
+    # explicit 只含用户真给过的参数（缺省值不在内），合并缺省值会把
+    # p_grad=0.1 之类的缺省误判为越界。此前只在有 JSON 时校验且只查
+    # config.values——`--case sod --outlet-ghost copy` 能通过解析（Astra
+    # 第十轮）。
+    _validate_applicability(
+        {**(config.values if config is not None else {}), **explicit},
+        merged.get("case", "sod"))
 
     fmt = merged.get("mesh_format")
     if fmt is None:

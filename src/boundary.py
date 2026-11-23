@@ -897,7 +897,8 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
         if marker_faces != tuple(faces.values()):
             raise ValueError("special_boundary.faces 与已构造的六侧描述不一致")
         mixed_outflow = tuple(f for f in marker_faces if f.executor == "halo" and
-                              bcs[f.axis] in (INFLOW, PLATE) and f.kind == OUTFLOW)
+                              bcs[f.axis] in (INFLOW, PLATE)
+                              and f.kind in (OUTFLOW, NONREFLECTING))
         needs_farfield = any(f.kind == FARFIELD for f in marker_faces)
         farfield = _farfield_state(case) if needs_farfield else None
         return BoundaryExecution("custom", bcs, callback, marker_faces,

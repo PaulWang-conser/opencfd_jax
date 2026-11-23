@@ -426,7 +426,8 @@ with h5py.File("grid.cgns", "w") as f:
    当现成鬼胞。
 5. **BC**：遍历 `ZoneBC_t` 下所有 `BC_t`，按 `BCType` 字符串 + `PointRange` 建面表；
    当前执行子集是 `BCWall`→`WALL`、同轴双面 `BCSymmetryPlane`→`PERIODIC`、
-   `BCExtrapolate/BCOutflow*`→`OUTFLOW`、`BCFarfield`→`FARFIELD`；`BCInflow*`、
+   `BCExtrapolate/BCOutflow/BCOutflowSubsonic`→`OUTFLOW`、
+   `BCOutflowSupersonic`→`NONREFLECTING`（项目约定）、`BCFarfield`→`FARFIELD`；`BCInflow*`、
    `BCWallViscous*` 在严格模式下报错并打印 patch 名，不退化。`BCFarfield` 是**单面**：
    只有被标记的那个面是远场，同轴对侧可以是 `BCWall`/`BCOutflow` 等不同 kind；
    本步不读 `BCDataSet`，缺省来流由算例侧提供为物理 +x 方向均匀来流。

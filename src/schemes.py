@@ -63,7 +63,8 @@ def _nonref_or_sum(Fp, Fm, h, nonref):
     原码 NON_REFLETION（OCFD_Schemes.cu:293-381 的 put_du_p/m_kernel；正分裂趟的
     任务区间向低侧多探一格、负分裂趟向高侧多探一格，OCFD_Schemes_Choose.cu:99、437）：
     低侧开关打开时，第一个内点的正分裂通量差不累加；高侧打开时，最后一个内点的
-    负分裂通量差不累加。这里把两半分别差分再相加，与原码两趟内核的累加次序一致。
+    负分裂通量差不累加。这里按原码分别形成 P/M 面差再相加；原码的浮点乘除
+    位置不同（每趟 -Ajac*ΔF/h 逐项累入 du），实数下等价、舍入不同。
     未开无反射时走 (Fp+Fm) 合并后的差分，运算路径逐位不变。
     """
     if not (nonref[0] or nonref[1]):

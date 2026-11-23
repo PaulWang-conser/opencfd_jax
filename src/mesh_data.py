@@ -230,7 +230,7 @@ def _generic_faces(bcs, dif_bound, dif_axis_map):
                                    dif_axis_map, "周期"))
             elif bc in (OUTFLOW, NONREFLECTING):
                 faces.append(_face(side, bc, _EXEC_HALO, dif_bound, dif_axis_map,
-                                   "零梯度出流"))
+                                   "出流（鬼层保持）" if bc == OUTFLOW else "无反射出流"))
             elif bc == WALL:
                 if axis != 1:
                     raise ValueError(

@@ -139,3 +139,14 @@ def test_cli_overrides_json():
     assert state.execution.faces[1].params["halo"] == "copy"
     state = _state("copy", extra_cli={"boundary_outlet_ghost": "keep"})
     assert "halo" not in state.execution.faces[1].params
+
+
+def test_pure_cli_scope_is_rejected():
+    """纯 CLI 给 sod 算例 --outlet-ghost 必须报错（此前只校验 JSON 路径）。"""
+    defaults = main.build_parser().parse_args([])
+    explicit_parser = main.build_parser(explicit_only=True)
+    _, explicit = main.resolve_cli(
+        vars(explicit_parser.parse_args(["--case", "sod", "--outlet-ghost", "copy"])),
+        explicit_parser)
+    with pytest.raises(runtime_config.ConfigError, match="outlet_ghost"):
+        runtime_config.resolve_args(explicit, None, defaults)

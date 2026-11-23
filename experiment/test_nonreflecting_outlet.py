@@ -13,7 +13,7 @@ CGNS 边条按项目约定分配：``BCOutflowSupersonic`` → ``nonreflecting``
 
 锁五件事：
   1. 注册格式：nonref 只保留边界内点的那一半分裂通量差；其余点两半分别差分
-     再相加（原码两趟内核的累加次序），与合并差分只差舍入；不传 nonref 时走
+     再相加（按原码分别形成 P/M 面差），与合并差分只差舍入；不传 nonref 时走
      原路径（逐位相同）；
   2. UP7 同上；
   3. 无反射面的鬼层、Ev、边界带与出流面相同；
@@ -103,9 +103,14 @@ def test_nonreflecting_face_matches_outflow_for_ghosts_and_band():
     # 状态鬼层：两者都保持原值；显式 halo=copy 的覆盖仍然生效
     np.testing.assert_array_equal(np.asarray(boundary.fill_faces(f, (nr,), grid)),
                                   np.asarray(boundary.fill_faces(f, (of,), grid)))
-    cp = np.asarray(boundary.fill_faces(f, (replace(nr, params={"halo": "copy"}),), grid))
+    # copy 覆盖：给鬼层一个与内点不同的错值，四层都应等于边界点那一层
+    q = jnp.asarray(np.asarray(f).copy())
+    q = q.at[..., 4 + grid.ni:].set(7.0)
+    cp = np.asarray(boundary.fill_faces(q, (replace(nr, params={"halo": "copy"}),), grid))
     f3 = np.asarray(f)
-    np.testing.assert_array_equal(cp[..., 4 + grid.ni - 1], f3[..., 4 + grid.ni - 1])
+    for layer in range(4):
+        np.testing.assert_array_equal(
+            cp[..., 4 + grid.ni - 1 + layer], f3[..., 4 + grid.ni - 1])
     # Ev 鬼层：两者都清零
     for face in (nr, of):
         ev = np.asarray(boundary.fill_ev_faces(f, (face,), grid))

@@ -412,7 +412,8 @@ LAP 鬼胞坐标并计算 CD6 度量。
 `BCOutflowSubsonic` 映射 `OUTFLOW`，`BCFarfield` 映射单面的 `FARFIELD`。
 本项目约定 `BCSymmetryPolar` 为周期，须同轴正负整面成对；`BCSymmetryPlane`
 不支持；`BCOutflowSupersonic` 映射 `NONREFLECTING`（原码 `NON_REFLETION` 口径，
-SIDS 字面是"全部外推"，与此不同；零梯度出流用 `outflow` 加 `boundary.outlet_ghost="copy"`）。
+SIDS 字面是"全部外推"，与此不同；零梯度出流用 `outflow` 加 `boundary.outlet_ghost="copy"`，目前只有 CGNS plate
+消费该开关；内置 plate 与其他算例给出时会在配置解析阶段报错。
 `BCWallViscous*` 和其他 `BCInflow*` 类型不在执行子集内。CGNS 不解析 `BCDataSet`。
 CGNS plate 的入口、远场原始量和壁温由 JSON 的 `boundary` 提供；
 其他算例的默认来流按各自配置确定。真实 plate 的分阶段对拍尚未完成，见
