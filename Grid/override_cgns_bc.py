@@ -10,8 +10,8 @@
     python Grid/override_cgns_bc.py --bc dom-5 --type BCOutflowSupersonic
 
 缺省参数即无反射对照实验所用的那一组。结束时打印源文件的 SHA-256 与产物的逻辑
-内容哈希。产物的文件字节哈希不能用：改一个节点时 HDF5 会把父组的修改时间写进
-对象头，隔一秒再生成字节就不同，而读取器消费的是逻辑内容。
+内容哈希。产物的文件字节哈希不能用：改一个节点时 HDF5 对象头里的时间字段会随
+生成时间改变，隔一秒再生成字节就不同，而读取器消费的是逻辑内容。
 """
 
 from __future__ import annotations
@@ -61,29 +61,59 @@ def override(src: Path, out: Path, bc: str, bc_type: str) -> str:
     return old
 
 
-def logical_digest(path: Path) -> str:
-    """CGNS 节点树的逻辑内容哈希。
+def _feed(h, *chunks):
+    """按长度前缀依次喂入；字段之间因此没有歧义边界。"""
+    for chunk in chunks:
+        h.update(len(chunk).to_bytes(8, "big"))
+        h.update(chunk)
 
-    按名字排序遍历全部节点，依次喂入节点名、属性、数据集的类型、形状和内容。
-    不含 HDF5 对象头里的时间戳，所以同一份逻辑内容总是得到同一个哈希。
-    """
-    h = hashlib.sha256()
 
-    def feed(node, prefix):
-        for key in sorted(node):
-            child = node[key]
-            name = f"{prefix}/{key.strip()}"
-            h.update(name.encode("utf-8"))
-            for k, v in sorted(child.attrs.items()):
-                h.update(f"{name}.{k}={v!r}".encode("utf-8"))
-            if isinstance(child, h5py.Dataset):
-                h.update(f"{name}:{child.dtype.str}:{child.shape}:".encode("utf-8"))
-                h.update(np.ascontiguousarray(child[()]).tobytes())
+def _feed_value(h, value):
+    """喂入一个属性值或数据集内容：类型、形状和内容，不经过打印表示。"""
+    a = np.asarray(value)
+    if a.dtype.kind == "O":                      # 逐元素编码，不含对象指针
+        _feed(h, b"O", repr(a.shape).encode("ascii"))
+        for x in a.ravel().tolist():
+            if isinstance(x, bytes):
+                _feed(h, b"b", x)
+            elif isinstance(x, str):
+                _feed(h, b"s", x.encode("utf-8"))
             else:
-                feed(child, name)
+                raise TypeError(f"逻辑内容哈希不支持的元素类型 {type(x).__name__}")
+    elif a.dtype.kind == "U":                    # 定长字符串：按 UTF-8，与字节序无关
+        _feed(h, b"U", repr(a.shape).encode("ascii"))
+        for x in a.ravel().tolist():
+            _feed(h, x.encode("utf-8"))
+    elif a.dtype.kind in "biufcS":               # 数值与定长字节串
+        _feed(h, a.dtype.str.encode("ascii"), repr(a.shape).encode("ascii"),
+              np.ascontiguousarray(a).tobytes())
+    else:
+        raise TypeError(f"逻辑内容哈希不支持 dtype={a.dtype.str}")
+
+
+def logical_digest(path: Path) -> str:
+    """CGNS 节点树的逻辑内容哈希（算法 v2）。
+
+    从根节点起按原始名字排序遍历，喂入节点种类、名字、全部属性（含根的）、
+    数据集的类型、形状和内容。字段带长度前缀，值按类型和原始字节编码。不含
+    HDF5 对象头里的时间字段，所以同一份逻辑内容总是得到同一个哈希。
+    """
+    h = hashlib.sha256(b"cgns-logical-digest-v2")
+
+    def feed(name, node):
+        h.update(b"G" if isinstance(node, h5py.Group) else b"D")
+        _feed(h, name.encode("utf-8"))
+        for k in sorted(node.attrs):
+            _feed(h, k.encode("utf-8"))
+            _feed_value(h, node.attrs[k])
+        if isinstance(node, h5py.Dataset):
+            _feed_value(h, node[()])
+        else:
+            for key in sorted(node):
+                feed(key, node[key])
 
     with h5py.File(path, "r") as f:
-        feed(f, "")
+        feed("", f)
     return h.hexdigest()
 
 
@@ -98,7 +128,7 @@ def main() -> None:
     old = override(src, out, args.bc, args.type)
     print(f"{out.name}: {args.bc} 的 BCType {old!r} -> {args.type!r}")
     print(f"  源文件     SHA-256 {hashlib.sha256(src.read_bytes()).hexdigest()}")
-    print(f"  产物逻辑内容 SHA-256 {logical_digest(out)}")
+    print(f"  产物逻辑内容 SHA-256 {logical_digest(out)}（算法 v2）")
 
 
 if __name__ == "__main__":

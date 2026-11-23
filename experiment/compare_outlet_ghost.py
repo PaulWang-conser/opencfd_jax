@@ -261,13 +261,15 @@ if __name__ == "__main__":
 # BCOutflowSupersonic，跑到 t=10；快照 e1_outlet_ghost_20261123/C/）。
 # 来源：网格由 Grid/override_cgns_bc.py 的缺省参数从 testcgnstest_ystr.cgns 派生
 #   源文件 SHA-256       4b0841427dc7964d38f847a6314026f9c0f9b5ecdc03fc3fabc5746267104217
-#   产物逻辑内容 SHA-256 db551205ec45c82850609754fe6f9e867667bdd49673dd86377e6bc2a3606b14
-# （派生网格不入库。产物的文件字节哈希不稳定——HDF5 把父组修改时间写进对象头，
-# 所以核对逻辑内容哈希），配置 experiment/cases/e1_outlet_nonreflecting.json；按此
-# 重跑，第 1000、2000 步与归档快照逐位相同。
+#   产物逻辑内容 SHA-256 695595a9e4cff28fa9d3203b966c0d6d7073b06a5cd3d0d2e4edf40d1514c79a
+#   （override_cgns_bc.logical_digest，算法 v2；派生网格不入库。产物的文件字节
+# 哈希不能用：HDF5 对象头里的时间字段随生成时间改变），配置
+# experiment/cases/e1_outlet_nonreflecting.json；按此重跑，第 1000、2000 步与归档
+# 快照逐位相同。
 # 此前写的“x≤7.98 与 A 逐位相同”不成立（Astra 第十一轮更正）：该段 640000 个值里
-# 606627 个位型不同。逐列取比值 max|C−A|/max|A|（五个守恒量、全部 j 和 k 上取最大），
-# 该段最大为 6.13e-4（x=7.68），x=7.98 处为 4.72e-4。
+# 606627 个位型不同。逐列取比值 max|C−A|/max|A|（五个守恒量、全部 j 和 k 上取
+# 最大），该段观测最大为 6.13e-4（x=7.68），x=7.98 处为 4.72e-4，x=6.06（i=60）
+# 处为 6.46e-7。
 # 以 CLBL 的 Cf 为量尺、2 个百分点为门槛：t=5 为 x≥9.09，t=10 为 x≥8.79
 # （copy 同期 x≥8.69）。出口列 t=10：壁压比 0.564→0.955、第一层速度
 # 0.165→0.022、Cf +200.4%→−59.9%；对照 copy（1.003 / 0.017 / −68.9%），
