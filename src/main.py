@@ -71,7 +71,7 @@ def build_rhs(case, args, execution=None):
                           dif_axis_map=dif_axis_map, farfield=farfield,
                           faces=faces, fill_state_halos=False,
                           flux_scale=flux_scale)
-        if args.viscous or args.case in ("poiseuille", "channel"):
+        if args.viscous or case.get("needs_viscous", False):
             # viscous 的 dxs 是导数步长，必须全部合法
             du = du + viscous_rhs(q, grid, params, bcs, axes=axes, dx=dxs,
                                   order=vis_order, metrics=metrics,
@@ -186,9 +186,9 @@ def resolve_cli(parsed, parser):
     return config_path, explicit
 
 
-def _warn_forced_viscous(args):
-    """poiseuille 在 RHS 里强制粘性；显式关闭时如实提示。"""
-    if not getattr(args, "viscous", False) and args.case == "poiseuille":
+def _warn_forced_viscous(args, case, effective_viscous):
+    """算例声明强制粘性时，显式关闭要如实提示（按 case.needs_viscous，无 case 名）。"""
+    if effective_viscous and not getattr(args, "viscous", False)             and case.get("needs_viscous", False):
         print(f"WARNING: {args.case} 强制粘性，显式 viscous=false 不会关闭粘性项")
 
 
@@ -237,25 +237,26 @@ def run(args):
             f"grid={grid.ni}x{grid.nj}x{grid.nk} "
             f"原始异常={type(exc).__name__}: {exc}") from exc
 
+    effective_viscous = bool(args.viscous or case.get("needs_viscous", False))
     prefix = getattr(args, "out_prefix", None) or args.case
     print(f"case={args.case} grid={grid.ni}x{grid.nj}x{grid.nk} "
           f"(ni/nj/nk) "
           f"scheme={args.scheme} "
-          f"viscous={args.viscous} vis-order={args.vis_order} "
+          f"viscous={args.viscous}"
+          f"{'' if args.viscous == effective_viscous else '(effective)'}"
+          f" vis-order={args.vis_order} "
           f"precision={config.precision_name()} "
           f"Re={params.Re} Ama={params.Ama} Ref_T={params.Ref_T} Pr={params.Pr} "
           f"metrics={'on' if desc.has_metrics else 'off(Ajac=1)'} "
           f"dt-mode={dt_mode} out-prefix={prefix} "
           f"config={getattr(args, 'config_path', None) or 'cli'}")
-    _warn_forced_viscous(args)
-    if (args.viscous or args.case == "poiseuille") and args.ref_t is None:
+    _warn_forced_viscous(args, case, effective_viscous)
+    if effective_viscous and args.ref_t is None:
         print("WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度"
               "（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；"
               "与原码对拍时必须用 --ref-t 给出 in 文件里的同值。")
-    if args.case == "sod" and args.viscous:
-        print("WARNING: sod 初值用 E=p/(gamma-1) 标准约定，与 viscous 的 "
-              "OCFD Ama 缩放约定不匹配——粘性系数无物理意义（不 raise，"
-              "保留灵活性）")
+    if effective_viscous and case.get("viscous_convention_note"):
+        print(f"WARNING: {case['viscous_convention_note']}")
 
     t0 = time.time()
     t = 0.0

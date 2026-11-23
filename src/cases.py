@@ -139,6 +139,7 @@ class CaseSpec(MutableMapping):
     channel_bc: Any = None                   # channel 兼容边界（内部库）
     special_boundary: Any = None             # specificboundary 挂载点
     needs_viscous: bool = False              # 算例声明强制粘性（main 统一判定）
+    viscous_convention_note: str = ""       # 粘性口径告警（算例自带说明）
     scheme_invis: Any = None
     scheme_vis: Any = None
 
@@ -224,7 +225,11 @@ def build_case(args):
         cons = make_initial_sod(grid, dx, gamma=gamma)
         return CaseSpec(grid=grid, cons0=cons, bcs=(OUTFLOW, PERIODIC, PERIODIC),
                     dxs=(dx, dx, dx), axes=(0,), params=params,
-                    forcing=None, gamma=gamma)
+                    forcing=None,
+                    viscous_convention_note=(
+                        "sod 初值用 E=p/(gamma-1) 标准约定，与 viscous 的 "
+                        "OCFD Ama 缩放约定不匹配——粘性系数无物理意义"
+                        "（不 raise，保留灵活性）"))
 
     if args.case == "tg":
         ni = int(_dimension(args, "ni", 256))
@@ -267,7 +272,7 @@ def build_case(args):
                 fw = fw.strip().lower() not in ("off", "0", "false", "no")
             return CaseSpec(grid=grid, cons0=cons, bcs=block.bcs,
                         dxs=block.dxs, axes=(0, 1), params=params,
-                        faces=block.faces,
+                        needs_viscous=True, faces=block.faces,
                         forcing=("x", G), forcing_work=bool(fw), gamma=gamma,
                         metrics=block.metrics, coords=block.coords,
                         dif_bound=block.dif_bound,
@@ -284,6 +289,7 @@ def build_case(args):
             fw = fw.strip().lower() not in ("off", "0", "false", "no")
         return CaseSpec(grid=grid, cons0=cons, bcs=(PERIODIC, WALL, PERIODIC),
                     dxs=(dx, 1.0 / nj, dx), axes=(0, 1), params=params,
+                    needs_viscous=True,
                     forcing=("x", G), forcing_work=bool(fw), gamma=gamma)
 
     if args.case == "channel":
@@ -336,6 +342,7 @@ def build_case(args):
                 padded, dxs, order=6, jac_bound=jac_bound, periodic=periodic)
         return CaseSpec(grid=grid, cons0=cons, bcs=bcs,
                     dxs=dxs, axes=(0, 1, 2), params=params, forcing=None,
+                    needs_viscous=True,
                     gamma=params.gamma,
                     bc_apply=lambda q: bc.apply(q, grid, params),
                     source=lambda q: bc.source(q, grid),
