@@ -13,7 +13,8 @@
 import jax.numpy as jnp
 
 from .axes import MISSING, normalize_axis, resolve_dimensions
-from .boundary import (FARFIELD, INFLOW, LAP, NVARS, OUTFLOW, PERIODIC, PLATE,
+from .boundary import (FARFIELD, INFLOW, LAP, NONREFLECTING, NVARS, OUTFLOW,
+                        PERIODIC, PLATE,
                        WALL, _WALL_SIGN, fill_halos, fill_halos_i, fill_halos_j,
                        fill_halos_k, fill_wall_j, zero_nonperiodic_ghosts)
 

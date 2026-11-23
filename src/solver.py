@@ -17,7 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .boundary import (LAP, NVARS, OUTFLOW, PERIODIC, WALL, fill_faces,
+from .boundary import (LAP, NONREFLECTING, NVARS, OUTFLOW, PERIODIC, WALL, fill_faces,
                        fill_halos_i, fill_halos_j, fill_halos_k, fill_wall_j,
                        zero_nonperiodic_ghosts)
 from .fields import array_axis
@@ -68,7 +68,7 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
                     scheme="UP7", weno_tv=None, bound=None, metric=None,
                     zero_flux_ghosts=False, zero_state_ghosts=False,
                     farfield=None, faces=None, fill_state_halos=True,
-                    flux_scale=1.0):
+                    flux_scale=1.0, nonref=(False, False)):
     """单方向无粘 RHS：分裂 → 鬼胞填充 → 面通量 → 差分 → 铺回全场。
 
     scheme: "UP7" 或 "WENO7-SYMBO"；weno_tv: None 或 (limiter, tv_max)。
@@ -84,6 +84,8 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
             OMP6 极值判据阈值都除以 s²，使权重与 OCFD 同口径（Step 4.9
             定点复算：差 1.04 → 2.65e-13）。UP7 无 epsilon、只换算边界带；
             WENO7-SYMBO 未接入换算，s≠1 时明确拒绝。
+    nonref: (低侧, 高侧) 是否为无反射面（原码 NON_REFLETION）。由 inviscid_rhs
+            按六侧描述算好传入；WENO7-SYMBO 不支持，该轴开无反射时明确拒绝。
     """
     # 原码声速和分裂内核覆盖含鬼层区域，先准备状态，再逐点计算分裂通量。
     if fill_state_halos:
@@ -133,8 +135,12 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
         if scheme == "UP7":
             du_var = up7_rhs_along_last_axis(fp[var], fm[var], dxs[axis], bound=bound,
                                              band_eps=eps_kwargs.get("band_eps"),
-                                             stable=stable)
+                                             stable=stable, nonref=nonref)
         elif scheme == "WENO7-SYMBO":
+            if nonref[0] or nonref[1]:
+                raise ValueError(
+                    "WENO7-SYMBO 尚未支持无反射（nonreflecting）边界："
+                    "该轴的低侧或高侧标了无反射，请改用 WENO7 等注册格式")
             if flux_scale != 1.0:
                 raise ValueError(
                     "WENO7-SYMBO 尚未接入 flux_scale 换算（主模板 ε、"
@@ -146,7 +152,8 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
                 bound=bound)
         elif scheme in SOLVE_SCHEMES:
             du_var = SOLVE_SCHEMES[scheme](fp[var], fm[var], dxs[axis], bound=bound,
-                                           stable=stable, **eps_kwargs)
+                                           stable=stable, nonref=nonref,
+                                           **eps_kwargs)
         else:
             raise ValueError(f"unknown scheme: {scheme}")
         du_vars.append(du_var)
@@ -158,6 +165,21 @@ def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
     # 只返回内区（轴序已还原），由调用方 .at[inner].add 累加：
     # 原先每轴"zeros(全场)+set+add"要 3 次全场写，现在只写内区 3 次。
     return jnp.moveaxis(du_moved_inner, -1, 1 + array_axis(axis))
+
+
+def _nonref_per_axis(bcs, faces):
+    """各轴 (低侧, 高侧) 是否为无反射面。给出六侧描述时按面判断，否则按轴级 bcs。"""
+    out = []
+    for axis in range(3):
+        if faces:
+            lo = any(f.axis == axis and f.kind == NONREFLECTING and f.side.endswith("-")
+                     for f in faces)
+            hi = any(f.axis == axis and f.kind == NONREFLECTING and f.side.endswith("+")
+                     for f in faces)
+        else:
+            lo = hi = bcs[axis] == NONREFLECTING
+        out.append((bool(lo), bool(hi)))
+    return tuple(out)
 
 
 def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=None,
@@ -207,6 +229,7 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
         if zero_state_ghosts:
             cons = zero_nonperiodic_ghosts(cons, bcs, preserve_inflow=True)
         fill_state_halos = False
+    nonref_axes = _nonref_per_axis(bcs, faces)
     du = jnp.zeros(grid.shape, dtype=cons.dtype)
     sl = grid.inner()
     for axis in axes:
@@ -223,7 +246,8 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
                                            zero_state_ghosts=zero_state_ghosts,
                                            farfield=farfield, faces=faces,
                                            fill_state_halos=fill_state_halos,
-                                           flux_scale=scales[axis]))
+                                           flux_scale=scales[axis],
+                                           nonref=nonref_axes[axis]))
     if metrics is not None:
         # 只看内区；鬼胞区 du 恒为 0，乘任何有限 Ajac 仍是 0
         du = du * metrics["Ajac"]

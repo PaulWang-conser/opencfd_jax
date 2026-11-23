@@ -22,20 +22,24 @@ from typing import Iterable, Mapping
 import numpy as np
 
 from .axes import AXIS_NAMES, SIDES, normalize_side, side_axis
-from .boundary import FARFIELD, INFLOW, LAP, OUTFLOW, PERIODIC, WALL
+from .boundary import (FARFIELD, INFLOW, LAP, NONREFLECTING, OUTFLOW, PERIODIC,
+                       WALL)
 from .fields import Grid
 from .mesh import METRIC_KEYS, compute_metrics_from_coords, pad_coords
 from .boundary import dif_band
 from .mesh_data import BlockMesh, FaceBoundary
 
-_BC_OUTFLOW = ("BCExtrapolate", "BCOutflow", "BCOutflowSubsonic",
-               "BCOutflowSupersonic")
+_BC_OUTFLOW = ("BCExtrapolate", "BCOutflow", "BCOutflowSubsonic")
+# 项目约定：BCOutflowSupersonic 表示原码 NON_REFLETION 口径的无反射出口。
+# SIDS 字面是"全部外推"，与此不同；零梯度出流用 outflow 加 outlet_ghost=copy。
+_BC_NONREFLECTING = ("BCOutflowSupersonic",)
 _BC_WALL = ("BCWall",)
 _BC_SYMMETRY = ("BCSymmetryPolar",)
 _BC_INFLOW = ("BCInflow",)
 _BC_FARFIELD = ("BCFarfield",)
 
-_BC_EXECUTABLE = _BC_OUTFLOW + _BC_WALL + _BC_SYMMETRY + _BC_FARFIELD + _BC_INFLOW
+_BC_EXECUTABLE = (_BC_OUTFLOW + _BC_NONREFLECTING + _BC_WALL + _BC_SYMMETRY
+                  + _BC_FARFIELD + _BC_INFLOW)
 
 
 class CgnsError(ValueError):
@@ -377,6 +381,8 @@ def _bc_kind(bc_type: str) -> str | None:
     """把 SIDS BCType 映射到执行 kind；不支持的返回 None。"""
     if bc_type in _BC_OUTFLOW:
         return OUTFLOW
+    if bc_type in _BC_NONREFLECTING:
+        return NONREFLECTING
     if bc_type in _BC_WALL:
         return WALL
     if bc_type in _BC_SYMMETRY:

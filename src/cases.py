@@ -15,7 +15,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from .boundary import FARFIELD
-from .fields import INFLOW, OUTFLOW, PERIODIC, PLATE, WALL, Grid
+from .fields import INFLOW, NONREFLECTING, OUTFLOW, PERIODIC, PLATE, WALL, Grid
 from .viscous import PhysParams
 
 
@@ -398,7 +398,8 @@ def _build_plate(args, params, nk):
                       if f.kind == WALL else
                       replace(f, dif_band=False) if f.kind == FARFIELD else
                       replace(f, params={"halo": "copy"})
-                      if (f.kind == OUTFLOW and outlet_ghost == "copy") else f
+                      if (f.kind in (OUTFLOW, NONREFLECTING)
+                          and outlet_ghost == "copy") else f
                       for f in block.faces)
         return CaseSpec(grid=grid, cons0=cons, bcs=block.bcs, faces=faces,
                     dxs=block.dxs, axes=block.axes, params=params,

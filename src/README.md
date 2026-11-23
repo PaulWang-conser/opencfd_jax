@@ -372,6 +372,7 @@ du = -(F_right - F_left) / h
 | 槽道双壁      | `channel.py`              | 只写壁面层；压力 / 温度按壁面类型外推；鬼层清零 + 该侧单侧带      |
 | 平板入口      | `boundary.py` + `plate.py` | 通用 INFLOW：写边界点 + 四层鬼层同一剖面，可来自 1D 剖面文件 |
 | 平板出口      | `boundary.py`             | 保持已有状态鬼层；CGNS plate 的初始出口鬼层为零              |
+| 无反射出流    | `boundary.py` + `schemes.py` | 原码 `NON_REFLETION` 口径：鬼层、Ev、边界带与出流相同；无粘 RHS 在边界内点只留一半分裂通量差（低侧丢正分裂、高侧丢负分裂） |
 | 平板下壁 / 顶部 | `plate.py` / `boundary.py` | 下壁只写壁面点（ρ 两点外推 + 无滑移 + ρ Cv Tw）；顶部远场只写最后一层内点，鬼层清零 + 该侧单侧带 |
 | 通用体积力     | `cases.py::apply_forcing` | 动量源 `rho*G`，可选能量做功源 `rho*u*G`        |
 | 槽道专用体积力   | `channel.py::body_force`  | 按 `ChannelBC.F` 生成源项；是否做功由 `work` 控制 |
@@ -407,9 +408,11 @@ LAP 鬼胞坐标并计算 CD6 度量。
 
 当前执行子集：三维 `Structured`、`Vertex` 坐标、整面 `BC`、同块 identity 1to1；
 支持通过 `FamilySpecified`、`FamilyName_t` 和 `FamilyBC_t` 解析边界类型。
-`BCWall` 映射 `WALL`，`BCInflow` 映射 `INFLOW`，`BCExtrapolate/BCOutflow*`
-映射 `OUTFLOW`，`BCFarfield` 映射单面的 `FARFIELD`。本项目约定
-`BCSymmetryPolar` 为周期，须同轴正负整面成对；`BCSymmetryPlane` 不支持。
+`BCWall` 映射 `WALL`，`BCInflow` 映射 `INFLOW`，`BCExtrapolate`、`BCOutflow`、
+`BCOutflowSubsonic` 映射 `OUTFLOW`，`BCFarfield` 映射单面的 `FARFIELD`。
+本项目约定 `BCSymmetryPolar` 为周期，须同轴正负整面成对；`BCSymmetryPlane`
+不支持；`BCOutflowSupersonic` 映射 `NONREFLECTING`（原码 `NON_REFLETION` 口径，
+SIDS 字面是"全部外推"，与此不同；零梯度出流用 `outflow` 加 `boundary.outlet_ghost="copy"`）。
 `BCWallViscous*` 和其他 `BCInflow*` 类型不在执行子集内。CGNS 不解析 `BCDataSet`。
 CGNS plate 的入口、远场原始量和壁温由 JSON 的 `boundary` 提供；
 其他算例的默认来流按各自配置确定。真实 plate 的分阶段对拍尚未完成，见

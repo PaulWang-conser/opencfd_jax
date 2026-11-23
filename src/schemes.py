@@ -57,8 +57,28 @@ def _du_from_faces(F):
     return -(F[..., 1:] - F[..., :-1])
 
 
+def _nonref_or_sum(Fp, Fm, h, nonref):
+    """面通量差分；``nonref=(低侧, 高侧)`` 为 True 时，该侧边界内点只留另一半分裂通量差。
+
+    原码 NON_REFLETION（OCFD_Schemes.cu:293-381 的 put_du_p/m_kernel；正分裂趟的
+    任务区间向低侧多探一格、负分裂趟向高侧多探一格，OCFD_Schemes_Choose.cu:99、437）：
+    低侧开关打开时，第一个内点的正分裂通量差不累加；高侧打开时，最后一个内点的
+    负分裂通量差不累加。这里把两半分别差分再相加，与原码两趟内核的累加次序一致。
+    未开无反射时走 (Fp+Fm) 合并后的差分，运算路径逐位不变。
+    """
+    if not (nonref[0] or nonref[1]):
+        return _du_from_faces(Fp + Fm) / h
+    du_p = _du_from_faces(Fp) / h
+    du_m = _du_from_faces(Fm) / h
+    if nonref[0]:
+        du_p = du_p.at[..., 0].set(0.0)
+    if nonref[1]:
+        du_m = du_m.at[..., -1].set(0.0)
+    return du_p + du_m
+
+
 def up7_rhs_along_last_axis(fp, fm, h=1.0, bound=None, band_eps=None,
-                            stable=False):
+                            stable=False, nonref=(False, False)):
     """单方向 UP7 通量差分。
 
     fp/fm: (..., nx+2*LAP) 已填好鬼胞的正/负分裂通量场。
@@ -75,7 +95,7 @@ def up7_rhs_along_last_axis(fp, fm, h=1.0, bound=None, band_eps=None,
     if bound is not None and (bound[0] or bound[1]):
         Fp, Fm = flux_band_faces(Fp, Fm, fp, fm, lo=bool(bound[0]), hi=bool(bound[1]),
                                  band_eps=band_eps, stable=stable)
-    return _du_from_faces(Fp + Fm) / h
+    return _nonref_or_sum(Fp, Fm, h, nonref)
 
 
 def steger_warming(cons, gamma, epsl_sw=0.0, axis=0, metric=None):
@@ -641,7 +661,7 @@ def _rhs_from_faces(face):
 def make_flux_rhs(face_P, face_M, p_template, m_template, m_boundary="m"):
     """注册自定义面重构时，声明 OCFD P/M 模板及 M 所用边界宏。"""
     def rhs_along_last_axis(fp, fm, h=1.0, bound=None, eps=None, band_eps=None,
-                            thr=None, stable=False):
+                            thr=None, stable=False, nonref=(False, False)):
         """重构 P/M 面通量，按需覆盖边界带，并返回除以步长后的通量散度。
 
         eps/band_eps/thr: 通量单位下的主模板 epsilon、边界带 epsilon 和
@@ -663,7 +683,7 @@ def make_flux_rhs(face_P, face_M, p_template, m_template, m_boundary="m"):
                                      p_template=p_template, m_template=m_template,
                                      m_boundary=m_boundary, stable=stable,
                                      **band_kwargs)
-        return _du_from_faces(Fp + Fm) / h
+        return _nonref_or_sum(Fp, Fm, h, nonref)
     return rhs_along_last_axis
 
 

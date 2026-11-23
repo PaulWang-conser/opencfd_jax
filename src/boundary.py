@@ -3,6 +3,8 @@
 本模块负责**所有通用边界**的数值实现：
 
 - 周期/出流沿计算 i/j/k 的鬼胞填充；
+- 无反射出流（原码 NON_REFLETION）：鬼层与出流相同，区别在无粘 RHS 的
+  边界内点只留一半分裂通量差（实现见 ``schemes._nonref_or_sum``）；
 - 无滑移壁面的守恒量镜像（``fill_wall_j``）；
 - 粘性通量 Ev 的壁面/平板镜像（``fill_ev_wall_j`` / ``fill_ev_plate_j``）；
 - 非周期鬼层清零（``zero_nonperiodic_ghosts``）。
@@ -53,8 +55,12 @@ INFLOW = "inflow"
 PLATE = "plate"
 WALL = "wall"
 FARFIELD = "farfield"
+# 无反射出流（原码 NON_REFLETION 口径）：鬼层、黏性通量鬼层、边界带都与
+# 出流相同；区别只在无粘 RHS——边界内点沿该轴只保留一半分裂通量差
+# （低侧丢正分裂、高侧丢负分裂，见 schemes._nonref_or_sum）。
+NONREFLECTING = "nonreflecting"
 
-GENERIC_KINDS = (PERIODIC, OUTFLOW, WALL, FARFIELD, INFLOW)
+GENERIC_KINDS = (PERIODIC, OUTFLOW, NONREFLECTING, WALL, FARFIELD, INFLOW)
 SIX_SIDES = SIDES
 
 # 守恒量 var 轴符号：(rho, rho*u, rho*v, rho*w, rho*E)
@@ -85,7 +91,7 @@ def halo_mode(kind):
     """状态鬼层：周期复制，入口与出口保持，壁面与远场清零。"""
     if kind == PERIODIC:
         return HALO_PERIODIC
-    if kind == OUTFLOW:
+    if kind in (OUTFLOW, NONREFLECTING):
         return HALO_KEEP
     if kind == INFLOW:
         return HALO_KEEP
@@ -151,7 +157,7 @@ def fill_halos_i(f, bc, ni, farfield=None):
     if bc == PERIODIC:
         f = f.at[..., :LAP].set(f[..., ni:ni + LAP])
         f = f.at[..., LAP + ni:].set(f[..., LAP:LAP + LAP])
-    elif bc == OUTFLOW:
+    elif bc in (OUTFLOW, NONREFLECTING):
         pass
     elif bc == FARFIELD:
         layer = _farfield_layer(f, farfield)
@@ -169,7 +175,7 @@ def fill_halos_j(f, bc, nj, farfield=None):
     if bc == PERIODIC:
         f = f.at[..., :LAP, :].set(f[..., nj:nj + LAP, :])
         f = f.at[..., LAP + nj:, :].set(f[..., LAP:LAP + LAP, :])
-    elif bc == OUTFLOW:
+    elif bc in (OUTFLOW, NONREFLECTING):
         pass
     elif bc == FARFIELD:
         layer = _farfield_layer(f, farfield)
@@ -187,7 +193,7 @@ def fill_halos_k(f, bc, nk, farfield=None):
     if bc == PERIODIC:
         f = f.at[:, :LAP, :, :].set(f[:, nk:nk + LAP, :, :])
         f = f.at[:, LAP + nk:, :, :].set(f[:, LAP:LAP + LAP, :, :])
-    elif bc == OUTFLOW:
+    elif bc in (OUTFLOW, NONREFLECTING):
         pass
     elif bc == FARFIELD:
         layer = _farfield_layer(f, farfield)
@@ -540,7 +546,7 @@ def fill_ev_axis(f, axis, bc, nxi, is_ev=False):
     避免把槽道镜像误用于其他方向。FARFIELD 的粘性通量按零梯度处理：远场
     状态是 Dirichlet 常量，Ev 的鬼层直接复制边界内层。
     """
-    if bc in (OUTFLOW, INFLOW):
+    if bc in (OUTFLOW, NONREFLECTING, INFLOW):
         moved = jnp.moveaxis(f, 3 - axis, -1)
         moved = moved.at[..., :LAP].set(0.0)
         moved = moved.at[..., LAP + nxi:].set(0.0)
@@ -584,7 +590,7 @@ def _mirror_ev_wall_halos(f, side, n, signs):
 
 def _fill_ev_face(f, face, grid, signs=None):
     """填 Ev 鬼层；入口和出口按本次原版参考初始化为零。"""
-    mode = HALO_ZERO if face.kind in (OUTFLOW, INFLOW) else halo_mode(face.kind)
+    mode = HALO_ZERO if face.kind in (OUTFLOW, NONREFLECTING, INFLOW) else halo_mode(face.kind)
     if mode == HALO_KEEP:
         return f
     axis = int(face.axis)
@@ -618,7 +624,7 @@ def fill_ev_faces(f, faces, grid):
         return f
     for mode in (HALO_ZERO, HALO_PERIODIC, HALO_COPY):
         for face in faces:
-            if (HALO_ZERO if face.kind in (OUTFLOW, INFLOW) else halo_mode(face.kind)) == mode:
+            if (HALO_ZERO if face.kind in (OUTFLOW, NONREFLECTING, INFLOW) else halo_mode(face.kind)) == mode:
                 f = _fill_ev_face(f, face, grid)
     return f
 
@@ -747,12 +753,13 @@ def validate_special_sides(faces, bcs):
             raise ValueError(
                 f"special_boundary axis={axis} 有回调面，轴级 bcs 必须是 "
                 f"INFLOW/PLATE（no-op 占位），得到 {bc!r}")
-        if not callback_faces and bc not in (PERIODIC, OUTFLOW, FARFIELD, WALL):
+        if not callback_faces and bc not in (PERIODIC, OUTFLOW, NONREFLECTING,
+                                             FARFIELD, WALL):
             # WALL 无回调面是合法组合（通用 WALL 的状态鬼层由 fill_faces 清零、
             # Ev 侧另有规则；Poiseuille 派生六侧曾在此被误拒——2026-11-23 Astra 复审）
             raise ValueError(
                 f"special_boundary axis={axis} 没有回调面，轴级 bcs 只能是 "
-                f"PERIODIC/OUTFLOW/FARFIELD/WALL，得到 {bc!r}")
+                f"PERIODIC/OUTFLOW/NONREFLECTING/FARFIELD/WALL，得到 {bc!r}")
         if bc == WALL and axis != 1:
             raise ValueError("special_boundary 的 WALL 只支持计算 j 方向")
     for face in faces:

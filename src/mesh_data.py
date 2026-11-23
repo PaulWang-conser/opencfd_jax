@@ -20,7 +20,8 @@ from typing import Mapping, Optional, Tuple
 
 from .axes import (AXIS_NAMES, DIMENSION_NAMES, SIDES, grid_extent,
                    normalize_side, side_axis)
-from .fields import INFLOW, LAP, OUTFLOW, PERIODIC, PLATE, WALL, Grid
+from .fields import (INFLOW, LAP, NONREFLECTING, OUTFLOW, PERIODIC, PLATE, WALL,
+                     Grid)
 from .boundary import dif_band, validate_special_sides
 from .mesh import METRIC_KEYS
 
@@ -31,7 +32,7 @@ _EXEC_HALO = "halo"
 _EXEC_CALLBACK = "callback"
 _EXEC_CALLBACK_HALO = "callback+halo"
 
-_VALID_KINDS = (PERIODIC, OUTFLOW, WALL, INFLOW, PLATE, FARFIELD)
+_VALID_KINDS = (PERIODIC, OUTFLOW, NONREFLECTING, WALL, INFLOW, PLATE, FARFIELD)
 _VALID_THERMAL = (None, "isothermal", "adiabatic")
 _COORD_KEYS = ("Axx", "Ayy", "Azz")
 
@@ -227,9 +228,9 @@ def _generic_faces(bcs, dif_bound, dif_axis_map):
             if bc == PERIODIC:
                 faces.append(_face(side, PERIODIC, _EXEC_HALO, dif_bound,
                                    dif_axis_map, "周期"))
-            elif bc == OUTFLOW:
-                faces.append(_face(side, OUTFLOW, _EXEC_HALO, dif_bound,
-                                   dif_axis_map, "零梯度出流"))
+            elif bc in (OUTFLOW, NONREFLECTING):
+                faces.append(_face(side, bc, _EXEC_HALO, dif_bound, dif_axis_map,
+                                   "零梯度出流"))
             elif bc == WALL:
                 if axis != 1:
                     raise ValueError(
