@@ -60,3 +60,42 @@ def test_build_case_returns_spec_for_all_public_cases():
                                vis_order="CD8", ref_t=288.15, pr=0.7,
                                plate_dif_bound=None)
         assert isinstance(build_case(args), CaseSpec), name
+
+
+def test_registry_drives_both_entries(tmp_path, monkeypatch, capsys):
+    """Step 5 交付 3：注册表是名字单一来源——临时算例从 CLI 与 JSON 双入口
+    走到 prepare + 一次 RHS；未知名在 build_case 报可选名。"""
+    from opencfd_jax.src import cases, init, main as main_mod, runtime_config
+
+    def _build_minimal(args, params, nk):
+        grid = Grid(8, 8, 4)
+        cons = jnp.ones(grid.shape)
+        return CaseSpec(grid=grid, cons0=cons, bcs=("outflow",) * 3,
+                        dxs=(0.1, 0.1, 0.1), axes=(0,), params=params)
+
+    monkeypatch.setitem(cases.CASE_BUILDERS, "minimal", _build_minimal)
+    monkeypatch.setattr(runtime_config, "CASE_NAMES",
+                        cases.PUBLIC_CASE_NAMES + ("minimal",))
+
+    # CLI 入口
+    args = main_mod.build_parser().parse_args(
+        ["--case", "minimal", "--end-step", "1", "--dt", "1e-4",
+         "--end-time", "1e-4"])
+    resolved = runtime_config.resolve_args({}, None, args)
+    state = init.prepare(resolved)
+    case = main_mod.build_rhs(state.case, resolved, execution=state.execution)
+    du = case(state.cons0)
+    assert du.shape == state.case.grid.shape
+
+    # JSON 入口
+    cfg = tmp_path / "m.json"
+    cfg.write_text('{"case": {"name": "minimal"},'
+                   ' "time": {"dt": 1e-4, "end_step": 1}}', encoding="utf-8")
+    loaded = runtime_config.load_config(str(cfg))
+    assert loaded.values["case"] == "minimal"
+
+    # 未注册名：报可选名（含临时注册的 minimal）
+    import types
+    with pytest.raises(ValueError, match="可选.*minimal"):
+        cases.build_case(types.SimpleNamespace(
+            case="nope", Ama=0.1, Re=100.0, nk=4))

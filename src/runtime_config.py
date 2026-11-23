@@ -22,7 +22,9 @@ from typing import Any, Mapping
 SCHEMES = ("UP7", "WENO7-SYMBO", "NND2", "WENO5", "WENO7",
            "OMP6-1", "OMP6-2", "OMP6-3", "OMP6_HR", "OMP6_LD", "OMP6_CD8")
 VIS_ORDERS = ("CD6", "CD8")
-CASE_NAMES = ("sod", "tg", "poiseuille", "plate")
+from .cases import CGNS_CASES, PUBLIC_CASE_NAMES
+
+CASE_NAMES = PUBLIC_CASE_NAMES
 MESH_FORMATS = ("builtin", "cgns")
 
 
@@ -185,7 +187,7 @@ def _validate_value(kind: str, value: Any, dotted: str, directory: Path) -> Any:
 def _validate_applicability(values: dict[str, Any], case: str) -> None:
     """JSON 中已给出的字段是否适用于最终生效的算例。"""
     fmt = values.get("mesh_format")
-    if fmt == "cgns" and case not in ("poiseuille", "plate"):
+    if fmt == "cgns" and case not in CGNS_CASES:
         raise ConfigError(
             f"{case} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille/plate")
     for dotted, allowed in _CASE_SCOPE.items():
@@ -355,7 +357,7 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
         raise ConfigError("mesh.file 只在 mesh.format=\"cgns\" 时可用")
     if fmt == "cgns" and not merged.get("mesh"):
         raise ConfigError("mesh.format=\"cgns\" 需要 mesh.file")
-    if fmt == "cgns" and merged.get("case", "sod") not in ("poiseuille", "plate"):
+    if fmt == "cgns" and merged.get("case", "sod") not in CGNS_CASES:
         raise ConfigError(
             f"{merged.get('case')} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille/plate")
 
