@@ -241,7 +241,7 @@ python -m opencfd_jax.src.main --case sod --ni 16 --nj 4 --nk 4 --scheme UP7 `
 - `read_cgns_zone(validate=True)` 的执行子集校验，zone 名空格归一化，以及真实样例
   `Grid/samples/multi_hdf5.cgns` Zone 1 的 `validate=False` 原始读取；
 - `BCFarfield` 在严格模式被接受并映射为通用 `FARFIELD`；真实样例
-  `multi_hdf5.cgns` 仍在 `Klo_Seg 2` 的非整面 patch 处被拒绝；
+  `multi_hdf5.cgns` 的 Zone 1 在严格模式下首先被 `Ilo_Seg 1 / BCSymmetryPlane` 拒绝；
 - `to_block_mesh()` 的 `(i,j,k)` 顺序、`(periodic,wall,periodic)`、六侧 `halo`；
   `build_cgns_block()` 的 `Ajac` 形状与均匀间距解析值；
 - `poiseuille` 用 CGNS 和内置网格各跑一步，五个守恒分量在 `rtol=1e-12, atol=1e-14` 内一致。

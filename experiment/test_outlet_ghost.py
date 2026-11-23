@@ -150,3 +150,29 @@ def test_pure_cli_scope_is_rejected():
         explicit_parser)
     with pytest.raises(runtime_config.ConfigError, match="outlet_ghost"):
         runtime_config.resolve_args(explicit, None, defaults)
+
+
+def test_builtin_plate_with_outlet_ghost_is_rejected():
+    """该开关只有 CGNS 装配分支消费：内置网格的 plate 显式给出必须报错。
+
+    纯 CLI、JSON、JSON+CLI 合并三个入口都要拦住（Astra 第十一轮：此前
+    `--case plate --outlet-ghost copy` 解析成 plate/builtin/copy 并跑完一步）。
+    """
+    defaults = main.build_parser().parse_args([])
+    explicit_parser = main.build_parser(explicit_only=True)
+    with pytest.raises(runtime_config.ConfigError, match="outlet_ghost"):
+        _, explicit = main.resolve_cli(
+            vars(explicit_parser.parse_args(["--case", "plate", "--outlet-ghost", "copy"])),
+            explicit_parser)
+        runtime_config.resolve_args(explicit, None, defaults)
+    builtin = {"case": {"name": "plate"}}
+    for cfg_json in (dict(builtin, boundary={"outlet_ghost": "copy"}),
+                     dict(builtin, mesh={"format": "builtin"},
+                          boundary={"outlet_ghost": "keep"})):
+        with pytest.raises(runtime_config.ConfigError, match="outlet_ghost"):
+            _resolve(_load_text(json.dumps(cfg_json)))
+    with pytest.raises(runtime_config.ConfigError, match="outlet_ghost"):
+        _resolve(_load_text(json.dumps(builtin)), {"boundary_outlet_ghost": "copy"})
+    # 对照：不显式给出时内置 plate 照常解析
+    args = _resolve(_load_text(json.dumps(builtin)))
+    assert args.mesh_format == "builtin" and args.case == "plate"

@@ -163,7 +163,7 @@ CGNS 路径只适用于 `poiseuille`：`mesh.file` 指向 HDF5/CGNS 文件，`me
 
 * 诊断和无粘 / 粘性右端项可以操作完整数组，但最终存盘只保存 `(nk, nj, ni)` 内区。
 
-`boundary.py` 负责周期环绕、零梯度出流、壁面镜像和 Ev 等通用填充；`fields.py`
+`boundary.py` 负责周期环绕、出口鬼层（缺省保持原值）、壁面镜像和 Ev 等通用填充；`fields.py`
 只保留数组布局、`Grid` 和 canonical 填充入口的重新导出。平板的专用入口、壁面和顶部条件仍由
 `plate.py` 写入，槽道双壁由 `channel.py` 写入。
 
@@ -416,8 +416,8 @@ SIDS 字面是"全部外推"，与此不同；零梯度出流用 `outflow` 加 `
 消费该开关；内置 plate 与其他算例给出时会在配置解析阶段报错。
 `BCWallViscous*` 和其他 `BCInflow*` 类型不在执行子集内。CGNS 不解析 `BCDataSet`。
 CGNS plate 的入口、远场原始量和壁温由 JSON 的 `boundary` 提供；
-其他算例的默认来流按各自配置确定。真实 plate 的分阶段对拍尚未完成，见
-`experiment/step49_progress_2026-11-19.md`。
+其他算例的默认来流按各自配置确定。真实 plate 的一步三阶段 RHS 与末态已与
+原码对拍签收，范围与待验项见 `experiment/step49_progress_2026-11-19.md`。
 `validate=False` 保留所有原始 `BCType` 供诊断，但仍拒绝
 `CellCenter`、`Rind>0`、`PointList`、`Periodic_t` 和二维 zone。
 

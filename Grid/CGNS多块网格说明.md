@@ -169,7 +169,7 @@ CGNS VertexSize = (ni, nj, nk) = (2, 123, 25)   →   h5py shape = (25, 123, 2)
 ## 4. 块间连接：`ZoneGridConnectivity_t`
 
 一块一个，下挂若干连接节点；**每个界面记两次**（本例 4 块共 16 条 1to1：
-`Zone1/2/3` 各 2 条自连接周期（共 6 条），其余 10 条是跨块配对，`Zone4` 没有自连接）。
+`Zone1/2/3` 各有 2 条自连接，是同一条连接的两个方向（共 6 条），其余 10 条是跨块配对，`Zone4` 没有自连接）。
 
 ### 4.1 1to1：结构网格的匹配界面（`GridConnectivity1to1_t`）
 
@@ -206,8 +206,15 @@ GridConnectivity1to1_t:
 | `1to1InterfaceA   4` | Zone 4 | [1,2,3] | [1,1,25]–[2,57,25] | [1,1,1]–[2,57,1] |
 | `1to1InterfaceA   7` | Zone 2 | [1,-2,3] | [1,57,25]–[2,123,25] | [1,67,45]–[2,1,45] |
 
-前两条合起来就是 **k 面周期**（`k=1 ↔ k=25`，且 j 反向），用的是"自己连自己"的 1to1，
-不是 `BCPeriodic`。
+前两条是同一条自连接的两个方向：接收区和供体区**都在 `k=1` 面上**，j 子区 `1–25` 与
+`123–99` 反向对接；它不是 `k=1 ↔ k=25` 的周期。对照 Zone 1 的边条，`k=1` 面上
+j=25–99 是 `BCWallViscousHeatFlux`，这条自连接接的是壁面两端的 j=1–25 与 j=99–123
+两段。读索引时按 `PointRange`/`PointRangeDonor`/`Transform` 逐条算，不按"周期"推。
+
+一个面接多个邻居在本例里就有：Zone 1 的 `k=25` 面分两段，j=1–57 接 Zone 4、
+j=57–123 接 Zone 2（`[1,-2,3]`，j 反向）；Zone 2 的 `k=45` 面和 Zone 4 的 `k=1` 面
+各接三个邻居。相邻两段的 `PointRange` 在交界那一条线上**重叠**（j=57 同时属于两段），
+因为 CGNS 的范围是闭区间。
 
 ### 4.2 一般连接：`GridConnectivity_t`
 
@@ -310,22 +317,23 @@ ZoneBC_t
 
 ### 5.3 与 `opencfd_jax` 现有 kind 的映射
 
-现有 `src/boundary.py` 只有 5 个 kind（`PERIODIC` / `OUTFLOW` / `INFLOW` / `WALL` / `PLATE`）。
-读 CGNS 时建议按下表翻译，翻译不了的要报错而不是静默取默认：
+下表是读取器 `src/mesh_cgns.py` 实际执行的映射，kind 的定义见 `src/boundary.py`。
+标「不执行」的 `BCType` 在严格模式下报错并打印 patch 名，不静默取默认：
 
-| CGNS `BCType` | 现有 kind | 说明 |
+| CGNS `BCType` | kind | 说明 |
 | --- | --- | --- |
-| `BCInflowSubsonic`、`BCInflowSupersonic`、`BCInflow` | `INFLOW` | 入口剖面；`BCInflow*` 的数据集里可带 `VelocityX/Y/Z`、`Temperature` |
-| `BCFarfield` | `INFLOW` 或 `OUTFLOW` | 远场要按"法向速度方向"判进/出；平板算例入口+顶面都用它 |
-| `BCOutflowSubsonic`、`BCOutflow` | `OUTFLOW` | |
-| `BCExtrapolate` | `OUTFLOW` | 零梯度外插，等价于现有出口处理 |
-| `BCSymmetryPlane` | `PERIODIC`（近似） | 严格说要单独的滑移镜像；现有代码没有 symmetry kind，先按周期或按「对称面镜像」另加 |
-| `BCWall`、`BCWallViscous` | `WALL` | 绝热无滑移 |
-| `BCWallViscousIsothermal` + `BCDataSet/DirichletData/Temperature` | `WALL` | 等温壁；壁温从数据集取，取不到再用算例参数 |
-| `BCWallViscousHeatFlux` | `WALL` | 定热流；现有代码没有热流入口，需要新增或退化成等温 |
-| 1to1 自连接（k 面/两平面） | `PERIODIC` | 见 §4.3；`Transform` 的符号决定要不要翻转 |
-| 1to1 跨块连接 | 新增 `interface`（多块待做） | 对应 `多块网格GPU.md` 里的 `outside` 面 |
-| 平板底面的等温壁（原码 `plate`） | `PLATE` | CGNS 里通常写成 `BCWallViscous` + 等温数据集；`PLATE` 是原码特有的"入口+壁面"混合处理，靠面位置判定 |
+| `BCInflow` | `INFLOW` | 只接受精确的 `BCInflow`；`BCInflowSubsonic`、`BCInflowSupersonic` 不执行 |
+| `BCFarfield` | `FARFIELD` | 单面标记，来流状态由算例侧提供；平板算例的顶面用它，入口用 `BCInflow` |
+| `BCOutflowSubsonic`、`BCOutflow`、`BCExtrapolate` | `OUTFLOW` | 状态鬼层缺省保持原值；零梯度延拓要另给 `boundary.outlet_ghost=copy` |
+| `BCOutflowSupersonic` | `NONREFLECTING` | 项目约定：原码 `NON_REFLETION` 口径的无反射出口；SIDS 字面是「全部外推」 |
+| `BCSymmetryPolar` | `PERIODIC` | 项目约定；须同轴正负整面成对 |
+| `BCSymmetryPlane` | 不执行 | 严格说要单独的滑移镜像；现有代码没有 symmetry kind |
+| `BCWall` | `WALL` | 绝热无滑移；`BCWallViscous` 不执行 |
+| `BCWallViscousIsothermal` + `BCDataSet/DirichletData/Temperature` | 不执行 | 等温壁的数据集尚未接入 |
+| `BCWallViscousHeatFlux` | 不执行 | 定热流；现有代码没有热流入口 |
+| 同块 identity 整面自连接（同轴两个面互补） | `PERIODIC` | 当前只接受 `Transform=(1,2,3)`；翻转、同面自连接、部分面见 §4，留给多块阶段 |
+| 1to1 跨块连接 | 多块阶段接入 | 对应 `多块网格GPU.md` 里的 `outside` 面 |
+| 平板底面的等温壁（原码 `plate`） | 不经 CGNS | 读取器不产生 `PLATE`；CGNS plate 准例的壁面是 `BCWall`→`WALL` |
 
 ### 5.4 实测：CFL3D 写出来的 BC 长什么样
 
@@ -425,10 +433,13 @@ with h5py.File("grid.cgns", "w") as f:
 4. **鬼胞**：LAP=4 由 `mesh.pad_coords` 自己补；当前 reader 拒绝 `Rind>0`，不把 CGNS rind
    当现成鬼胞。
 5. **BC**：遍历 `ZoneBC_t` 下所有 `BC_t`，按 `BCType` 字符串 + `PointRange` 建面表；
-   当前执行子集是 `BCWall`→`WALL`、同轴双面 `BCSymmetryPlane`→`PERIODIC`、
+   当前执行子集是 `BCWall`→`WALL`、同轴成对的 `BCSymmetryPolar`→`PERIODIC`、
    `BCExtrapolate/BCOutflow/BCOutflowSubsonic`→`OUTFLOW`、
-   `BCOutflowSupersonic`→`NONREFLECTING`（项目约定）、`BCFarfield`→`FARFIELD`；`BCInflow*`、
-   `BCWallViscous*` 在严格模式下报错并打印 patch 名，不退化。`BCFarfield` 是**单面**：
+   `BCOutflowSupersonic`→`NONREFLECTING`（项目约定）、`BCFarfield`→`FARFIELD`、
+   `BCInflow`→`INFLOW`；其余（`BCInflowSubsonic`、`BCInflowSupersonic`、`BCWallViscous*`、
+   `BCSymmetryPlane` 等）在严格模式下报错并打印 patch 名，不退化。真实样例
+   `multi_hdf5.cgns` 的 Zone 1 在严格模式下首先被 `Ilo_Seg 1 / BCSymmetryPlane` 拒绝。
+   `BCFarfield` 是**单面**：
    只有被标记的那个面是远场，同轴对侧可以是 `BCWall`/`BCOutflow` 等不同 kind；
    本步不读 `BCDataSet`，缺省来流由算例侧提供为物理 +x 方向均匀来流。
 6. **1to1**：当前只接受同块、`Transform=(1,2,3)` 的整面 identity 自连接，两范围互补时

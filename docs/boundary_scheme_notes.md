@@ -81,7 +81,7 @@
 
 ## 与 Step 2 统一边界的关系
 
-- `src/boundary.py` 现在负责**通用鬼胞**：周期、零梯度出流、y 方向无滑移壁面镜像、
+- `src/boundary.py` 现在负责**通用鬼胞**：周期、出口鬼层（缺省保持原值）、y 方向无滑移壁面镜像、
   Ev 镜像、非周期鬼层清零，以及 JIT 前的 `BoundaryExecution` 校验。
 - `src/schemes.py` 的 `flux_band_faces` 和 `src/viscous.py` 的单侧导数仍负责**边界带
   公式**；本文件的公式材料继续对应这两处，不与通用鬼胞混为一谈。

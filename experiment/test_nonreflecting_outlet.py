@@ -20,7 +20,9 @@ CGNS 边条按项目约定分配：``BCOutflowSupersonic`` → ``nonreflecting``
   4. inviscid_rhs 接线：i+、i-、k+ 三个方向上，无反射与出流的无粘 RHS
      只在该轴的边界内点列上有实质差别，差值正好是被丢掉的那一半；其余点
      只差舍入；
-  5. CGNS 映射与端到端一步可跑。
+  5. CGNS 映射与端到端一步可跑；
+  6. 无反射对照所用网格的来源可复建：派生脚本的缺省参数加源网格，只改出口
+     边条的类型，坐标逐位相同。
 """
 
 import json
@@ -108,7 +110,7 @@ def test_nonreflecting_face_matches_outflow_for_ghosts_and_band():
     q = q.at[..., 4 + grid.ni:].set(7.0)
     cp = np.asarray(boundary.fill_faces(q, (replace(nr, params={"halo": "copy"}),), grid))
     f3 = np.asarray(f)
-    for layer in range(4):
+    for layer in range(1, 5):       # 鬼层 1～4，逐层等于边界点那一层
         np.testing.assert_array_equal(
             cp[..., 4 + grid.ni - 1 + layer], f3[..., 4 + grid.ni - 1])
     # Ev 鬼层：两者都清零
@@ -200,6 +202,31 @@ def test_cgns_outflow_supersonic_maps_to_nonreflecting(tmp_path):
     zone = mesh_cgns.read_cgns_zone(str(path))            # validate=True
     kinds = tuple(f.kind for f in mesh_cgns.to_block_mesh(zone).faces)
     assert kinds == ("inflow", NR, "wall", "farfield", "periodic", "periodic")
+
+
+@pytest.mark.skipif(not (REPO / "Grid" / "testcgnstest_ystr.cgns").exists(),
+                    reason="缺少 testcgnstest_ystr.cgns")
+def test_nonreflecting_grid_is_derived_from_recorded_source(tmp_path):
+    """无反射对照所用网格的来源：派生脚本的缺省参数加源网格。
+
+    只改 dom-5 的类型，坐标与源网格逐位相同，其余五面不变；源文件不可被覆盖。
+    """
+    import subprocess
+    script = REPO / "Grid" / "override_cgns_bc.py"
+    src = REPO / "Grid" / "testcgnstest_ystr.cgns"
+    out = tmp_path / "nr.cgns"
+    subprocess.run([sys.executable, str(script), "--out", str(out)],
+                   check=True, capture_output=True)
+    a = mesh_cgns.read_cgns_zone(str(src))
+    b = mesh_cgns.read_cgns_zone(str(out))
+    assert all(np.array_equal(a.coords[k], b.coords[k]) for k in a.coords)
+    assert tuple(f.kind for f in mesh_cgns.to_block_mesh(a).faces) == (
+        "inflow", "outflow", "wall", "farfield", "periodic", "periodic")
+    assert tuple(f.kind for f in mesh_cgns.to_block_mesh(b).faces) == (
+        "inflow", NR, "wall", "farfield", "periodic", "periodic")
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.run([sys.executable, str(script), "--out", str(src)],
+                       check=True, capture_output=True)
 
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="缺少 testcgnstest.cgns")

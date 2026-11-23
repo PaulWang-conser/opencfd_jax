@@ -5,8 +5,8 @@
 
     D(x, t) = 100 · (Cf_B − Cf_A) / Cf_CLBL(x)          单位：百分点
 
-另报逐列壁压比 p_w/p∞（CLBL 的参考值是 1）、第一层速度 u1，以及选定站位的
-剖面。Astra 第九轮定的两级验收：
+另报逐列壁压比 p_w/p∞（CLBL 的参考值是 1）、第一层速度 u1；站位剖面见
+`compare_supersonic_bl_stations.py`。Astra 第九轮定的两级验收：
   1. 出口列同刻的正偏差减少至少一半，且 x=9.80、9.90 的壁压与剪切同步向参考移动；
   2. 影响范围：连续两次读数 |D| ≥ 2 个百分点的最上游连续站位（并列出 1、5 的门槛）。
 若最后两次读数之间 D 的变化仍超过其幅值的 20%，说明尚未定型，需要延长观察。
@@ -16,7 +16,10 @@ A 的后期时刻可以用归档快照代替，前提是 A 在 t=10 与归档逐
 用法（从归档复现，在 ocfd2jax 目录下；快照在 experiment/e1_outlet_ghost_20261123/{A,B,C}，
 A 的 t=20、30 取 experiment/supersonic_bl_reference_20261123 的归档）：
     python opencfd_jax/experiment/compare_outlet_ghost.py --c-dir \
-        opencfd_jax/experiment/e1_outlet_ghost_20261123/C
+        opencfd_jax/experiment/e1_outlet_ghost_20261123/C \
+        --c-prefix testcgnstest_ystr_nr
+C 的文件前缀来自派生网格 testcgnstest_ystr_nr.cgns，所以要给 --c-prefix；匹配不到
+快照时报错并列出目录里现有的文件。只给一个时刻（如 --steps 2000）也做三方比较。
 """
 import argparse
 from pathlib import Path
@@ -48,6 +51,11 @@ def load(path):
     T = (d["cons_4"] / rho - 0.5 * u * u
          - 0.5 * (d["cons_2"] ** 2 + d["cons_3"] ** 2) / rho) / (1.0 / (GAMMA * (GAMMA - 1.0) * 4.0))
     return rho, u, T, p
+
+
+def bits(a):
+    """数组的位型视图；逐位比较用（== 把 +0.0 与 -0.0 视为相同）。"""
+    return np.ascontiguousarray(a).view(f"u{a.dtype.itemsize}")
 
 
 def main():
@@ -84,7 +92,10 @@ def main():
     a10, _ = snap(2000)
     fresh = np.load(Path(args.a_dir) / f"{args.prefix}-istep-00002000.npz")
     arch = np.load(REF / "jax_ystr_step2000.npz")
-    same = all(np.array_equal(fresh[f"cons_{i}"], arch[f"cons_{i}"]) for i in range(5))
+    # 逐位：先比 dtype 与形状，再比位型。
+    keys = [f"cons_{i}" for i in range(5)]
+    same = all(fresh[k].dtype == arch[k].dtype and fresh[k].shape == arch[k].shape
+               and np.array_equal(bits(fresh[k]), bits(arch[k])) for k in keys)
     print(f"A(t=10) 与归档逐位相同: {same}")
     if not same:
         raise SystemExit("A(t=10) 与归档不一致：后期时刻的归档不可混用，中止")
@@ -116,15 +127,16 @@ def main():
         print()
 
     steps = sorted(table)
+
+    def extent(D, thr):
+        """从出口向上游的连续达标段：返回 (最上游达标列, 段外孤立点数)。"""
+        i = ni - 1
+        while i >= 0 and abs(D[i]) >= thr:
+            i -= 1
+        return i + 1, int(np.count_nonzero(np.abs(D[:i + 1]) >= thr))
+
     if len(steps) >= 2:
         Ds = {s: (table[s][1][0] - table[s][0][0]) / cf_ref * 100 for s in steps}
-        def extent(D, thr):
-            """从出口向上游的连续达标段：返回 (最上游达标列, 段外孤立点数)。"""
-            i = ni - 1
-            while i >= 0 and abs(D[i]) >= thr:
-                i -= 1
-            return i + 1, int(np.count_nonzero(np.abs(D[:i + 1]) >= thr))
-
         print("=== 影响范围：|D| 达到门槛的、从出口向上游的连续段 ===")
         for thr in (1.0, 2.0, 5.0):
             heads, isolated = {}, {}
@@ -153,58 +165,64 @@ def main():
         i10 = ni - 1
         print(f"\n=== 定型检查（t={prev*args.dt:g} → {last*args.dt:g}）===")
         print(f"  出口列: D {Ds[prev][i10]:+.1f} → {Ds[last][i10]:+.1f}，"
-              f"变化占幅值 {change[i10]/mag[i10]*100:.0f}%（<20% 才算定型）")
+              f"变化占幅值 {change[i10]/mag[i10]*100:.3f}%（<20% 才算定型）")
         for xs in (7.98, 9.09, 9.49, 9.80, 9.90):
             i = int(round(xs / dx))
             print(f"  x={xs:5.2f}: D {Ds[prev][i]:+6.1f} → {Ds[last][i]:+6.1f}"
-                  f"（变化 {change[i]/mag[i]*100 if mag[i] > 1 else float('nan'):3.0f}%）")
+                  f"（变化 {change[i]/mag[i]*100 if mag[i] > 1 else float('nan'):6.3f}%）")
         worst = np.nanargmax(np.where(mag > 5.0, rel, np.nan)) if (mag > 5.0).any() else None
         if worst is not None:
-            print(f"  |D|>5 的站位中变化比例最大：x={x[worst]:.2f}，{rel[worst]*100:.0f}%")
-        # 第三条轨迹 C=nonreflecting（原码 NON_REFLETION 口径），与 A 同时刻对比
-        c_dir = Path(args.c_dir) if args.c_dir else None
-        rows_c = []
-        if c_dir:
+            print(f"  |D|>5 的站位中变化比例最大：x={x[worst]:.2f}，{rel[worst]*100:.3f}%")
+    # 第三条轨迹 C=nonreflecting（原码 NON_REFLETION 口径），与 A 同时刻对比。
+    # 单时刻也做；显式给了 --c-dir 却一个快照都没匹配到时报错，不静默只打印 A/B。
+    c_dir = Path(args.c_dir) if args.c_dir else None
+    rows_c = []
+    if c_dir:
+        c_prefix = args.c_prefix or args.prefix
+        for step in steps:
+            fc = c_dir / f"{c_prefix}-istep-{step:08d}.npz"
+            if fc.exists():
+                rows_c.append((step, wall(load(fc))))
+        if not rows_c:
+            have = sorted(p.name for p in c_dir.glob("*.npz"))
+            raise SystemExit(
+                f"--c-dir {c_dir} 下没有前缀为 {c_prefix!r}、时刻为 {steps} 的快照；"
+                f"目录里现有：{have or '无 .npz'}。换过网格时文件前缀会变，请给 --c-prefix")
+    if rows_c:
+        print("\n=== C=nonreflecting（原码 NON_REFLETION 口径）：Cf 相对 CLBL，DC=C−A ===")
+        print("  t    x    Cf_A    Cf_C      DC   | p_w/p∞ A→C | u1 A→C")
+        Dc_all = {}
+        for step, C in rows_c:
+            A = table[step][0]
+            eA = (A[0] / cf_ref - 1) * 100
+            eC = (C[0] / cf_ref - 1) * 100
+            Dc = eC - eA
+            Dc_all[step] = Dc
+            for xs in STATIONS:
+                i = int(round(xs / dx))
+                print(f" {step*args.dt:4.1f} {xs:5.2f} {eA[i]:+7.1f} {eC[i]:+7.1f} {Dc[i]:+8.1f}   |"
+                      f" {A[1][i]:.3f}→{C[1][i]:.3f} | {A[2][i]:.4f}→{C[2][i]:.4f}")
+            print()
+        print("=== DC 的影响范围（从出口向上游的连续段）===")
+        for thr in (2.0, 5.0):
+            parts = []
             for step in steps:
-                fc = c_dir / f"{args.c_prefix or args.prefix}-istep-{step:08d}.npz"
-                if fc.exists():
-                    rows_c.append((step, wall(load(fc))))
-        if rows_c:
-            print("\n=== C=nonreflecting（原码 NON_REFLETION 口径）：Cf 相对 CLBL，DC=C−A ===")
-            print("  t    x    Cf_A    Cf_C      DC   | p_w/p∞ A→C | u1 A→C")
-            Dc_all = {}
-            for step, C in rows_c:
-                A = table[step][0]
-                eA = (A[0] / cf_ref - 1) * 100
-                eC = (C[0] / cf_ref - 1) * 100
-                Dc = eC - eA
-                Dc_all[step] = Dc
-                for xs in STATIONS:
-                    i = int(round(xs / dx))
-                    print(f" {step*args.dt:4.1f} {xs:5.2f} {eA[i]:+7.1f} {eC[i]:+7.1f} {Dc[i]:+8.1f}   |"
-                          f" {A[1][i]:.3f}→{C[1][i]:.3f} | {A[2][i]:.4f}→{C[2][i]:.4f}")
-                print()
-            print("=== DC 的影响范围（从出口向上游的连续段）===")
-            for thr in (2.0, 5.0):
-                parts = []
-                for step in steps:
-                    if step not in Dc_all:
-                        continue
-                    h, iso = extent(Dc_all[step], thr)
-                    parts.append(f"t={step*args.dt:g}: " + (f"x≥{x[h]:.2f}（{ni - h} 列）"
-                                                           if h < ni else "无")
-                                 + (f"＋{iso} 个孤立点" if iso else ""))
-                print(f"  门槛 {thr:.0f} 个百分点：" + "；".join(parts))
-            last_c = rows_c[-1][0]
-            prev_c = [st for st, _ in rows_c if st < last_c]
-            if prev_c and prev_c[-1] in Dc_all:
-                a_, b_ = Dc_all[prev_c[-1]], Dc_all[last_c]
-                i10 = ni - 1
-                print(f"=== DC 定型检查（t={prev_c[-1]*args.dt:g} → {last_c*args.dt:g}）===")
-                for xs in (7.98, 9.09, 9.49, 9.80, 9.90, 10.0):
-                    i = int(round(xs / dx))
-                    r = abs(b_[i] - a_[i]) / abs(b_[i]) * 100 if abs(b_[i]) > 1 else float("nan")
-                    print(f"  x={xs:5.2f}: DC {a_[i]:+7.1f} → {b_[i]:+7.1f}（变化 {r:3.0f}%）")
+                if step not in Dc_all:
+                    continue
+                h, iso = extent(Dc_all[step], thr)
+                parts.append(f"t={step*args.dt:g}: " + (f"x≥{x[h]:.2f}（{ni - h} 列）"
+                                                       if h < ni else "无")
+                             + (f"＋{iso} 个孤立点" if iso else ""))
+            print(f"  门槛 {thr:.0f} 个百分点：" + "；".join(parts))
+        last_c = rows_c[-1][0]
+        prev_c = [st for st, _ in rows_c if st < last_c]
+        if prev_c and prev_c[-1] in Dc_all:
+            a_, b_ = Dc_all[prev_c[-1]], Dc_all[last_c]
+            print(f"=== DC 定型检查（t={prev_c[-1]*args.dt:g} → {last_c*args.dt:g}）===")
+            for xs in (7.98, 9.09, 9.49, 9.80, 9.90, 10.0):
+                i = int(round(xs / dx))
+                r = abs(b_[i] - a_[i]) / abs(b_[i]) * 100 if abs(b_[i]) > 1 else float("nan")
+                print(f"  x={xs:5.2f}: DC {a_[i]:+7.1f} → {b_[i]:+7.1f}（变化 {r:6.3f}%）")
 
 
 
@@ -239,9 +257,17 @@ if __name__ == "__main__":
 # 梯度偏低（x=2～6 约 −75%～−92%）不因此解释。E1 检验的是普通出口
 # keep/copy，无反射本身的效果见下方 C 轨迹。
 #
-# C=nonreflecting（原码 NON_REFLETION 口径，同一 β=3 网格、出口边条改为
-# BCOutflowSupersonic，跑到 t=10；快照 e1_outlet_ghost_20261123/C/）：
-# x≤7.98 处与 A 逐位相同——影响只限出口附近；出口列壁压比 0.56→0.96、
-# 第一层速度 0.165→0.022、Cf 由 +200% 变为 −60%（copy 同期为 −69%），
-# 方向与零梯度一致、恢复程度略小。
+# C=nonreflecting（原码 NON_REFLETION 口径；β=3 网格的出口边条 dom-5 改为
+# BCOutflowSupersonic，跑到 t=10；快照 e1_outlet_ghost_20261123/C/）。
+# 来源：网格由 Grid/override_cgns_bc.py 的缺省参数从 testcgnstest_ystr.cgns 派生
+#   源   SHA-256 4b0841427dc7964d38f847a6314026f9c0f9b5ecdc03fc3fabc5746267104217
+#   产物 SHA-256 39d24329564ab403406716892a36557a5bf488b8a7dc2e4f4ccf4fff86e803f4
+# （派生网格不入库），配置 experiment/cases/e1_outlet_nonreflecting.json；按此重跑，
+# 第 1000、2000 步与归档快照逐位相同。
+# 此前写的“x≤7.98 与 A 逐位相同”不成立（Astra 第十一轮更正）：该段 640000 个值里
+# 606627 个位型不同，量级不超过该列场最大值的 5e-4。
+# 以 CLBL 的 Cf 为量尺、2 个百分点为门槛：t=5 为 x≥9.09，t=10 为 x≥8.79
+# （copy 同期 x≥8.69）。出口列 t=10：壁压比 0.564→0.955、第一层速度
+# 0.165→0.022、Cf +200.4%→−59.9%；对照 copy（1.003 / 0.017 / −68.9%），
+# 壁压是 copy 更接近 1，Cf 的绝对偏差是无反射更小。未测反射系数。
 # ---------------------------------------------------------------------------

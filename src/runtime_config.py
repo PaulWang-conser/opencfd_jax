@@ -355,9 +355,8 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
     # p_grad=0.1 之类的缺省误判为越界。此前只在有 JSON 时校验且只查
     # config.values——`--case sod --outlet-ghost copy` 能通过解析（Astra
     # 第十轮）。
-    _validate_applicability(
-        {**(config.values if config is not None else {}), **explicit},
-        merged.get("case", "sod"))
+    given = {**(config.values if config is not None else {}), **explicit}
+    _validate_applicability(given, merged.get("case", "sod"))
 
     fmt = merged.get("mesh_format")
     if fmt is None:
@@ -373,6 +372,11 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
     if fmt == "cgns" and merged.get("case", "sod") not in CGNS_CASES:
         raise ConfigError(
             f"{merged.get('case')} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille/plate")
+    # outlet_ghost 只有 CGNS 装配分支消费。内置网格的 plate 显式给出时此前
+    # 静默通过，用户会以为跑了零梯度出口（Astra 第十一轮）。
+    if fmt != "cgns" and "boundary_outlet_ghost" in given:
+        raise ConfigError(
+            "boundary.outlet_ghost 只适用于 CGNS 网格的 plate：内置网格不消费该开关")
 
     # 网格尺寸只保留 i/j/k 入口。JSON 不提供维数（Step 3 口径），
     # 命令行与默认值必须给出正整数。
