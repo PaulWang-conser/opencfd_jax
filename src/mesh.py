@@ -118,7 +118,8 @@ def pad_coords(arr, periodic=(True, False, True)):
 
     periodic 按计算方向 (i, j, k) 给出，数组轴是 (k, j, i)；周期轴取**对侧内区**
     （原码 `exchange_boundary_x/y/z_packed_dev` 单块自收自发等价于环绕），
-    非周期轴做**线性外推**：p[m] = 2·p[LAP] − p[2LAP−1−m]（关于边界的奇镜像）。
+    非周期轴做**奇镜像外推**（OCFD 准例补丁 P1 同式）：从壁向外第 r 层
+    ghost = 2·p0 − p_r（p0 为首个物理点，r=1..LAP）。
 
     2026-11-23 修正：非周期轴曾用边缘复制——鬼胞坐标恒定使近壁 ∂y/∂j=0、
     度量在壁面带崩坏（黄金标准 sin(y) 检验：内区精确 1.0000、近壁带比值
