@@ -390,10 +390,15 @@ def _build_plate(args, params, nk):
         cons = grid.alloc().at[grid.inner()].set(initial.reshape(5, 1, 1, 1))
         inlet = initial.reshape(5, 1, 1)
         far = state(args.boundary_farfield)
+        # 出口状态鬼层缺省保持原值（原码口径）；boundary.outlet_ghost="copy"
+        # 时按零梯度延拓。只改状态鬼层，黏性通量 Ev 的出口鬼层仍清零。
+        outlet_ghost = getattr(args, "boundary_outlet_ghost", None) or "keep"
         faces = tuple(replace(f, thermal="isothermal",
                               params={"Tw": args.boundary_wall_temperature})
                       if f.kind == WALL else
-                      replace(f, dif_band=False) if f.kind == FARFIELD else f
+                      replace(f, dif_band=False) if f.kind == FARFIELD else
+                      replace(f, params={"halo": "copy"})
+                      if (f.kind == OUTFLOW and outlet_ghost == "copy") else f
                       for f in block.faces)
         return CaseSpec(grid=grid, cons0=cons, bcs=block.bcs, faces=faces,
                     dxs=block.dxs, axes=block.axes, params=params,

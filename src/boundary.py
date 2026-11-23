@@ -93,6 +93,20 @@ def halo_mode(kind):
     return HALO_ZERO
 
 
+def face_halo_mode(face):
+    """状态鬼层模式：``face.params["halo"]`` 显式给出时优先，否则按 kind 派生。
+
+    目前只用于把出口从"保持原值"（原码口径，初始为零）切成零梯度延拓
+    （``copy``）。黏性通量 Ev 的鬼层走 :func:`_fill_ev_face`，出口恒清零，
+    不受这个开关影响。
+    """
+    mode = face.params.get("halo") or halo_mode(face.kind)
+    if mode not in (HALO_PERIODIC, HALO_COPY, HALO_KEEP, HALO_ZERO):
+        raise ValueError(
+            f"{face.side} 的 halo={mode!r}；可选 periodic/copy/keep/zero")
+    return mode
+
+
 def dif_band(kind, executor="halo"):
     """该面是否开边界单侧带（原码 DIF_BOUND 的逐侧开关）。
 
@@ -325,8 +339,8 @@ def _face_extent(face, grid):
 
 
 def _fill_face_halos(f, face, grid):
-    """按面的规则填状态鬼层；出口保持已有值。"""
-    mode = halo_mode(face.kind)
+    """按面的规则填状态鬼层；出口缺省保持已有值（face.params["halo"] 可覆盖）。"""
+    mode = face_halo_mode(face)
     if mode == HALO_KEEP:
         return f
     axis = int(face.axis)
@@ -355,17 +369,18 @@ def _fill_face_halos(f, face, grid):
 
 
 def fill_faces(f, faces, grid):
-    """按面填状态鬼层：先清零，再周期复制；入口和出口保持。
+    """按面填状态鬼层：先清零，再周期复制；入口保持，出口缺省保持。
 
     入口剖面由 :func:`write_faces` 写入。其他面的操作可能作用于交界鬼层。
+    出口显式设 ``params["halo"]="copy"`` 时按零梯度延拓。
     """
     faces = tuple(faces)
     if not faces:
         return f
-    order = (HALO_ZERO, HALO_PERIODIC, HALO_COPY)
+    order = (HALO_ZERO, HALO_PERIODIC, HALO_COPY, HALO_KEEP)
     for mode in order:
         for face in faces:
-            if halo_mode(face.kind) == mode:
+            if face_halo_mode(face) == mode:
                 f = _fill_face_halos(f, face, grid)
     return f
 

@@ -120,6 +120,10 @@ def build_parser(explicit_only=False):
              "空着表示用自由来流常数，剖面必须与网格 j 点逐点对应")
     add("--tw", type=float, default=None,
         help="壁面温度（无量纲，对应原码 IBC 壁面的 Tw）；缺省与来流同温")
+    add("--outlet-ghost", dest="boundary_outlet_ghost", default=None,
+        choices=runtime_config.OUTLET_GHOSTS,
+        help="出口状态鬼层：keep=保持原值（原码口径，缺省）；copy=零梯度延拓"
+             "（诊断用，会偏离与原码的逐位对齐）")
     add("--mesh-format", default=None, choices=runtime_config.MESH_FORMATS,
         help="网格格式：builtin（程序内置网格）或 cgns（单块 CGNS/HDF5）")
     add("--mesh", default=None,
@@ -188,7 +192,8 @@ def resolve_cli(parsed, parser):
 
 def _warn_forced_viscous(args, case, effective_viscous):
     """算例声明强制粘性时，显式关闭要如实提示（按 case.needs_viscous，无 case 名）。"""
-    if effective_viscous and not getattr(args, "viscous", False)             and case.get("needs_viscous", False):
+    if (effective_viscous and not getattr(args, "viscous", False)
+            and case.get("needs_viscous", False)):
         print(f"WARNING: {args.case} 强制粘性，显式 viscous=false 不会关闭粘性项")
 
 

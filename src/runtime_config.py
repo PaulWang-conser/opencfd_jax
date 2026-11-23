@@ -22,6 +22,8 @@ from typing import Any, Mapping
 SCHEMES = ("UP7", "WENO7-SYMBO", "NND2", "WENO5", "WENO7",
            "OMP6-1", "OMP6-2", "OMP6-3", "OMP6_HR", "OMP6_LD", "OMP6_CD8")
 VIS_ORDERS = ("CD6", "CD8")
+# 出口状态鬼层：keep=保持原值（原码口径，缺省）；copy=零梯度延拓
+OUTLET_GHOSTS = ("keep", "copy")
 from .cases import CGNS_CASES, PUBLIC_CASE_NAMES
 
 CASE_NAMES = PUBLIC_CASE_NAMES
@@ -49,6 +51,7 @@ _SCHEMA = {
         "inflow": ("state", "boundary_inflow"),
         "farfield": ("state", "boundary_farfield"),
         "wall_temperature": ("number", "boundary_wall_temperature"),
+        "outlet_ghost": ("str", "boundary_outlet_ghost"),
     },
     "numerics": {
         "scheme": ("str", "scheme"),
@@ -83,6 +86,7 @@ _CASE_SCOPE = {
     "boundary.inflow": {"plate"},
     "boundary.farfield": {"plate"},
     "boundary.wall_temperature": {"plate"},
+    "boundary.outlet_ghost": {"plate"},
     "case.p_grad": {"poiseuille"},
     "case.forcing_work": {"poiseuille"},
     "case.plate_x0": {"plate"},
@@ -208,6 +212,9 @@ def _semantic_checks(values: dict[str, Any], sources: dict[str, str],
     if "scheme" in values and values["scheme"] not in SCHEMES:
         raise ConfigError(
             f"numerics.scheme 不支持 {values['scheme']!r}；可选 {SCHEMES}")
+    if "boundary_outlet_ghost" in values and values["boundary_outlet_ghost"] not in OUTLET_GHOSTS:
+        raise ConfigError(
+            f"boundary.outlet_ghost 不支持 {values['boundary_outlet_ghost']!r}；可选 {OUTLET_GHOSTS}")
     if "vis_order" in values and values["vis_order"] not in VIS_ORDERS:
         raise ConfigError(
             f"numerics.vis_order 不支持 {values['vis_order']!r}；可选 {VIS_ORDERS}")
