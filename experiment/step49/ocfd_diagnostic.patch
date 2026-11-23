@@ -1,0 +1,137 @@
+--- a/src/OCFD_ana.cu
++++ b/src/OCFD_ana.cu
+@@ -28,6 +28,7 @@
+     unsigned long int offset;
+ 
+     memcpy_All(pAjac , pAjac_d->ptr , pAjac_d->pitch , D2H , nx_2lap , ny_2lap , nz_2lap);
++    { FILE *f = fopen("diagnostic_Ajac.bin", "wb"); if (f) { fwrite(pAjac, sizeof(REAL), (size_t)nx_2lap * ny_2lap * nz_2lap, f); fclose(f); } }
+ 
+     for(k=0;k<nz_2lap;k++){
+         for(j=0;j<ny_2lap;j++){
+--- a/src/OCFD_NS_Solver.cu
++++ b/src/OCFD_NS_Solver.cu
+@@ -36,6 +36,22 @@
+ extern "C"{
+ #endif
+ 
++static void diag_dump(int stage) {
++    cudaDeviceSynchronize();
++    size_t n=(size_t)nx*ny*nz*5;
++    REAL *buf=(REAL*)malloc(n*sizeof(REAL));
++    char name[64];
++    memcpy_All(buf,pdu_d->ptr,pdu_d->pitch,D2H,nx,ny,nz*5);
++    snprintf(name,sizeof(name),"diagnostic_du_%d.bin",stage);
++    FILE *out=fopen(name,"wb"); if(out){fwrite(buf,sizeof(REAL),n,out);fclose(out);} free(buf);
++    n=(size_t)nx_2lap*ny_2lap*nz_2lap;
++    buf=(REAL*)malloc(n*sizeof(REAL));
++    cudaField *fields[5]={pd_d,pu_d,pv_d,pw_d,pT_d};
++    for(int v=0;v<5;v++){memcpy_All(buf,fields[v]->ptr,fields[v]->pitch,D2H,nx_2lap,ny_2lap,nz_2lap); snprintf(name,sizeof(name),"diagnostic_primitive_%d_%d.bin",stage,v); out=fopen(name,"wb"); if(out){fwrite(buf,sizeof(REAL),n,out);fclose(out);}}
++    free(buf);
++}
++
++
+ void NS_solver_real()
+ {
+ 
+@@ -77,6 +93,7 @@
+         {
+             
+             du_comput(KRK);
++            diag_dump(KRK);
+             
+             OCFD_time_advance(KRK);
+             
+--- a/src/OCFD_Stream.cu
++++ b/src/OCFD_Stream.cu
+@@ -2,6 +2,7 @@
+ #include <stdlib.h>
+ 
+ #include "OCFD_Stream.h"
++#include "cuda_utility.h"
+ #include "OCFD_split.h"
+ #include "OCFD_NS_Jacobian3d.h"
+ #include "parameters.h"
+@@ -25,7 +26,38 @@
+     for (int i = 0; i < 4; ++i) cudaEventDestroy(Event[i]);
+ }
+ 
++static int diag_stage = 0;
++static void diag_ev(const char *direction) {
++    cudaDeviceSynchronize();
++    size_t n=(size_t)nx_2lap*ny_2lap*nz_2lap;
++    REAL *buf=(REAL*)malloc(n*sizeof(REAL));
++    cudaField *fields[4]={pEv1_d,pEv2_d,pEv3_d,pEv4_d};
++    char name[64];
++    for(int v=0;v<4;v++){memcpy_All(buf,fields[v]->ptr,fields[v]->pitch,D2H,nx_2lap,ny_2lap,nz_2lap); snprintf(name,sizeof(name),"diagnostic_ev_%d_%s_%d.bin",diag_stage,direction,v); FILE *out=fopen(name,"wb"); if(out){fwrite(buf,sizeof(REAL),n,out);fclose(out);}}
++    free(buf);
++}
++
++static void diag_split(const char *name, cudaSoA *field) {
++    cudaDeviceSynchronize();
++    size_t n=(size_t)nx_2lap*ny_2lap*nz_2lap*5;
++    REAL *buf=(REAL*)malloc(n*sizeof(REAL));
++    memcpy_All(buf,field->ptr,field->pitch,D2H,nx_2lap,ny_2lap,nz_2lap*5);
++    char path[64]; snprintf(path,sizeof(path),"diagnostic_split_%d_%s.bin",diag_stage,name);
++    FILE *out=fopen(path,"wb"); if(out){fwrite(buf,sizeof(REAL),n,out);fclose(out);} free(buf);
++}
++
++static void diag_invis(int stage) {
++    cudaDeviceSynchronize();
++    size_t n=(size_t)nx*ny*nz*5;
++    REAL *buf=(REAL*)malloc(n*sizeof(REAL));
++    memcpy_All(buf,pdu_d->ptr,pdu_d->pitch,D2H,nx,ny,nz*5);
++    char name[64]; snprintf(name,sizeof(name),"diagnostic_invis_%d.bin",stage);
++    FILE *out=fopen(name,"wb"); if(out){fwrite(buf,sizeof(REAL),n,out);fclose(out);} free(buf);
++}
++
++
+ void du_comput(int KRK){
++    diag_stage = KRK;
+ 	//pthread_create(&thread_handles[0], NULL, du_invis_Jacobian3d_inner, NULL);
+ 	//pthread_create(&thread_handles[1], NULL, du_vis_Jacobian3d_outer, NULL);
+ 
+@@ -38,6 +70,7 @@
+ 	switch(Stream_MODE){
+         case 0://Non-stream
+ 	    du_invis_Jacobian3d(NULL);
++            diag_invis(KRK);
+ 	    du_vis_Jacobian3d(NULL);
+         break;
+ 
+@@ -297,6 +330,12 @@
+ 	cudaJobPackage job(dim3(LAP, LAP, LAP), dim3(nx_lap, ny_lap, nz_lap));
+ 	du_invis_Jacobian3d_init(job, &Stream[0]);
+     Stager_Warming(job, pfp_x_d, pfm_x_d, pfp_y_d, pfm_y_d, pfp_z_d, pfm_z_d, &Stream[0]);
++    diag_split("xp", pfp_x_d);
++    diag_split("xm", pfm_x_d);
++    diag_split("yp", pfp_y_d);
++    diag_split("ym", pfm_y_d);
++    diag_split("zp", pfp_z_d);
++    diag_split("zm", pfm_z_d);
+ 	du_invis_Jacobian3d_x(job, pfp_x_d, pfm_x_d, &Stream[0]);
+ 	du_invis_Jacobian3d_y(job, pfp_y_d, pfm_y_d, &Stream[0]);
+ 	du_invis_Jacobian3d_z(job, pfp_z_d, pfm_z_d, &Stream[0]);
+@@ -314,6 +353,7 @@
+     exchange_boundary_x_packed_dev(pEv2 , pEv2_d , Iperiodic[0]);
+     exchange_boundary_x_packed_dev(pEv3 , pEv3_d , Iperiodic[0]);
+     exchange_boundary_x_packed_dev(pEv4 , pEv4_d , Iperiodic[0]);
++    diag_ev("x");
+ 	du_viscous_Jacobian3d_x_final(job, &Stream[0]);
+ 
+ 	du_viscous_Jacobian3d_y_init(&Stream[0]);
+@@ -322,6 +362,7 @@
+     exchange_boundary_y_packed_dev(pEv3 , pEv3_d , Iperiodic[1]);
+ 	exchange_boundary_y_packed_dev(pEv4 , pEv4_d , Iperiodic[1]);
+ 	boundary_symmetry_pole_vis_y(&Stream[0]);
++    diag_ev("y");
+ 	du_viscous_Jacobian3d_y_final(job, &Stream[0]);
+ 
+ 	du_viscous_Jacobian3d_z_init(&Stream[0]);
+@@ -329,6 +370,7 @@
+     exchange_boundary_z_packed_dev(pEv2 , pEv2_d ,Iperiodic[2]);
+     exchange_boundary_z_packed_dev(pEv3 , pEv3_d ,Iperiodic[2]);
+     exchange_boundary_z_packed_dev(pEv4 , pEv4_d ,Iperiodic[2]);
++    diag_ev("z");
+ 	du_viscous_Jacobian3d_z_final(job, &Stream[0]);
+ 
+ 	return NULL;

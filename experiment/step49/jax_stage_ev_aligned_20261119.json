@@ -1,0 +1,5021 @@
+{
+  "axis_order": "k,j,i",
+  "relative_denominator": "区域内参考值最大绝对值；为零时为 null",
+  "diagnostic_options": {
+    "ocfd_farfield_band": false,
+    "interior_face_writes": false,
+    "rescale_weno_epsilon": false
+  },
+  "stages": {
+    "1": {
+      "total": {
+        "rho": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04175098247073272,
+            "max_abs_index": [
+              35,
+              0,
+              0
+            ],
+            "max_abs_ref": 39.95236882439985,
+            "relative": 0.0010450189487947062
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04175098247073272,
+            "max_abs_index": [
+              35,
+              0,
+              0
+            ],
+            "max_abs_ref": 8.130940252970722,
+            "relative": 0.005134828343558246
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.975127921928561e-05,
+            "max_abs_index": [
+              6,
+              0,
+              99
+            ],
+            "max_abs_ref": 39.95236882439985,
+            "relative": 2.2464570151963656e-06
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04175098247073272,
+            "max_abs_index": [
+              35,
+              0,
+              0
+            ],
+            "max_abs_ref": 35.35714285714375,
+            "relative": 0.0011808358678590774
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.006039778734703e-09,
+            "max_abs_index": [
+              33,
+              39,
+              99
+            ],
+            "max_abs_ref": 39.95236882439985,
+            "relative": 5.021078443562944e-11
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.203044541768008e-14,
+            "max_abs_index": [
+              34,
+              35,
+              14
+            ],
+            "max_abs_ref": 1.459703331258373e-12,
+            "relative": 0.056196655622457015
+          }
+        },
+        "rho_u": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0001221954088603816,
+            "max_abs_index": [
+              6,
+              2,
+              97
+            ],
+            "max_abs_ref": 287.47365351941164,
+            "relative": 4.2506646214147887e-07
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00012219120935874628,
+            "max_abs_index": [
+              31,
+              2,
+              3
+            ],
+            "max_abs_ref": 243.1623671582361,
+            "relative": 5.025087178857379e-07
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0001221954088603816,
+            "max_abs_index": [
+              6,
+              2,
+              97
+            ],
+            "max_abs_ref": 287.47365351941164,
+            "relative": 4.2506646214147887e-07
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0001221954088603816,
+            "max_abs_index": [
+              6,
+              2,
+              97
+            ],
+            "max_abs_ref": 287.47365351941164,
+            "relative": 4.2506646214147887e-07
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.987945807968572e-09,
+            "max_abs_index": [
+              0,
+              39,
+              15
+            ],
+            "max_abs_ref": 286.3762622308704,
+            "relative": 6.941726917176999e-12
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.565115200947048e-11,
+            "max_abs_index": [
+              31,
+              4,
+              11
+            ],
+            "max_abs_ref": 0.3993851482527182,
+            "relative": 1.8941904159540966e-10
+          }
+        },
+        "rho_v": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.430703357152525e-12,
+            "max_abs_index": [
+              25,
+              1,
+              27
+            ],
+            "max_abs_ref": 81.31242741274474,
+            "relative": 5.4489867024410905e-14
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.430520728938847e-12,
+            "max_abs_index": [
+              11,
+              1,
+              3
+            ],
+            "max_abs_ref": 81.31176908923119,
+            "relative": 5.448806216572182e-14
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.430650291098459e-12,
+            "max_abs_index": [
+              20,
+              1,
+              99
+            ],
+            "max_abs_ref": 81.31242741274474,
+            "relative": 5.4489214405177237e-14
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.430703357152525e-12,
+            "max_abs_index": [
+              25,
+              1,
+              27
+            ],
+            "max_abs_ref": 0.2093928571443744,
+            "relative": 2.1159763602144256e-11
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.054759874016485e-13,
+            "max_abs_index": [
+              35,
+              38,
+              36
+            ],
+            "max_abs_ref": 81.31242741274474,
+            "relative": 7.446290888946545e-15
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.8646049302512834e-18,
+            "max_abs_index": [
+              31,
+              4,
+              35
+            ],
+            "max_abs_ref": 4.811904577895933e-18,
+            "relative": 0.5953162378593694
+          }
+        },
+        "rho_w": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.220328617909448e-11,
+            "max_abs_index": [
+              37,
+              35,
+              97
+            ],
+            "max_abs_ref": 1.482882708546101e-11,
+            "relative": 0.8229434539066982
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.624061947780393e-12,
+            "max_abs_index": [
+              37,
+              32,
+              3
+            ],
+            "max_abs_ref": 9.743600443131334e-13,
+            "relative": 1.6667985897607915
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.220328617909448e-11,
+            "max_abs_index": [
+              37,
+              35,
+              97
+            ],
+            "max_abs_ref": 1.482882708546101e-11,
+            "relative": 0.8229434539066982
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1487599250136671e-11,
+            "max_abs_index": [
+              37,
+              1,
+              97
+            ],
+            "max_abs_ref": 1.4622377382996517e-11,
+            "relative": 0.7856177521101945
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1308807523266422e-11,
+            "max_abs_index": [
+              37,
+              38,
+              97
+            ],
+            "max_abs_ref": 1.482882708546101e-11,
+            "relative": 0.7626231972422278
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0832731669068472e-12,
+            "max_abs_index": [
+              11,
+              23,
+              11
+            ],
+            "max_abs_ref": 4.808335025629056e-12,
+            "relative": 0.22529070065477116
+          }
+        },
+        "rhoE": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0009718230090638436,
+            "max_abs_index": [
+              39,
+              2,
+              45
+            ],
+            "max_abs_ref": 9695.028200681749,
+            "relative": 1.0023931740554458e-07
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0009718229695967473,
+            "max_abs_index": [
+              8,
+              2,
+              3
+            ],
+            "max_abs_ref": 2037.0761497766537,
+            "relative": 4.770675704505688e-07
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.000971822977589909,
+            "max_abs_index": [
+              26,
+              2,
+              99
+            ],
+            "max_abs_ref": 9695.028200681749,
+            "relative": 1.0023931415914509e-07
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0009718230090638436,
+            "max_abs_index": [
+              39,
+              2,
+              45
+            ],
+            "max_abs_ref": 8958.247212150492,
+            "relative": 1.0848361136380723e-07
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.524136786367762e-11,
+            "max_abs_index": [
+              39,
+              38,
+              89
+            ],
+            "max_abs_ref": 9695.028200681749,
+            "relative": 6.729363392577846e-15
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.513680705921843e-10,
+            "max_abs_index": [
+              29,
+              4,
+              18
+            ],
+            "max_abs_ref": 0.7345665221367723,
+            "relative": 8.867380297939892e-10
+          }
+        }
+      },
+      "inviscid": {
+        "rho": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0417509824707496,
+            "max_abs_index": [
+              35,
+              0,
+              0
+            ],
+            "max_abs_ref": 39.95236882439985,
+            "relative": 0.0010450189487951286
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0417509824707496,
+            "max_abs_index": [
+              35,
+              0,
+              0
+            ],
+            "max_abs_ref": 8.130940252970722,
+            "relative": 0.005134828343560322
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.975127924770732e-05,
+            "max_abs_index": [
+              35,
+              0,
+              99
+            ],
+            "max_abs_ref": 39.95236882439985,
+            "relative": 2.2464570159077555e-06
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0417509824707496,
+            "max_abs_index": [
+              35,
+              0,
+              0
+            ],
+            "max_abs_ref": 35.35714285714375,
+            "relative": 0.0011808358678595547
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.0060255678799876e-09,
+            "max_abs_index": [
+              36,
+              39,
+              99
+            ],
+            "max_abs_ref": 39.95236882439985,
+            "relative": 5.021042874070738e-11
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.722638347337653e-14,
+            "max_abs_index": [
+              5,
+              34,
+              59
+            ],
+            "max_abs_ref": 1.459703331258373e-12,
+            "relative": 0.05975624060416502
+          }
+        },
+        "rho_u": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00012219540900053463,
+            "max_abs_index": [
+              24,
+              2,
+              97
+            ],
+            "max_abs_ref": 286.39285714287007,
+            "relative": 4.2667058885332525e-07
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00012219120939748347,
+            "max_abs_index": [
+              30,
+              2,
+              2
+            ],
+            "max_abs_ref": 238.09523809524435,
+            "relative": 5.13203079469417e-07
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00012219540900053463,
+            "max_abs_index": [
+              24,
+              2,
+              97
+            ],
+            "max_abs_ref": 286.39285714287007,
+            "relative": 4.2667058885332525e-07
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00012219540900053463,
+            "max_abs_index": [
+              24,
+              2,
+              97
+            ],
+            "max_abs_ref": 286.39285714287007,
+            "relative": 4.2667058885332525e-07
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9880292967400237e-09,
+            "max_abs_index": [
+              0,
+              39,
+              19
+            ],
+            "max_abs_ref": 286.39285714286996,
+            "relative": 6.9416162001145e-12
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.559095439895081e-11,
+            "max_abs_index": [
+              33,
+              4,
+              85
+            ],
+            "max_abs_ref": 1.6370751290967632e-12,
+            "relative": 46.174395454078656
+          }
+        },
+        "rho_v": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.430514508366345e-12,
+            "max_abs_index": [
+              3,
+              1,
+              49
+            ],
+            "max_abs_ref": 81.30940252970417,
+            "relative": 5.448957156889423e-14
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.4305145083662784e-12,
+            "max_abs_index": [
+              29,
+              1,
+              2
+            ],
+            "max_abs_ref": 81.30940252970417,
+            "relative": 5.448957156889341e-14
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.430514508366278e-12,
+            "max_abs_index": [
+              20,
+              1,
+              99
+            ],
+            "max_abs_ref": 81.30940252970416,
+            "relative": 5.448957156889341e-14
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.430514508366345e-12,
+            "max_abs_index": [
+              3,
+              1,
+              49
+            ],
+            "max_abs_ref": 6.578825400443043e-11,
+            "relative": 0.06734506904633732
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.872189248443002e-13,
+            "max_abs_index": [
+              10,
+              38,
+              81
+            ],
+            "max_abs_ref": 81.30940252970417,
+            "relative": 7.222029760085567e-15
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "rho_w": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2288023342258205e-11,
+            "max_abs_index": [
+              37,
+              29,
+              97
+            ],
+            "max_abs_ref": 1.482874307446605e-11,
+            "relative": 0.8286625023139845
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.7308002503731711e-12,
+            "max_abs_index": [
+              37,
+              24,
+              2
+            ],
+            "max_abs_ref": 9.743600443131334e-13,
+            "relative": 1.776345674758537
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2288023342258205e-11,
+            "max_abs_index": [
+              37,
+              29,
+              97
+            ],
+            "max_abs_ref": 1.482874307446605e-11,
+            "relative": 0.8286625023139845
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1310227608618081e-11,
+            "max_abs_index": [
+              37,
+              1,
+              97
+            ],
+            "max_abs_ref": 1.4622377382996517e-11,
+            "relative": 0.7734876013916906
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1308842245320552e-11,
+            "max_abs_index": [
+              37,
+              38,
+              97
+            ],
+            "max_abs_ref": 1.482874307446605e-11,
+            "relative": 0.7626298593569609
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2039984798627012e-12,
+            "max_abs_index": [
+              6,
+              17,
+              53
+            ],
+            "max_abs_ref": 4.80833499654647e-12,
+            "relative": 0.2503982107584973
+          }
+        },
+        "rhoE": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.000971823009057974,
+            "max_abs_index": [
+              39,
+              2,
+              46
+            ],
+            "max_abs_ref": 9689.85410479787,
+            "relative": 1.0029284223967644e-07
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0009718229794325883,
+            "max_abs_index": [
+              26,
+              2,
+              3
+            ],
+            "max_abs_ref": 2036.8005333691613,
+            "relative": 4.771321312573761e-07
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0009718229994177818,
+            "max_abs_index": [
+              3,
+              2,
+              99
+            ],
+            "max_abs_ref": 9689.85410479787,
+            "relative": 1.0029284124480159e-07
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.000971823009057974,
+            "max_abs_index": [
+              39,
+              2,
+              46
+            ],
+            "max_abs_ref": 8958.33333333356,
+            "relative": 1.0848256845298041e-07
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.526623873129195e-11,
+            "max_abs_index": [
+              39,
+              37,
+              89
+            ],
+            "max_abs_ref": 9689.85410479787,
+            "relative": 6.735523365514428e-15
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.615712932069944e-10,
+            "max_abs_index": [
+              34,
+              4,
+              15
+            ],
+            "max_abs_ref": 3.6350344954594097e-10,
+            "relative": 1.8199862863292648
+          }
+        }
+      },
+      "viscous": {
+        "rho": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.550920042595227e-14,
+            "max_abs_index": [
+              9,
+              34,
+              14
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.933538833597323e-14,
+            "max_abs_index": [
+              24,
+              37,
+              3
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.750155989720952e-14,
+            "max_abs_index": [
+              37,
+              30,
+              99
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.446130192255121e-14,
+            "max_abs_index": [
+              11,
+              2,
+              96
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.781187238396756e-14,
+            "max_abs_index": [
+              14,
+              37,
+              48
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.550920042595227e-14,
+            "max_abs_index": [
+              9,
+              34,
+              14
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "rho_u": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.011058400507864e-13,
+            "max_abs_index": [
+              0,
+              18,
+              98
+            ],
+            "max_abs_ref": 5.432843539045365,
+            "relative": 1.2904951799403034e-13
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.831690603168681e-13,
+            "max_abs_index": [
+              34,
+              0,
+              0
+            ],
+            "max_abs_ref": 5.370210481902504,
+            "relative": 8.997208991065391e-14
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.011058400507864e-13,
+            "max_abs_index": [
+              0,
+              18,
+              98
+            ],
+            "max_abs_ref": 5.432843539045365,
+            "relative": 1.2904951799403034e-13
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.319389456166391e-13,
+            "max_abs_index": [
+              11,
+              3,
+              17
+            ],
+            "max_abs_ref": 5.432843539045365,
+            "relative": 1.1631826705020123e-13
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.593082420818352e-13,
+            "max_abs_index": [
+              23,
+              38,
+              82
+            ],
+            "max_abs_ref": 0.06523124739242538,
+            "relative": 8.574238029162414e-12
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.448730438535222e-13,
+            "max_abs_index": [
+              23,
+              4,
+              11
+            ],
+            "max_abs_ref": 0.3993851482523441,
+            "relative": 1.614664557947135e-12
+          }
+        },
+        "rho_v": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.838416255234246e-12,
+            "max_abs_index": [
+              8,
+              1,
+              67
+            ],
+            "max_abs_ref": 0.2093928571428659,
+            "relative": 1.3555458834479885e-11
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.6982887055086984e-12,
+            "max_abs_index": [
+              25,
+              3,
+              3
+            ],
+            "max_abs_ref": 0.20939285714285932,
+            "relative": 1.2886250000723651e-11
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.7883945152851197e-12,
+            "max_abs_index": [
+              24,
+              2,
+              99
+            ],
+            "max_abs_ref": 0.2093928571428659,
+            "relative": 1.3316569406102692e-11
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.838416255234246e-12,
+            "max_abs_index": [
+              8,
+              1,
+              67
+            ],
+            "max_abs_ref": 0.2093928571428659,
+            "relative": 1.3555458834479885e-11
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1625393031046427e-13,
+            "max_abs_index": [
+              11,
+              37,
+              99
+            ],
+            "max_abs_ref": 0.009074649121714629,
+            "relative": 1.281084576948342e-11
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.8646049302512834e-18,
+            "max_abs_index": [
+              31,
+              4,
+              35
+            ],
+            "max_abs_ref": 4.811904577895933e-18,
+            "relative": 0.5953162378593694
+          }
+        },
+        "rho_w": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.155868594930021e-13,
+            "max_abs_index": [
+              26,
+              10,
+              46
+            ],
+            "max_abs_ref": 2.6486067240201283e-16,
+            "relative": 3079.305251687506
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.449926948885391e-13,
+            "max_abs_index": [
+              13,
+              4,
+              2
+            ],
+            "max_abs_ref": 2.0020425365392286e-17,
+            "relative": 32216.73281744985
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.116910564702984e-13,
+            "max_abs_index": [
+              0,
+              10,
+              97
+            ],
+            "max_abs_ref": 2.6486067240201283e-16,
+            "relative": 2309.4823815211676
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.97104664493781e-13,
+            "max_abs_index": [
+              13,
+              2,
+              20
+            ],
+            "max_abs_ref": 2.6117310843131744e-16,
+            "relative": 2669.1287961490248
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.883811843647648e-13,
+            "max_abs_index": [
+              13,
+              38,
+              75
+            ],
+            "max_abs_ref": 2.6486067240201283e-16,
+            "relative": 2599.031325118441
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.155868594930021e-13,
+            "max_abs_index": [
+              26,
+              10,
+              46
+            ],
+            "max_abs_ref": 1.4947594182823342e-17,
+            "relative": 54563.08550510513
+          }
+        },
+        "rhoE": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.610845204590987e-11,
+            "max_abs_index": [
+              25,
+              3,
+              78
+            ],
+            "max_abs_ref": 19.964990416615837,
+            "relative": 3.311218821867863e-12
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.6663784775423665e-11,
+            "max_abs_index": [
+              37,
+              3,
+              3
+            ],
+            "max_abs_ref": 4.966381022717542,
+            "relative": 1.140947191047737e-11
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.936762192959577e-11,
+            "max_abs_index": [
+              25,
+              3,
+              97
+            ],
+            "max_abs_ref": 19.964990416615837,
+            "relative": 2.9735862973511447e-12
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.610845204590987e-11,
+            "max_abs_index": [
+              25,
+              3,
+              78
+            ],
+            "max_abs_ref": 19.964990416615837,
+            "relative": 3.311218821867863e-12
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.6825651982799172e-11,
+            "max_abs_index": [
+              5,
+              39,
+              39
+            ],
+            "max_abs_ref": 17.769868071217576,
+            "relative": 9.468642037951998e-13
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.4179549735522414e-11,
+            "max_abs_index": [
+              20,
+              4,
+              65
+            ],
+            "max_abs_ref": 0.7345665218727645,
+            "relative": 7.375717259397093e-11
+          }
+        }
+      },
+      "primitive": {
+        "rho": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              4
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              0,
+              4,
+              4
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              44,
+              4,
+              4
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          }
+        },
+        "u": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              4
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              0,
+              4,
+              4
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              44,
+              4,
+              4
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          }
+        },
+        "v": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              0,
+              4,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              44,
+              4,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "w": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              0,
+              4,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              44,
+              4,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "T": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              4
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              0,
+              4,
+              4
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              44,
+              4,
+              4
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          }
+        }
+      }
+    },
+    "2": {
+      "total": {
+        "rho": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04532979820729821,
+            "max_abs_index": [
+              2,
+              2,
+              99
+            ],
+            "max_abs_ref": 39.99381006258298,
+            "relative": 0.0011334203502083294
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04142723954571803,
+            "max_abs_index": [
+              34,
+              0,
+              0
+            ],
+            "max_abs_ref": 8.130946291677766,
+            "relative": 0.005095008386430972
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04532979820729821,
+            "max_abs_index": [
+              2,
+              2,
+              99
+            ],
+            "max_abs_ref": 39.99381006258298,
+            "relative": 0.0011334203502083294
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04532979820729821,
+            "max_abs_index": [
+              2,
+              2,
+              99
+            ],
+            "max_abs_ref": 35.14306718625385,
+            "relative": 0.001289864597391456
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.004992462562035289,
+            "max_abs_index": [
+              24,
+              36,
+              98
+            ],
+            "max_abs_ref": 39.99381006258298,
+            "relative": 0.000124830881434477
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0016393735153993443,
+            "max_abs_index": [
+              22,
+              4,
+              95
+            ],
+            "max_abs_ref": 2.2833310520505223e-05,
+            "relative": 71.79745196944269
+          }
+        },
+        "rho_u": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0397771034171943,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 284.89651473905644,
+            "relative": 0.0036496659299940933
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.8882359220481622,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 236.51601037627555,
+            "relative": 0.0037555001906004557
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0397771034171943,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 284.89651473905644,
+            "relative": 0.0036496659299940933
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0397771034171943,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 284.89651473905644,
+            "relative": 0.0036496659299940933
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0027585864081694153,
+            "max_abs_index": [
+              24,
+              36,
+              96
+            ],
+            "max_abs_ref": 283.8600779460977,
+            "relative": 9.718120378636845e-06
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.025591060176597513,
+            "max_abs_index": [
+              22,
+              4,
+              94
+            ],
+            "max_abs_ref": 0.33328304220487326,
+            "relative": 0.07678476530728008
+          }
+        },
+        "rho_v": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.026556580834229668,
+            "max_abs_index": [
+              8,
+              1,
+              99
+            ],
+            "max_abs_ref": 81.31153733490012,
+            "relative": 0.0003266028623324428
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.025259908573668555,
+            "max_abs_index": [
+              32,
+              1,
+              1
+            ],
+            "max_abs_ref": 81.31153733490012,
+            "relative": 0.0003106558970792774
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.026556580834229668,
+            "max_abs_index": [
+              8,
+              1,
+              99
+            ],
+            "max_abs_ref": 81.31042686670908,
+            "relative": 0.0003266073227946947
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.026556580834229668,
+            "max_abs_index": [
+              8,
+              1,
+              99
+            ],
+            "max_abs_ref": 0.20680439755368268,
+            "relative": 0.1284140044813895
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0004007364659197681,
+            "max_abs_index": [
+              37,
+              38,
+              98
+            ],
+            "max_abs_ref": 81.31153733490012,
+            "relative": 4.928408428305119e-06
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.008009346778760673,
+            "max_abs_index": [
+              16,
+              4,
+              95
+            ],
+            "max_abs_ref": 5.1980744183629915e-05,
+            "relative": 154.0829571517182
+          }
+        },
+        "rho_w": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2549292618615803e-11,
+            "max_abs_index": [
+              37,
+              32,
+              97
+            ],
+            "max_abs_ref": 1.455134617991866e-11,
+            "relative": 0.8624145466303484
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.5532697492494293e-12,
+            "max_abs_index": [
+              37,
+              24,
+              2
+            ],
+            "max_abs_ref": 9.722140061613742e-13,
+            "relative": 1.597662386476263
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2549292618615803e-11,
+            "max_abs_index": [
+              37,
+              32,
+              97
+            ],
+            "max_abs_ref": 1.455134617991866e-11,
+            "relative": 0.8624145466303484
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1593920164489547e-11,
+            "max_abs_index": [
+              37,
+              1,
+              97
+            ],
+            "max_abs_ref": 1.4321571035365719e-11,
+            "relative": 0.809542482166202
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1325239175735291e-11,
+            "max_abs_index": [
+              37,
+              38,
+              97
+            ],
+            "max_abs_ref": 1.4435749784843592e-11,
+            "relative": 0.7845272566047041
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1725084732949899e-12,
+            "max_abs_index": [
+              35,
+              4,
+              42
+            ],
+            "max_abs_ref": 4.75948504259932e-12,
+            "relative": 0.24635196093706857
+          }
+        },
+        "rhoE": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.28847035367823004,
+            "max_abs_index": [
+              24,
+              2,
+              97
+            ],
+            "max_abs_ref": 9708.527853435105,
+            "relative": 2.9713089155547147e-05
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.26333348856695293,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 2037.080521740662,
+            "relative": 0.0001292700439459985
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.28847035367823004,
+            "max_abs_index": [
+              24,
+              2,
+              97
+            ],
+            "max_abs_ref": 9708.527853435105,
+            "relative": 2.9713089155547147e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.28847035367823004,
+            "max_abs_index": [
+              24,
+              2,
+              97
+            ],
+            "max_abs_ref": 8831.828449785615,
+            "relative": 3.266258570559445e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00807650632530832,
+            "max_abs_index": [
+              13,
+              36,
+              96
+            ],
+            "max_abs_ref": 9708.527853435105,
+            "relative": 8.318981463755765e-07
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.010498231896186039,
+            "max_abs_index": [
+              30,
+              4,
+              93
+            ],
+            "max_abs_ref": 0.7010636494204483,
+            "relative": 0.014974720062671433
+          }
+        }
+      },
+      "inviscid": {
+        "rho": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.045329798207198735,
+            "max_abs_index": [
+              5,
+              2,
+              99
+            ],
+            "max_abs_ref": 39.99381006258298,
+            "relative": 0.0011334203502058422
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04142723954570737,
+            "max_abs_index": [
+              34,
+              0,
+              0
+            ],
+            "max_abs_ref": 8.130946291677766,
+            "relative": 0.0050950083864296615
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.045329798207198735,
+            "max_abs_index": [
+              5,
+              2,
+              99
+            ],
+            "max_abs_ref": 39.99381006258298,
+            "relative": 0.0011334203502058422
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.045329798207198735,
+            "max_abs_index": [
+              5,
+              2,
+              99
+            ],
+            "max_abs_ref": 35.14306718625385,
+            "relative": 0.0012898645973886253
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00499246256205433,
+            "max_abs_index": [
+              24,
+              36,
+              98
+            ],
+            "max_abs_ref": 39.99381006258298,
+            "relative": 0.00012483088143495308
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.001639373515508064,
+            "max_abs_index": [
+              14,
+              4,
+              95
+            ],
+            "max_abs_ref": 2.2833310520505223e-05,
+            "relative": 71.79745197420414
+          }
+        },
+        "rho_u": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0397769996814454,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 283.92222318085476,
+            "relative": 0.0036621895532958017
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.888235804124575,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 231.57571311213297,
+            "relative": 0.00383561726826887
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0397769996814454,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 283.92222318085476,
+            "relative": 0.0036621895532958017
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0397769996814454,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 283.83838239615295,
+            "relative": 0.0036632712986301823
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.002758586408173684,
+            "max_abs_index": [
+              24,
+              36,
+              96
+            ],
+            "max_abs_ref": 283.879589337261,
+            "relative": 9.717452440359727e-06
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.02559113872784546,
+            "max_abs_index": [
+              22,
+              4,
+              94
+            ],
+            "max_abs_ref": 0.04023692965814158,
+            "relative": 0.636011220171898
+          }
+        },
+        "rho_v": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.026556582003937068,
+            "max_abs_index": [
+              10,
+              1,
+              99
+            ],
+            "max_abs_ref": 81.31023183302207,
+            "relative": 0.0003266081205926631
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0252599074086729,
+            "max_abs_index": [
+              32,
+              1,
+              1
+            ],
+            "max_abs_ref": 81.30940252970414,
+            "relative": 0.0003106640391244406
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.026556582003937068,
+            "max_abs_index": [
+              10,
+              1,
+              99
+            ],
+            "max_abs_ref": 81.31023183302207,
+            "relative": 0.0003266081205926631
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.026556582003937068,
+            "max_abs_index": [
+              10,
+              1,
+              99
+            ],
+            "max_abs_ref": 0.13622144269756625,
+            "relative": 0.19495155445458756
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00040073646591965253,
+            "max_abs_index": [
+              6,
+              38,
+              98
+            ],
+            "max_abs_ref": 81.31023183302207,
+            "relative": 4.928487557907856e-06
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.008009346773290201,
+            "max_abs_index": [
+              10,
+              4,
+              95
+            ],
+            "max_abs_ref": 5.196308296956791e-05,
+            "relative": 154.13532676613627
+          }
+        },
+        "rho_w": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2549908366263028e-11,
+            "max_abs_index": [
+              37,
+              32,
+              97
+            ],
+            "max_abs_ref": 1.4552031676173102e-11,
+            "relative": 0.8624162347592833
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.7284667300398478e-12,
+            "max_abs_index": [
+              37,
+              24,
+              2
+            ],
+            "max_abs_ref": 9.722782216752293e-13,
+            "relative": 1.7777490964075184
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2549908366263028e-11,
+            "max_abs_index": [
+              37,
+              32,
+              97
+            ],
+            "max_abs_ref": 1.4552031676173102e-11,
+            "relative": 0.8624162347592833
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1423528811815563e-11,
+            "max_abs_index": [
+              37,
+              1,
+              97
+            ],
+            "max_abs_ref": 1.4329830204787406e-11,
+            "relative": 0.7971852177284776
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1188149933600342e-11,
+            "max_abs_index": [
+              37,
+              38,
+              97
+            ],
+            "max_abs_ref": 1.4436461768921115e-11,
+            "relative": 0.7749925232847736
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2816229103740206e-12,
+            "max_abs_index": [
+              4,
+              34,
+              34
+            ],
+            "max_abs_ref": 4.7598834365217936e-12,
+            "relative": 0.26925510413560577
+          }
+        },
+        "rhoE": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.28847260629772353,
+            "max_abs_index": [
+              24,
+              2,
+              97
+            ],
+            "max_abs_ref": 9703.352735203376,
+            "relative": 2.9729168275121694e-05
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.2633352128948766,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 2036.804905715304,
+            "relative": 0.00012928838307289727
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.28847260629772353,
+            "max_abs_index": [
+              24,
+              2,
+              97
+            ],
+            "max_abs_ref": 9703.352735203376,
+            "relative": 2.9729168275121694e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.28847260629772353,
+            "max_abs_index": [
+              24,
+              2,
+              97
+            ],
+            "max_abs_ref": 8834.339007748931,
+            "relative": 3.265355857916403e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.008076506333645123,
+            "max_abs_index": [
+              13,
+              36,
+              96
+            ],
+            "max_abs_ref": 9703.352735203376,
+            "relative": 8.323418259694797e-07
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.010499405881055773,
+            "max_abs_index": [
+              30,
+              4,
+              93
+            ],
+            "max_abs_ref": 0.052104635734259476,
+            "relative": 0.2015061756616845
+          }
+        }
+      },
+      "viscous": {
+        "rho": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.2687728352142074e-13,
+            "max_abs_index": [
+              21,
+              3,
+              97
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.3761334656753905e-13,
+            "max_abs_index": [
+              26,
+              4,
+              3
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.2687728352142074e-13,
+            "max_abs_index": [
+              21,
+              3,
+              97
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.2687728352142074e-13,
+            "max_abs_index": [
+              21,
+              3,
+              97
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.023372480791752e-14,
+            "max_abs_index": [
+              1,
+              37,
+              38
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.577693696854567e-13,
+            "max_abs_index": [
+              34,
+              4,
+              26
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "rho_u": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.830559881454974e-07,
+            "max_abs_index": [
+              15,
+              0,
+              99
+            ],
+            "max_abs_ref": 5.460067343451556,
+            "relative": 3.35263242430595e-08
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.7094941995310364e-07,
+            "max_abs_index": [
+              39,
+              0,
+              1
+            ],
+            "max_abs_ref": 5.371086077030455,
+            "relative": 3.182771929203888e-08
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.830559881454974e-07,
+            "max_abs_index": [
+              15,
+              0,
+              99
+            ],
+            "max_abs_ref": 5.460067343451556,
+            "relative": 3.35263242430595e-08
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.830559881454974e-07,
+            "max_abs_index": [
+              15,
+              0,
+              99
+            ],
+            "max_abs_ref": 5.460067343451556,
+            "relative": 3.35263242430595e-08
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2505552149377763e-12,
+            "max_abs_index": [
+              37,
+              37,
+              99
+            ],
+            "max_abs_ref": 0.06446412625980635,
+            "relative": 1.9399242454597615e-11
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.857905381936092e-08,
+            "max_abs_index": [
+              10,
+              4,
+              95
+            ],
+            "max_abs_ref": 0.3733675902774821,
+            "relative": 2.1046029667696105e-07
+          }
+        },
+        "rho_v": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.254146785369727e-09,
+            "max_abs_index": [
+              33,
+              1,
+              98
+            ],
+            "max_abs_ref": 0.20705225002140343,
+            "relative": 1.5716548769855622e-08
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.347157995741256e-09,
+            "max_abs_index": [
+              0,
+              0,
+              1
+            ],
+            "max_abs_ref": 0.2068043975521689,
+            "relative": 1.134965224880751e-08
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.254146785369727e-09,
+            "max_abs_index": [
+              33,
+              1,
+              98
+            ],
+            "max_abs_ref": 0.20705225002140343,
+            "relative": 1.5716548769855622e-08
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.254146785369727e-09,
+            "max_abs_index": [
+              33,
+              1,
+              98
+            ],
+            "max_abs_ref": 0.20705225002140343,
+            "relative": 1.5716548769855622e-08
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.7425651714772158e-13,
+            "max_abs_index": [
+              33,
+              36,
+              99
+            ],
+            "max_abs_ref": 0.00907464796404156,
+            "relative": 1.920256497422444e-11
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.658574630394412e-12,
+            "max_abs_index": [
+              29,
+              4,
+              95
+            ],
+            "max_abs_ref": 3.6699173075312527e-07,
+            "relative": 2.359337801052259e-05
+          }
+        },
+        "rho_w": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.155928889360197e-13,
+            "max_abs_index": [
+              38,
+              10,
+              63
+            ],
+            "max_abs_ref": 8.259169421687148e-15,
+            "relative": 98.74998892678167
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.360380511149591e-13,
+            "max_abs_index": [
+              37,
+              0,
+              2
+            ],
+            "max_abs_ref": 6.86871287316833e-16,
+            "relative": 780.4053845501637
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.239592395447827e-13,
+            "max_abs_index": [
+              7,
+              25,
+              98
+            ],
+            "max_abs_ref": 8.259169421687148e-15,
+            "relative": 75.54745612874507
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.145494858537744e-13,
+            "max_abs_index": [
+              19,
+              0,
+              74
+            ],
+            "max_abs_ref": 8.259169421687148e-15,
+            "relative": 86.5159012209498
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.199837593172094e-13,
+            "max_abs_index": [
+              11,
+              37,
+              11
+            ],
+            "max_abs_ref": 7.119840775234945e-16,
+            "relative": 870.7831802555315
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.822494872412619e-13,
+            "max_abs_index": [
+              23,
+              35,
+              17
+            ],
+            "max_abs_ref": 1.1779782369712401e-15,
+            "relative": 664.0610689485601
+          }
+        },
+        "rhoE": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.8001309399551246e-05,
+            "max_abs_index": [
+              6,
+              1,
+              99
+            ],
+            "max_abs_ref": 19.89439852771273,
+            "relative": 9.048431081982988e-07
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.4062832579829774e-06,
+            "max_abs_index": [
+              13,
+              0,
+              1
+            ],
+            "max_abs_ref": 4.966378760575935,
+            "relative": 4.845146481948807e-07
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.8001309399551246e-05,
+            "max_abs_index": [
+              6,
+              1,
+              99
+            ],
+            "max_abs_ref": 19.89439852771273,
+            "relative": 9.048431081982988e-07
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.8001309399551246e-05,
+            "max_abs_index": [
+              6,
+              1,
+              99
+            ],
+            "max_abs_ref": 19.89439852771273,
+            "relative": 9.048431081982988e-07
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.1827872842550278e-11,
+            "max_abs_index": [
+              27,
+              38,
+              99
+            ],
+            "max_abs_ref": 17.760548291199708,
+            "relative": 1.2290089520133742e-12
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.176023420840222e-06,
+            "max_abs_index": [
+              6,
+              4,
+              95
+            ],
+            "max_abs_ref": 0.7319680756652421,
+            "relative": 1.6066594431340527e-06
+          }
+        }
+      },
+      "primitive": {
+        "rho": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.94755661281954e-09,
+            "max_abs_index": [
+              9,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.0000524619941797,
+            "relative": 7.947139690023376e-09
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.94755661281954e-09,
+            "max_abs_index": [
+              0,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.0000524619941797,
+            "relative": 7.947139690023376e-09
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.947556501797237e-09,
+            "max_abs_index": [
+              44,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.0000524619941797,
+            "relative": 7.947139579006897e-09
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.139401292377556e-10,
+            "max_abs_index": [
+              4,
+              4,
+              103
+            ],
+            "max_abs_ref": 0.9955897889688813,
+            "relative": 7.171027034911372e-10
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          }
+        },
+        "u": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9362584202653466e-08,
+            "max_abs_index": [
+              5,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.0320314368169552,
+            "relative": 1.8761622477676215e-08
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9362584202653466e-08,
+            "max_abs_index": [
+              2,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.0320314368169543,
+            "relative": 1.8761622477676228e-08
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9362584202653466e-08,
+            "max_abs_index": [
+              45,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.032031436816954,
+            "relative": 1.8761622477676235e-08
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          }
+        },
+        "v": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.347053991465507e-14,
+            "max_abs_index": [
+              28,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.0432444649443541e-05,
+            "relative": 8.001052746453567e-09
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.331950885796195e-14,
+            "max_abs_index": [
+              3,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.0432444649292239e-05,
+            "relative": 7.98657569332175e-09
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.331948175290763e-14,
+            "max_abs_index": [
+              45,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.0432444649292183e-05,
+            "relative": 7.98657309517196e-09
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "w": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2203286179094485e-15,
+            "max_abs_index": [
+              41,
+              39,
+              101
+            ],
+            "max_abs_ref": 1.487616516819265e-15,
+            "relative": 0.8203247302730169
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2203286179094485e-15,
+            "max_abs_index": [
+              1,
+              39,
+              101
+            ],
+            "max_abs_ref": 9.001009045115052e-16,
+            "relative": 1.3557686830364142
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.419981286666508e-16,
+            "max_abs_index": [
+              44,
+              19,
+              85
+            ],
+            "max_abs_ref": 1.487616516819265e-15,
+            "relative": 0.22989670039284807
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "T": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.375846571873069e-09,
+            "max_abs_index": [
+              16,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.000040489249822,
+            "relative": 8.375507453859384e-09
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.375846571873069e-09,
+            "max_abs_index": [
+              2,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.000040489249822,
+            "relative": 8.375507453859384e-09
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.375846460850767e-09,
+            "max_abs_index": [
+              44,
+              5,
+              103
+            ],
+            "max_abs_ref": 1.000040489249822,
+            "relative": 8.375507342841577e-09
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          }
+        }
+      }
+    },
+    "3": {
+      "total": {
+        "rho": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04159359782253613,
+            "max_abs_index": [
+              34,
+              0,
+              0
+            ],
+            "max_abs_ref": 39.97306699566698,
+            "relative": 0.0010405405676538358
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04159359782253613,
+            "max_abs_index": [
+              34,
+              0,
+              0
+            ],
+            "max_abs_ref": 8.130943270825627,
+            "relative": 0.005115470178198976
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.021149119122586768,
+            "max_abs_index": [
+              24,
+              2,
+              99
+            ],
+            "max_abs_ref": 39.97306699566698,
+            "relative": 0.0005290842237569436
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04159359782253613,
+            "max_abs_index": [
+              34,
+              0,
+              0
+            ],
+            "max_abs_ref": 35.24925672807371,
+            "relative": 0.0011799851027613178
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.005560096199499251,
+            "max_abs_index": [
+              13,
+              36,
+              98
+            ],
+            "max_abs_ref": 39.97306699566698,
+            "relative": 0.00013909606185839973
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0008416579980747965,
+            "max_abs_index": [
+              4,
+              4,
+              95
+            ],
+            "max_abs_ref": 2.2111519495470332e-05,
+            "relative": 38.06423155347668
+          }
+        },
+        "rho_u": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.525054720073316,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 286.192965698067,
+            "relative": 0.0018346178383267732
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.46965214558962654,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 239.8464873662912,
+            "relative": 0.0019581364344618416
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.525054720073316,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 286.192965698067,
+            "relative": 0.0018346178383267732
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.525054720073316,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 286.192965698067,
+            "relative": 0.0018346178383267732
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0017443176266691666,
+            "max_abs_index": [
+              24,
+              36,
+              96
+            ],
+            "max_abs_ref": 285.1286993719466,
+            "relative": 6.117650136627347e-06
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.01528601043583,
+            "max_abs_index": [
+              22,
+              4,
+              94
+            ],
+            "max_abs_ref": 0.3682183243534029,
+            "relative": 0.04151344304407574
+          }
+        },
+        "rho_v": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.013581580560698497,
+            "max_abs_index": [
+              27,
+              1,
+              1
+            ],
+            "max_abs_ref": 81.31165391540597,
+            "relative": 0.0001670311684328588
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.013581580560698497,
+            "max_abs_index": [
+              27,
+              1,
+              1
+            ],
+            "max_abs_ref": 81.31165391540597,
+            "relative": 0.0001670311684328588
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.012666474312682599,
+            "max_abs_index": [
+              11,
+              1,
+              99
+            ],
+            "max_abs_ref": 81.309993211734,
+            "relative": 0.00015578004390799378
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.013581580560698497,
+            "max_abs_index": [
+              27,
+              1,
+              1
+            ],
+            "max_abs_ref": 0.20810240509398914,
+            "relative": 0.06526392885543249
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00025119684696410115,
+            "max_abs_index": [
+              7,
+              38,
+              98
+            ],
+            "max_abs_ref": 81.31165391540597,
+            "relative": 3.0893092793984766e-06
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.003093266358279365,
+            "max_abs_index": [
+              15,
+              4,
+              4
+            ],
+            "max_abs_ref": 4.0546995966358324e-05,
+            "relative": 76.28842247267431
+          }
+        },
+        "rho_w": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2409710527496498e-11,
+            "max_abs_index": [
+              37,
+              32,
+              97
+            ],
+            "max_abs_ref": 1.485447525300106e-11,
+            "relative": 0.8354189775225723
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.5545092506479336e-12,
+            "max_abs_index": [
+              37,
+              24,
+              2
+            ],
+            "max_abs_ref": 9.73295306727608e-13,
+            "relative": 1.5971609437576253
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2409710527496498e-11,
+            "max_abs_index": [
+              37,
+              32,
+              97
+            ],
+            "max_abs_ref": 1.485447525300106e-11,
+            "relative": 0.8354189775225723
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1285357023951582e-11,
+            "max_abs_index": [
+              37,
+              2,
+              97
+            ],
+            "max_abs_ref": 1.4419817666719047e-11,
+            "relative": 0.7826282748358321
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1338656122735811e-11,
+            "max_abs_index": [
+              37,
+              36,
+              97
+            ],
+            "max_abs_ref": 1.4724800198094348e-11,
+            "relative": 0.7700380290527294
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1407291374465328e-12,
+            "max_abs_index": [
+              20,
+              21,
+              70
+            ],
+            "max_abs_ref": 5.305697258272711e-12,
+            "relative": 0.21500079667528965
+          }
+        },
+        "rhoE": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.24370616490446606,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 9701.755864182569,
+            "relative": 2.5119799788427243e-05
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.24370616490446606,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 2037.0783207407933,
+            "relative": 0.00011963514727103921
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.16566880604568723,
+            "max_abs_index": [
+              19,
+              2,
+              99
+            ],
+            "max_abs_ref": 9701.755864182569,
+            "relative": 1.7076167279915967e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.24370616490446606,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 8895.691527471272,
+            "relative": 2.7395977496731278e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00698716317609005,
+            "max_abs_index": [
+              30,
+              36,
+              96
+            ],
+            "max_abs_ref": 9701.755864182569,
+            "relative": 7.20195733010105e-07
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.017793043142301124,
+            "max_abs_index": [
+              30,
+              4,
+              93
+            ],
+            "max_abs_ref": 0.7181210591259548,
+            "relative": 0.024777219545625822
+          }
+        }
+      },
+      "inviscid": {
+        "rho": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04159359782251926,
+            "max_abs_index": [
+              34,
+              0,
+              0
+            ],
+            "max_abs_ref": 39.97306699566698,
+            "relative": 0.0010405405676534136
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04159359782251926,
+            "max_abs_index": [
+              34,
+              0,
+              0
+            ],
+            "max_abs_ref": 8.130943270825627,
+            "relative": 0.0051154701781969
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.021149119122547688,
+            "max_abs_index": [
+              0,
+              2,
+              99
+            ],
+            "max_abs_ref": 39.97306699566698,
+            "relative": 0.000529084223755966
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.04159359782251926,
+            "max_abs_index": [
+              34,
+              0,
+              0
+            ],
+            "max_abs_ref": 35.24925672807371,
+            "relative": 0.001179985102760839
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.005560096199515134,
+            "max_abs_index": [
+              37,
+              36,
+              98
+            ],
+            "max_abs_ref": 39.97306699566698,
+            "relative": 0.00013909606185879707
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0008416579981756878,
+            "max_abs_index": [
+              24,
+              4,
+              95
+            ],
+            "max_abs_ref": 2.2111519495470332e-05,
+            "relative": 38.064231558039516
+          }
+        },
+        "rho_u": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.5252603811412246,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 285.1665536016398,
+            "relative": 0.001841942452602563
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.4698341703125374,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 234.85382473328676,
+            "relative": 0.0020005387216755254
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.5252603811412246,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 285.1665536016398,
+            "relative": 0.001841942452602563
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.5252603811412246,
+            "max_abs_index": [
+              24,
+              2,
+              98
+            ],
+            "max_abs_ref": 285.1239228524417,
+            "relative": 0.0018422178535087677
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0017443451709256656,
+            "max_abs_index": [
+              24,
+              36,
+              96
+            ],
+            "max_abs_ref": 285.14674404897863,
+            "relative": 6.117359595822864e-06
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.015198538705378706,
+            "max_abs_index": [
+              22,
+              4,
+              94
+            ],
+            "max_abs_ref": 0.018521190954857086,
+            "relative": 0.82060266763747
+          }
+        },
+        "rho_v": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.013593300469472103,
+            "max_abs_index": [
+              27,
+              1,
+              1
+            ],
+            "max_abs_ref": 81.30981357708554,
+            "relative": 0.0001671790878795339
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.013593300469472103,
+            "max_abs_index": [
+              27,
+              1,
+              1
+            ],
+            "max_abs_ref": 81.30940252970414,
+            "relative": 0.00016717993302811646
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.012674012087278266,
+            "max_abs_index": [
+              8,
+              1,
+              99
+            ],
+            "max_abs_ref": 81.30981357708554,
+            "relative": 0.00015587309243136693
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.013593300469472103,
+            "max_abs_index": [
+              27,
+              1,
+              1
+            ],
+            "max_abs_ref": 0.07060652791703989,
+            "relative": 0.1925218654774207
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0002511987563212655,
+            "max_abs_index": [
+              14,
+              38,
+              98
+            ],
+            "max_abs_ref": 81.30981357708554,
+            "relative": 3.089402684254309e-06
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0031010499584988808,
+            "max_abs_index": [
+              16,
+              4,
+              4
+            ],
+            "max_abs_ref": 3.7593350000612704e-05,
+            "relative": 82.48932213937675
+          }
+        },
+        "rho_w": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.254859635536673e-11,
+            "max_abs_index": [
+              37,
+              32,
+              97
+            ],
+            "max_abs_ref": 1.4854761649487658e-11,
+            "relative": 0.8447524538907383
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.729653701140866e-12,
+            "max_abs_index": [
+              37,
+              24,
+              2
+            ],
+            "max_abs_ref": 9.733254159304802e-13,
+            "relative": 1.7770559289128915
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.254859635536673e-11,
+            "max_abs_index": [
+              37,
+              32,
+              97
+            ],
+            "max_abs_ref": 1.4854761649487658e-11,
+            "relative": 0.8447524538907383
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1221675922870204e-11,
+            "max_abs_index": [
+              37,
+              3,
+              97
+            ],
+            "max_abs_ref": 1.4421697413162905e-11,
+            "relative": 0.7781106205035204
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.130899365926719e-11,
+            "max_abs_index": [
+              37,
+              38,
+              97
+            ],
+            "max_abs_ref": 1.4725100857248097e-11,
+            "relative": 0.7680078913483702
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2531741728380063e-12,
+            "max_abs_index": [
+              9,
+              9,
+              25
+            ],
+            "max_abs_ref": 5.3058163692970994e-12,
+            "relative": 0.23618875694411257
+          }
+        },
+        "rhoE": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.2439422875163999,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 9696.581262632508,
+            "relative": 2.5157556143676606e-05
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.2439422875163999,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 2036.8027045231934,
+            "relative": 0.00011976726414132769
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.16297668518200226,
+            "max_abs_index": [
+              27,
+              2,
+              99
+            ],
+            "max_abs_ref": 9696.581262632508,
+            "relative": 1.6807643928078214e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.2439422875163999,
+            "max_abs_index": [
+              32,
+              2,
+              1
+            ],
+            "max_abs_ref": 8896.96108288817,
+            "relative": 2.7418607909343613e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.006990822234081789,
+            "max_abs_index": [
+              30,
+              36,
+              96
+            ],
+            "max_abs_ref": 9696.581262632508,
+            "relative": 7.209574224909721e-07
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.01789406191051829,
+            "max_abs_index": [
+              30,
+              4,
+              93
+            ],
+            "max_abs_ref": 0.02625093142265461,
+            "relative": 0.6816543619886826
+          }
+        }
+      },
+      "viscous": {
+        "rho": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.848476221203102e-13,
+            "max_abs_index": [
+              1,
+              3,
+              33
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.4343247810100204e-13,
+            "max_abs_index": [
+              34,
+              4,
+              2
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.9077421853939143e-13,
+            "max_abs_index": [
+              28,
+              5,
+              96
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.848476221203102e-13,
+            "max_abs_index": [
+              1,
+              3,
+              33
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.105427357601002e-14,
+            "max_abs_index": [
+              25,
+              36,
+              99
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.1319844681225737e-13,
+            "max_abs_index": [
+              12,
+              4,
+              83
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "rho_u": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00023806360118783232,
+            "max_abs_index": [
+              24,
+              0,
+              99
+            ],
+            "max_abs_ref": 5.423229595329246,
+            "relative": 4.389701689798722e-05
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00021227027679060484,
+            "max_abs_index": [
+              27,
+              0,
+              3
+            ],
+            "max_abs_ref": 5.3706483860839,
+            "relative": 3.952414336798268e-05
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00023806360118783232,
+            "max_abs_index": [
+              24,
+              0,
+              99
+            ],
+            "max_abs_ref": 5.423229595329246,
+            "relative": 4.389701689798722e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00023806360118783232,
+            "max_abs_index": [
+              24,
+              0,
+              99
+            ],
+            "max_abs_ref": 5.423229595329246,
+            "relative": 4.389701689798722e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.7544523047845493e-08,
+            "max_abs_index": [
+              1,
+              36,
+              96
+            ],
+            "max_abs_ref": 0.06485410027088873,
+            "relative": 4.247152135762416e-07
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00011424156492473303,
+            "max_abs_index": [
+              13,
+              5,
+              95
+            ],
+            "max_abs_ref": 0.3865550424759764,
+            "relative": 0.0002955376398481024
+          }
+        },
+        "rho_v": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4593472194393206e-05,
+            "max_abs_index": [
+              33,
+              3,
+              1
+            ],
+            "max_abs_ref": 0.2082576212435569,
+            "relative": 7.007413273642537e-05
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4593472194393206e-05,
+            "max_abs_index": [
+              33,
+              3,
+              1
+            ],
+            "max_abs_ref": 0.20810240509247524,
+            "relative": 7.012639852916765e-05
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2866638210956355e-05,
+            "max_abs_index": [
+              0,
+              3,
+              98
+            ],
+            "max_abs_ref": 0.2082576212435569,
+            "relative": 6.178231622029738e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4593472194393206e-05,
+            "max_abs_index": [
+              33,
+              3,
+              1
+            ],
+            "max_abs_ref": 0.2082576212435569,
+            "relative": 7.007413273642537e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.909405891752959e-09,
+            "max_abs_index": [
+              9,
+              38,
+              98
+            ],
+            "max_abs_ref": 0.009074648573800914,
+            "relative": 2.1041100117811009e-07
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.794556007459678e-06,
+            "max_abs_index": [
+              33,
+              4,
+              95
+            ],
+            "max_abs_ref": 2.960837833573792e-06,
+            "relative": 2.632550800004973
+          }
+        },
+        "rho_w": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.15615148431225e-13,
+            "max_abs_index": [
+              29,
+              10,
+              18
+            ],
+            "max_abs_ref": 4.104417071239652e-15,
+            "relative": 198.7164399413449
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.851464865787469e-13,
+            "max_abs_index": [
+              17,
+              29,
+              2
+            ],
+            "max_abs_ref": 3.1398738003725226e-16,
+            "relative": 2500.5670179661206
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.225034833760707e-13,
+            "max_abs_index": [
+              17,
+              31,
+              98
+            ],
+            "max_abs_ref": 4.104417071239652e-15,
+            "relative": 151.66672211215044
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.745996126077616e-13,
+            "max_abs_index": [
+              25,
+              3,
+              16
+            ],
+            "max_abs_ref": 4.104417071239652e-15,
+            "relative": 164.35942081393137
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.964256229293965e-13,
+            "max_abs_index": [
+              34,
+              36,
+              2
+            ],
+            "max_abs_ref": 3.4554529931751257e-16,
+            "relative": 2015.4394353067703
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.15615148431225e-13,
+            "max_abs_index": [
+              29,
+              10,
+              18
+            ],
+            "max_abs_ref": 4.92829781307248e-16,
+            "relative": 1654.963192905627
+          }
+        },
+        "rhoE": {
+          "all": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.002735743601078866,
+            "max_abs_index": [
+              29,
+              0,
+              99
+            ],
+            "max_abs_ref": 19.928743868373417,
+            "relative": 0.00013727626884805548
+          },
+          "inlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0016848336242105688,
+            "max_abs_index": [
+              24,
+              0,
+              2
+            ],
+            "max_abs_ref": 4.966381892647178,
+            "relative": 0.0003392476979478757
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.002735743601078866,
+            "max_abs_index": [
+              29,
+              0,
+              99
+            ],
+            "max_abs_ref": 19.928743868373417,
+            "relative": 0.00013727626884805548
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.002735743601078866,
+            "max_abs_index": [
+              29,
+              0,
+              99
+            ],
+            "max_abs_ref": 19.928743868373417,
+            "relative": 0.00013727626884805548
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.847172586863735e-06,
+            "max_abs_index": [
+              9,
+              36,
+              98
+            ],
+            "max_abs_ref": 17.76521506187948,
+            "relative": 2.7284626558024485e-07
+          },
+          "interior": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00011996314588980095,
+            "max_abs_index": [
+              7,
+              4,
+              94
+            ],
+            "max_abs_ref": 0.7333002301319295,
+            "relative": 0.00016359349276110025
+          }
+        }
+      },
+      "primitive": {
+        "rho": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.135095325399682e-06,
+            "max_abs_index": [
+              5,
+              6,
+              103
+            ],
+            "max_abs_ref": 1.000027000132208,
+            "relative": 1.1350646785032978e-06
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1350953252886598e-06,
+            "max_abs_index": [
+              0,
+              6,
+              103
+            ],
+            "max_abs_ref": 1.000027000132208,
+            "relative": 1.1350646783922785e-06
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.135095325399682e-06,
+            "max_abs_index": [
+              45,
+              6,
+              103
+            ],
+            "max_abs_ref": 1.000027000132208,
+            "relative": 1.1350646785032978e-06
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.8210236485405318e-07,
+            "max_abs_index": [
+              5,
+              4,
+              103
+            ],
+            "max_abs_ref": 0.9978015641363882,
+            "relative": 1.825035872855796e-07
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          }
+        },
+        "u": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.5295353011989263e-05,
+            "max_abs_index": [
+              4,
+              6,
+              102
+            ],
+            "max_abs_ref": 1.0159266772468698,
+            "relative": 2.489879789409497e-05
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.5295353011989263e-05,
+            "max_abs_index": [
+              3,
+              6,
+              102
+            ],
+            "max_abs_ref": 1.0159266772468694,
+            "relative": 2.4898797894094983e-05
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.5295353011989263e-05,
+            "max_abs_index": [
+              44,
+              6,
+              102
+            ],
+            "max_abs_ref": 1.0159266772468691,
+            "relative": 2.4898797894094987e-05
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          }
+        },
+        "v": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.649746765276941e-07,
+            "max_abs_index": [
+              5,
+              5,
+              103
+            ],
+            "max_abs_ref": 4.612359228559375e-06,
+            "relative": 0.14417235162652162
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.649746764904912e-07,
+            "max_abs_index": [
+              3,
+              5,
+              103
+            ],
+            "max_abs_ref": 4.612359228522159e-06,
+            "relative": 0.14417235161961894
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.649746765276941e-07,
+            "max_abs_index": [
+              45,
+              5,
+              103
+            ],
+            "max_abs_ref": 4.612359228483881e-06,
+            "relative": 0.14417235162888137
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "w": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.170364415201932e-16,
+            "max_abs_index": [
+              41,
+              36,
+              101
+            ],
+            "max_abs_ref": 7.327810638127864e-16,
+            "relative": 0.8420474709180475
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.170364415201932e-16,
+            "max_abs_index": [
+              1,
+              36,
+              101
+            ],
+            "max_abs_ref": 4.516315754533451e-16,
+            "relative": 1.3662384896379658
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.6921730186529737e-16,
+            "max_abs_index": [
+              44,
+              36,
+              87
+            ],
+            "max_abs_ref": 7.327810638127864e-16,
+            "relative": 0.2309247744269353
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "T": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.906763820399789e-07,
+            "max_abs_index": [
+              41,
+              6,
+              103
+            ],
+            "max_abs_ref": 1.0000204456610686,
+            "relative": 9.906561274205621e-07
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.906763820399789e-07,
+            "max_abs_index": [
+              1,
+              6,
+              103
+            ],
+            "max_abs_ref": 1.0000204456610686,
+            "relative": 9.906561274205621e-07
+          },
+          "periodic_plus": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.906763819289566e-07,
+            "max_abs_index": [
+              44,
+              6,
+              103
+            ],
+            "max_abs_ref": 1.0000204456610686,
+            "relative": 9.906561273095421e-07
+          },
+          "outlet_wall_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          },
+          "outlet_farfield_corner": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0,
+            "relative": 0.0
+          }
+        }
+      }
+    }
+  }
+}
