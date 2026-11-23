@@ -118,19 +118,35 @@ def pad_coords(arr, periodic=(True, False, True)):
 
     periodic 按计算方向 (i, j, k) 给出，数组轴是 (k, j, i)；周期轴取**对侧内区**
     （原码 `exchange_boundary_x/y/z_packed_dev` 单块自收自发等价于环绕），
-    非周期轴边缘复制。
+    非周期轴做**线性外推**：p[m] = 2·p[LAP] − p[2LAP−1−m]（关于边界的奇镜像）。
+
+    2026-11-23 修正：非周期轴曾用边缘复制——鬼胞坐标恒定使近壁 ∂y/∂j=0、
+    度量在壁面带崩坏（黄金标准 sin(y) 检验：内区精确 1.0000、近壁带比值
+    偏至 15.7；handoff 第五轮已记录"Ajac(wall) 差 2 倍"）。线性外推与
+    OCFD 准例补丁 P1 的 fill_ghost_edge_coord 同式，对线性/缓变坐标精确。
     """
     out = arr
     for axis, per in zip((2, 1, 0), periodic):
         n = out.shape[axis]
-        if LAP >= n:
-            raise ValueError(f"axis {axis} 长 {n} < LAP={LAP}，无法环绕填鬼胞")
+        if per and LAP >= n:
+            raise ValueError(f"周期轴 {axis} 长 {n} < LAP={LAP}，无法环绕填鬼胞")
         if per:
             lo = np.take(out, np.arange(n - LAP, n), axis=axis)
             hi = np.take(out, np.arange(0, LAP), axis=axis)
-        else:
+        elif n < 2 * LAP:
+            # 短轴（退化坐标维度）：无足够内点做外推，回退边缘复制
             lo = np.take(out, np.zeros(LAP, dtype=int), axis=axis)
             hi = np.take(out, np.full(LAP, n - 1), axis=axis)
+        else:
+            # 奇镜像外推（OCFD 准例补丁 P1 同式）：ghost[i] = 2·p0 − p_in[i+1]
+            # （i=0 最外→用第 LAP 个内点；i=LAP−1 最内→用次内点）。
+            # 均匀网格给出真·等差延拓 [p0−LAP·h … p0−h]。
+            head = np.take(out, np.arange(0, LAP + 1), axis=axis)
+            tail = np.take(out, np.arange(n - LAP - 1, n), axis=axis)
+            lo = 2.0 * np.take(head, [0], axis=axis) - np.flip(
+                np.take(head, np.arange(1, LAP + 1), axis=axis), axis=axis)
+            hi = 2.0 * np.take(tail, [LAP], axis=axis) - np.flip(
+                np.take(tail, np.arange(0, LAP), axis=axis), axis=axis)
         out = np.concatenate([lo, out, hi], axis=axis)
     return out
 
