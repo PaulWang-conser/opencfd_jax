@@ -328,11 +328,11 @@ ZoneBC_t
 | `BCOutflowSupersonic` | `NONREFLECTING` | 项目约定：原码 `NON_REFLETION` 口径的无反射出口；SIDS 字面是「全部外推」 |
 | `BCSymmetryPolar` | `PERIODIC` | 项目约定；须同轴正负整面成对 |
 | `BCSymmetryPlane` | 不执行 | 严格说要单独的滑移镜像；现有代码没有 symmetry kind |
-| `BCWall` | `WALL` | 绝热无滑移；`BCWallViscous` 不执行 |
+| `BCWall` | `WALL` | 无滑移；热条件由算例给出，CGNS plate 设为等温壁。`BCWallViscous` 不执行 |
 | `BCWallViscousIsothermal` + `BCDataSet/DirichletData/Temperature` | 不执行 | 等温壁的数据集尚未接入 |
 | `BCWallViscousHeatFlux` | 不执行 | 定热流；现有代码没有热流入口 |
 | 同块 identity 整面自连接（同轴两个面互补） | `PERIODIC` | 当前只接受 `Transform=(1,2,3)`；翻转、同面自连接、部分面见 §4，留给多块阶段 |
-| 1to1 跨块连接 | 多块阶段接入 | 对应 `多块网格GPU.md` 里的 `outside` 面 |
+| 1to1 跨块连接 | 多块阶段接入 | 对应 `多块网格GPU.md` 里的 `interface` 面 |
 | 平板底面的等温壁（原码 `plate`） | 不经 CGNS | 读取器不产生 `PLATE`；CGNS plate 准例的壁面是 `BCWall`→`WALL` |
 
 ### 5.4 实测：CFL3D 写出来的 BC 长什么样
@@ -444,11 +444,9 @@ with h5py.File("grid.cgns", "w") as f:
    本步不读 `BCDataSet`，缺省来流由算例侧提供为物理 +x 方向均匀来流。
 6. **1to1**：当前只接受同块、`Transform=(1,2,3)` 的整面 identity 自连接，两范围互补时
    标 `PERIODIC`；跨块、翻转/轴交换和 `GridConnectivity_t` 留给多块阶段。
-7. **自检**（写进测试 fixture）：
-   - `CellSize + 1 == VertexSize`；
-   - 1to1 双向存在且 `Transform`/范围互补；
-   - 相邻块界面顶点坐标逐点相等（可用 `np.allclose`，容差按文件精度定）；
-   - 每块外表面的 BC 面积之和 = 六个面面积之和（块内部面被 1to1 占掉，两者不重叠）。
+7. **自检**：已实现并写进测试 fixture 的是 `CellSize + 1 == VertexSize`，以及同块
+   自连接的两个方向记录互补。相邻块界面顶点坐标逐点相等、每块外表面被 BC 与 1to1
+   不重不漏地覆盖，这两项当前 reader 没有做，留给多块阶段。
 
 ---
 

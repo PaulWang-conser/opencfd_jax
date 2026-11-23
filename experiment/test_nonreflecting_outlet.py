@@ -210,13 +210,24 @@ def test_nonreflecting_grid_is_derived_from_recorded_source(tmp_path):
     """无反射对照所用网格的来源：派生脚本的缺省参数加源网格。
 
     只改 dom-5 的类型，坐标与源网格逐位相同，其余五面不变；源文件不可被覆盖。
+    产物的文件字节哈希不稳定（HDF5 把父组修改时间写进对象头），跨秒生成两次
+    的逻辑内容哈希必须相同。
     """
+    import importlib.util
     import subprocess
+    import time
     script = REPO / "Grid" / "override_cgns_bc.py"
     src = REPO / "Grid" / "testcgnstest_ystr.cgns"
-    out = tmp_path / "nr.cgns"
+    out, again = tmp_path / "nr.cgns", tmp_path / "nr_again.cgns"
     subprocess.run([sys.executable, str(script), "--out", str(out)],
                    check=True, capture_output=True)
+    time.sleep(1.1)
+    subprocess.run([sys.executable, str(script), "--out", str(again)],
+                   check=True, capture_output=True)
+    spec = importlib.util.spec_from_file_location("override_cgns_bc", script)
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    assert tool.logical_digest(out) == tool.logical_digest(again)
     a = mesh_cgns.read_cgns_zone(str(src))
     b = mesh_cgns.read_cgns_zone(str(out))
     assert all(np.array_equal(a.coords[k], b.coords[k]) for k in a.coords)
