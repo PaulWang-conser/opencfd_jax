@@ -18,15 +18,21 @@ X_JAX, X_CBL = 10.0, 0.01          # 两边的特征长度（各自单位）
 AMA, GAMMA = 2.0, 1.4
 CV = 1.0 / (GAMMA * (GAMMA - 1.0) * AMA ** 2)
 
-# ---- JAX 末态：x=10 列、k 中面 ----
+# ---- JAX 末态：x=10 列、k 中面（网格/末态可用环境变量切换） ----
+import os
+
 import h5py
 from opencfd_jax.src import mesh_cgns
 
-zone = mesh_cgns.read_cgns_zone(
-    r"D:\Desktop\ocfd2jax\opencfd_jax\Grid\testcgnstest.cgns")
+MESH = os.environ.get(
+    "BL_MESH", r"D:\Desktop\ocfd2jax\opencfd_jax\Grid\testcgnstest.cgns")
+NPZ = os.environ.get(
+    "BL_NPZ",
+    r"D:\Desktop\ocfd2jax\opencfd_jax\experiment\cases\supersonic-long-output"
+    r"\testcgnstest-istep-00002000.npz")
+zone = mesh_cgns.read_cgns_zone(MESH)
 y_c = zone.coords["Ayy"][zone.coords["Ayy"].shape[0] // 2, :, 0]  # (nj,)
-d = np.load(r"D:\Desktop\ocfd2jax\opencfd_jax\experiment\cases\supersonic-long-output"
-            r"\testcgnstest-istep-00002000.npz")
+d = np.load(NPZ)
 rho, rhou, rhov, E = (d[f"cons_{i}"] for i in (0, 1, 2, 4))
 k_mid, i_last = rho.shape[0] // 2, rho.shape[2] - 1 - 4  # 内区末列
 rho, rhou, rhov, E = (a[k_mid, :, i_last + 4] for a in (rho, rhou, rhov, E))
