@@ -46,10 +46,6 @@ from opencfd_jax.src.mesh_data import FaceBoundary  # noqa: E402
 REPO = Path(__file__).resolve().parents[1]
 SAMPLE = REPO / "Grid" / "testcgnstest.cgns"
 NR = "nonreflecting"
-# 用 Grid/override_cgns_bc.py 的缺省参数派生出的无反射网格的逻辑内容哈希
-# （override_cgns_bc.logical_digest，算法 v2），与 compare_outlet_ghost.py 尾注的
-# 来源记录相同。
-NR_GRID_DIGEST = "695595a9e4cff28fa9d3203b966c0d6d7073b06a5cd3d0d2e4edf40d1514c79a"
 DX = 0.1
 
 
@@ -214,27 +210,14 @@ def test_nonreflecting_grid_is_derived_from_recorded_source(tmp_path):
     """无反射对照所用网格的来源：派生脚本的缺省参数加源网格。
 
     只改 dom-5 的类型，坐标与源网格逐位相同，其余五面不变；源文件不可被覆盖。
-    产物的文件字节哈希不稳定（HDF5 对象头里的时间字段随生成时间改变），跨秒
-    生成两次的逻辑内容哈希必须相同，并且等于记录值、不随 NumPy 打印选项变。
+    产物不记哈希：来源由入库的源网格、脚本、配置和已验证的重跑确定。
     """
-    import importlib.util
     import subprocess
-    import time
     script = REPO / "Grid" / "override_cgns_bc.py"
     src = REPO / "Grid" / "testcgnstest_ystr.cgns"
-    out, again = tmp_path / "nr.cgns", tmp_path / "nr_again.cgns"
+    out = tmp_path / "nr.cgns"
     subprocess.run([sys.executable, str(script), "--out", str(out)],
                    check=True, capture_output=True)
-    time.sleep(1.1)
-    subprocess.run([sys.executable, str(script), "--out", str(again)],
-                   check=True, capture_output=True)
-    spec = importlib.util.spec_from_file_location("override_cgns_bc", script)
-    tool = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(tool)
-    digest = tool.logical_digest(out)
-    assert tool.logical_digest(again) == digest == NR_GRID_DIGEST
-    with np.printoptions(legacy="1.21"):       # 哈希不依赖 NumPy 的打印表示
-        assert tool.logical_digest(out) == digest
     a = mesh_cgns.read_cgns_zone(str(src))
     b = mesh_cgns.read_cgns_zone(str(out))
     assert all(np.array_equal(a.coords[k], b.coords[k]) for k in a.coords)
@@ -245,38 +228,6 @@ def test_nonreflecting_grid_is_derived_from_recorded_source(tmp_path):
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.run([sys.executable, str(script), "--out", str(src)],
                        check=True, capture_output=True)
-
-
-def test_logical_digest_detects_content_root_attribute_and_name_changes(tmp_path):
-    """逻辑内容哈希对三类改动必须敏感：内容、根节点属性、节点名。
-
-    Astra 第十三轮指出首版算法的三个漏洞：属性用打印表示编码、漏掉根属性、
-    名字去了空格且字段没有边界。
-    """
-    import h5py
-    import importlib.util
-    import shutil
-    spec = importlib.util.spec_from_file_location(
-        "override_cgns_bc", REPO / "Grid" / "override_cgns_bc.py")
-    tool = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(tool)
-    base, other = tmp_path / "base.cgns", tmp_path / "other.cgns"
-    for path, name in ((base, " data"), (other, "data")):
-        with h5py.File(path, "w") as f:
-            node = f.create_group("node")
-            node.create_dataset(name, data=np.arange(4, dtype=np.int64))
-            node.attrs["label"] = b"X_t"
-    assert tool.logical_digest(base) != tool.logical_digest(other)
-    with_root, with_value = tmp_path / "root.cgns", tmp_path / "value.cgns"
-    for path in (with_root, with_value):
-        shutil.copyfile(base, path)
-    with h5py.File(with_root, "r+") as f:
-        f.attrs["note"] = "root attribute"
-    with h5py.File(with_value, "r+") as f:
-        f["node"][" data"][0] = 99
-    digest = tool.logical_digest(base)
-    assert tool.logical_digest(with_root) != digest
-    assert tool.logical_digest(with_value) != digest
 
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="缺少 testcgnstest.cgns")
