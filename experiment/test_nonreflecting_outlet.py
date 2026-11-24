@@ -9,7 +9,7 @@
 鬼层清零、不开边界带。
 
 CGNS 边条按项目约定分配：``BCOutflowSupersonic`` → ``nonreflecting``
-（SIDS 字面是"全部外推"，与此不同，见 mesh_cgns._bc_kind）。
+（SIDS 字面是"全部外推"，与此不同，见 mesh_cgns.bc_kind）。
 
 锁五件事：
   1. 注册格式：nonref 只保留边界内点的那一半分裂通量差；其余点两半分别差分
@@ -195,8 +195,8 @@ def _cgns_with_bc(src, dst, bc_name, bc_type):
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="缺少 testcgnstest.cgns")
 def test_cgns_outflow_supersonic_maps_to_nonreflecting(tmp_path):
-    assert mesh_cgns._bc_kind("BCOutflowSupersonic") == NR
-    assert mesh_cgns._bc_kind("BCOutflowSubsonic") == "outflow"   # 原有映射不变
+    assert mesh_cgns.bc_kind("BCOutflowSupersonic") == NR
+    assert mesh_cgns.bc_kind("BCOutflowSubsonic") == "outflow"   # 原有映射不变
     path = tmp_path / "nr.cgns"
     _cgns_with_bc(SAMPLE, path, "dom-5", "BCOutflowSupersonic")
     zone = mesh_cgns.read_cgns_zone(str(path))            # validate=True

@@ -19,7 +19,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import boundary, config, init, io, runtime_config
+from . import boundary, config, init, io, multiblock, runtime_config
 from .ana import check_nan, diagnostic_line
 from .cases import apply_forcing
 from .errors import RuntimeExecutionError, SetupError
@@ -125,16 +125,21 @@ def build_parser(explicit_only=False):
         help="出口状态鬼层：keep=保持原值（原码口径，缺省）；copy=零梯度延拓"
              "（诊断用，会偏离与原码的逐位对齐）")
     add("--mesh-format", default=None, choices=runtime_config.MESH_FORMATS,
-        help="网格格式：builtin（程序内置网格）或 cgns（单块 CGNS/HDF5）")
+        help="网格格式：builtin（程序内置网格）或 cgns（CGNS/HDF5 文件，单块或多块）")
     add("--mesh", default=None,
-        help="CGNS/HDF5 单块网格路径；给出时默认按 cgns 读取")
+        help="CGNS/HDF5 网格路径；给出时默认按 cgns 读取，可以是多 zone 的文件")
     add("--cgns-zone", default=None,
-        help="CGNS 文件包含多个 zone 时必须显式给出 zone 名")
+        help="只读 CGNS 文件里这一个 zone（单块路径）；不给时读入文件里的全部 zone，"
+             "不止一个就走多块路径")
     add("--ni", type=int, default=256, help="计算 i 方向网格")
     add("--nj", type=int, default=64, help="计算 j 方向网格")
     add("--nk", type=int, default=4, help="计算 k 方向网格")
     add("--scheme", default="UP7",
         choices=runtime_config.SCHEMES)
+    add("--flux-scale", type=float, nargs=3, default=None, metavar=("SX", "SY", "SZ"),
+        help="ε 尺度换算的三轴参考尺度（i、j、k 各一个数）：等价单块的全局顶点数里"
+             "其余两轴 (N-1) 的乘积，100×40×40 对应 1521 3861 3861；多块网格必填，"
+             "对应 JSON 的 numerics.flux_scale")
     add("--dt", type=float, default=None,
         help="固定时间步长（必填；不再提供 CFL 自适应）")
     add("--weno-tv", action="store_true",
@@ -181,6 +186,8 @@ def resolve_cli(parsed, parser):
     """
     explicit = dict(parsed)
     config_path = explicit.pop("config", None)
+    if isinstance(explicit.get("flux_scale"), list):      # --flux-scale 给的三个数
+        explicit["flux_scale"] = tuple(explicit["flux_scale"])
     for negative, positive in _NEGATIVE_FLAGS:
         if explicit.pop(negative, False):
             if explicit.get(positive):
@@ -203,6 +210,9 @@ def run(args):
     ``args`` 通常由 :func:`main` 的命令行解析器生成；计算到 ``end_time`` 或
     ``end_step`` 中任一条件满足时停止。输出只写物理内区，不包含鬼胞。
     """
+    multi = multiblock.enter(args)        # 多块网格的入口判定与放行校验
+    if multi is not None:
+        return multiblock.run(args, multi)
     try:
         state = init.prepare(args)
     except (ValueError, OSError) as exc:
@@ -285,15 +295,11 @@ def run(args):
         step += 1
         if step % args.kstep_show == 0:
             print(diagnostic_line(cons, grid, t, step, time.time() - t0))
-        if step % args.kstep_save == 0 or t >= args.end_time:
+        if io.time_to_save(step, args.kstep_save, t >= args.end_time):
             io.save_npz(
                 f"{args.out_dir}/{io.checkpoint_name(prefix, step)}",
-                {f"cons_{i}": np.asarray(cons[grid.inner()][i]) for i in range(5)},
-                meta={"t": t, "step": step, "dt": dt, "case": args.case,
-                      "N": grid.ni, "scheme": args.scheme,
-                      "gamma": params.gamma, "Re": params.Re,
-                      "Ama": params.Ama, "Ref_T": params.Ref_T,
-                      "Pr": params.Pr})
+                io.inner_fields(cons, grid),
+                meta=io.checkpoint_meta(args, params, grid, t, step, dt))
     print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")
 
 
@@ -329,6 +335,8 @@ def main(argv=None):
         run(args)
     except SetupError as exc:
         explicit_parser.error(f"初始化错误：{exc}")
+    except runtime_config.ConfigError as exc:
+        explicit_parser.error(f"配置错误：{exc}")
     # 运行期异常（含 RuntimeExecutionError）不在这里捕获，保留原始类型和 traceback。
 
 

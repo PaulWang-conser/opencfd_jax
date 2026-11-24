@@ -285,6 +285,9 @@ experiment/
   test_step4_cgns_adapter.py 第 4 步 CGNS -> BlockMesh 适配/度量测试
   test_step4_cgns_run.py     第 4 步 CGNS 与内置 Poiseuille 一步 NPZ 对齐
   test_step4n_farfield.py    第 4.n 步通用远场/单面 BCFarfield/特殊覆盖顺序
+  step6_support.py        第 6 步的测试辅助：验收网格、等价单块参考、阈值与比较
+  test_step49_frozen.py   单块默认口径的逐位回归（第 6 步的护栏）
+  test_step6_*.py         第 6 步多块串行的读取、拓扑、装配、交换、运行与验收测试
   compare_ocfd_jax.py     原码 dump vs JAX 的单步对拍（--dir/--scheme 可换口径）
   cases/channel_small.in  小网格槽道 in 文件（历史遗留，当前入口不再读取）
   cases/*.json            七条历史 Step 0 JSON；当前清单只引用 4 条

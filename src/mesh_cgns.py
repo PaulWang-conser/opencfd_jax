@@ -6,8 +6,11 @@
   只做结构校验，供真实样例诊断使用。
 - ``to_block_mesh`` 把可执行子集翻译成 ``BlockMesh``；``build_cgns_block`` 再补
   LAP 鬼胞坐标并计算曲线度量。
+- ``read_cgns_zones`` 把一个多 zone 文件的全部 zone 按文件顺序读成 ``CgnsZone``，
+  只做结构校验，并把 1to1 连接下 ``Periodic_t`` 的三个数组记进连接。连接是否
+  合法由多块路径的拓扑校验负责。``zone_metadata`` 只读 zone 的名字、类型和尺寸。
 
-当前只支持三维 Structured zone、顶点坐标（``GridLocation=Vertex``）和整面边界；
+单块路径只支持三维 Structured zone、顶点坐标（``GridLocation=Vertex``）和整面边界；
 子区、翻转/轴交换 1to1、``Periodic_t``、``CellCenter``、``Rind``、``PointList``
 在 reader 或 adapter 阶段明确拒绝。可执行 BCType 包含远场 ``BCFarfield``；
 远场来流状态不来自 CGNS 文件（本步不解析 ``BCDataSet``），由算例侧提供。
@@ -58,6 +61,30 @@ class CgnsBC:
 
 
 @dataclass(frozen=True)
+class CgnsZoneMeta:
+    """``Zone_t`` 节点的名字、类型和尺寸；不读坐标。
+
+    入口判定用 ``problem``：zone 不是 ``Structured``、或尺寸读不出来时，它记着原因，
+    与读取器的报错是同一句话；这时读不出的那几项是 None。
+    """
+
+    name: str
+    zone_type: str | None
+    vertex_size: tuple[int, int, int] | None
+    cell_size: tuple[int, int, int] | None
+    problem: str | None = None
+
+
+@dataclass(frozen=True)
+class CgnsPeriodic:
+    """1to1 连接下 ``Periodic_t`` 的三个数组；文件里缺的记为 None。"""
+
+    rotation_center: np.ndarray | None = None
+    rotation_angle: np.ndarray | None = None
+    translation: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
 class CgnsConnection:
     """一个 ``GridConnectivity1to1_t``；索引已转为 0-based 闭区间。"""
 
@@ -66,6 +93,7 @@ class CgnsConnection:
     point_range: tuple[tuple[int, int, int], tuple[int, int, int]]
     point_range_donor: tuple[tuple[int, int, int], tuple[int, int, int]]
     transform: tuple[int, int, int]
+    periodic: CgnsPeriodic | None = None
 
 
 @dataclass(frozen=True)
@@ -130,19 +158,24 @@ def _data(group) -> np.ndarray:
     return np.asarray(group[" data"][()])
 
 
-def _range(value, name: str) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
-    """把 SIDS 的 1-based ``IndexRange_t`` 转成 0-based 闭区间。"""
+def _range(value, name: str, positive: bool = True
+           ) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    """把 SIDS 的 1-based ``IndexRange_t`` 转成 0-based 闭区间。
+
+    ``positive=False`` 时不查下标非正，留给拓扑校验按范围越界报（它要先报
+    ``Transform``）；形状不对仍然在这里报。
+    """
     arr = np.asarray(value, dtype=np.int64)
     if arr.shape != (2, 3):
         raise CgnsError(f"{name} 需要 (2,3) 的 PointRange，得到 {arr.shape}")
-    if np.any(arr < 1):
+    if positive and np.any(arr < 1):
         raise CgnsError(f"{name} 的 PointRange 含非正索引：{arr.tolist()}")
     lo = tuple(int(v) - 1 for v in arr[0])
     hi = tuple(int(v) - 1 for v in arr[1])
     return lo, hi
 
 
-def _check_extent(lo, hi, vertex, name: str) -> None:
+def check_extent(lo, hi, vertex, name: str) -> None:
     """确认 PointRange 落在 ``VertexSize`` 内；允许 donor 范围倒序。"""
     for axis, (a, b, n) in enumerate(zip(lo, hi, vertex)):
         amin, amax = min(a, b), max(a, b)
@@ -169,8 +202,43 @@ def _side_of(lo, hi, vertex) -> str | None:
     return None
 
 
-def _check_location(group, name: str) -> None:
-    """拒绝网格/BC 上的 ``CellCenter``、``Rind>0`` 和 ``PointList``。"""
+def face_axes(lo, hi):
+    """有向范围是一个面片时返回 (法向轴, 切向轴, 切向轴)，否则返回 None。
+
+    点状、线状、体型的范围都不是面片。面片可以是整面，也可以是整面的一部分。
+    """
+    flat = [axis for axis in range(3) if lo[axis] == hi[axis]]
+    if len(flat) != 1:
+        return None
+    tangential = [axis for axis in range(3) if axis != flat[0]]
+    return flat[0], tangential[0], tangential[1]
+
+
+def side_of_face(axis, lo, vertex) -> str | None:
+    """面片落在块的哪个侧面（``i-`` 等）；落在内部时返回 None。"""
+    if lo[axis] == 0:
+        return AXIS_NAMES[axis] + "-"
+    if lo[axis] == vertex[axis] - 1:
+        return AXIS_NAMES[axis] + "+"
+    return None
+
+
+def face_boundary(side: str, kind: str, detail: str) -> FaceBoundary:
+    """按 CGNS 的边界种类造一个整面描述。
+
+    通用边界都由鬼层填充执行，边界带按 kind 派生（壁面和远场开带，其余不开）。
+    """
+    return FaceBoundary(side=side, axis=side_axis(side), kind=kind,
+                        executor="halo", dif_band=dif_band(kind, "halo"),
+                        detail=detail)
+
+
+def _check_location(group, name: str, keep_periodic: bool = False) -> None:
+    """拒绝网格/BC 上的 ``CellCenter``、``Rind>0`` 和 ``PointList``。
+
+    缺省连 ``Periodic_t`` 一并拒绝；多块读取器打开 ``keep_periodic``，把周期
+    信息留给 ``CgnsConnection.periodic`` 记录。
+    """
     if "GridLocation" in group:
         loc = _text(group["GridLocation"])
         if loc != "Vertex":
@@ -182,6 +250,8 @@ def _check_location(group, name: str) -> None:
             raise CgnsError(f"{name} 的 Rind={rind.tolist()}；本步不接受鬼胞数据")
     if "PointList" in group:
         raise CgnsError(f"{name} 使用 PointList；本步只接受 PointRange")
+    if keep_periodic:
+        return
     if "Periodic_t" in group:
         raise CgnsError(f"{name} 使用 Periodic_t；本步只接受整面 identity 1to1")
     # 标准 CGNS 把周期信息挂在 GridConnectivity1to1_t → GridConnectivityProperty_t
@@ -242,14 +312,53 @@ def _read_bcs(zone, vertex, zone_name: str) -> tuple[CgnsBC, ...]:
                 raise CgnsError(f"{zone_name}/{name}: Family {family!r} 需要唯一 FamilyBC")
             bc_type = _text(family_bcs[0])
         lo, hi = _range(_data(node["PointRange"]), f"{zone_name}/{name}")
-        _check_extent(lo, hi, vertex, f"{zone_name}/{name}")
+        check_extent(lo, hi, vertex, f"{zone_name}/{name}")
         bcs.append(CgnsBC(name=name, bc_type=bc_type, point_range=(lo, hi),
                           family=family, original_type=original_type))
     return tuple(bcs)
 
 
-def _read_connections(zone, vertex, zone_name: str) -> tuple[CgnsConnection, ...]:
-    """读取 ``ZoneGridConnectivity_t`` 下所有 1to1 连接。"""
+_PERIODIC_ARRAYS = (("rotation_center", "RotationCenter"),
+                    ("rotation_angle", "RotationAngle"),
+                    ("translation", "Translation"))
+
+
+def _read_periodic(node, name: str) -> CgnsPeriodic | None:
+    """读 1to1 连接下 ``GridConnectivityProperty_t/Periodic_t`` 的三个数组。
+
+    没有这个节点时返回 None；节点在而某个数组缺时，该数组记为 None。
+    """
+    if "Periodic_t" in node:
+        raise CgnsError(
+            f"{name} 的 Periodic_t 直接挂在 GridConnectivity1to1_t 下；"
+            "标准位置是 GridConnectivityProperty_t 之下")
+    fields = {}
+    found = False
+    for prop in (v for v in node.values()
+                 if _label(v) == "GridConnectivityProperty_t"):
+        for per in (v for v in prop.values() if _label(v) == "Periodic_t"):
+            found = True
+            for field, array in _PERIODIC_ARRAYS:
+                if array in per:
+                    try:
+                        fields[field] = np.asarray(_data(per[array]),
+                                                   dtype=np.float64)
+                    except (TypeError, ValueError) as exc:
+                        raise CgnsError(
+                            f"{name} 的 Periodic_t/{array} 不是数值数组：{exc}"
+                        ) from exc
+    return CgnsPeriodic(**fields) if found else None
+
+
+def _read_connections(zone, vertex, zone_name: str,
+                      keep_periodic: bool = False) -> tuple[CgnsConnection, ...]:
+    """读取 ``ZoneGridConnectivity_t`` 下所有 1to1 连接。
+
+    ``keep_periodic=True`` 供多块读取器使用：``Periodic_t`` 读进连接记录，留给
+    拓扑校验。供体范围在两种情况下都不在这里验界：供体可以是别的块，它的尺寸
+    这里不知道，由拓扑校验去比。多块读取时接收范围也不在这里验界，下标非正也不在
+    这里查，都留给拓扑校验，让它排在 ``Transform`` 之后报（方案 KTD3）。
+    """
     if "ZoneGridConnectivity" not in zone:
         return ()
     out = []
@@ -261,14 +370,16 @@ def _read_connections(zone, vertex, zone_name: str) -> tuple[CgnsConnection, ...
         if _label(node) != "GridConnectivity1to1_t":
             continue
         name = node.name.rsplit("/", 1)[-1]
-        _check_location(node, f"{zone_name}/{name}")
+        _check_location(node, f"{zone_name}/{name}", keep_periodic=keep_periodic)
         if "PointRange" not in node or "PointRangeDonor" not in node:
             raise CgnsError(f"{zone_name}/{name} 缺少 PointRange/PointRangeDonor")
         donor = _text(node)
-        lo, hi = _range(_data(node["PointRange"]), f"{zone_name}/{name}")
+        strict = not keep_periodic                 # 多块读取：下标非正也留给拓扑校验
+        lo, hi = _range(_data(node["PointRange"]), f"{zone_name}/{name}", positive=strict)
         dlo, dhi = _range(_data(node["PointRangeDonor"]),
-                          f"{zone_name}/{name}/PointRangeDonor")
-        _check_extent(lo, hi, vertex, f"{zone_name}/{name}")
+                          f"{zone_name}/{name}/PointRangeDonor", positive=strict)
+        if strict:
+            check_extent(lo, hi, vertex, f"{zone_name}/{name}")
         transform = (1, 2, 3)
         if "Transform" in node:
             raw = np.asarray(node["Transform"][" data"][()], dtype=np.int64)
@@ -278,7 +389,9 @@ def _read_connections(zone, vertex, zone_name: str) -> tuple[CgnsConnection, ...
             transform = tuple(int(v) for v in raw)
         out.append(CgnsConnection(
             name=name, donor_zone=donor.strip(), point_range=(lo, hi),
-            point_range_donor=(dlo, dhi), transform=transform))
+            point_range_donor=(dlo, dhi), transform=transform,
+            periodic=(_read_periodic(node, f"{zone_name}/{name}")
+                      if keep_periodic else None)))
     return tuple(out)
 
 
@@ -303,6 +416,88 @@ def _read_coords(zone, vertex, zone_name: str) -> Mapping[str, np.ndarray]:
     return MappingProxyType(arrays)
 
 
+def _open(path):
+    """以只读方式打开 CGNS/HDF5 文件，由调用方关闭；打不开转成 ``CgnsError``。"""
+    import h5py
+
+    try:
+        return h5py.File(str(path), "r")
+    except (OSError, ValueError) as exc:
+        raise CgnsError(f"无法打开 HDF5/CGNS 文件 {path}: {exc}") from exc
+
+
+def _check_base(base) -> None:
+    """确认 ``CGNSBase_t`` 是三维的。"""
+    dims = np.asarray(base[" data"][()], dtype=np.int64)
+    if dims.shape != (2,) or tuple(int(v) for v in dims) != (3, 3):
+        raise CgnsError(
+            f"{base.name} 的 CellDimension/PhysicalDimension={dims.tolist()}；"
+            "本步只支持三维")
+
+
+def _bases(handle, path) -> list:
+    """列出 ``CGNSBase_t``，并确认都是三维。"""
+    bases = [obj for obj in handle.values() if _label(obj) == "CGNSBase_t"]
+    if not bases:
+        raise CgnsError(f"{path} 缺少 CGNSBase_t")
+    for base in bases:
+        _check_base(base)
+    return bases
+
+
+def _structured_problem(zone_name: str, zone_type: str) -> str:
+    """zone 不是 ``Structured`` 时的报错句子；读取器和入口判定共用。"""
+    return f"{zone_name} 的 ZoneType={zone_type!r}；只支持 Structured"
+
+
+def _zone_header(node) -> CgnsZoneMeta:
+    """读 ``Zone_t`` 的名字、尺寸和类型。"""
+    name = _zone_name(node)
+    vertex, cell = _decode_zone_data(_data(node), name)
+    if "ZoneType" not in node:
+        raise CgnsError(f"{name} 缺少 ZoneType")
+    return CgnsZoneMeta(name=name, zone_type=_text(node["ZoneType"]),
+                        vertex_size=vertex, cell_size=cell)
+
+
+def _zone_header_or_problem(node) -> CgnsZoneMeta:
+    """入口判定用的宽松版：读不出尺寸或类型、不是 ``Structured`` 时不报错，
+    把原因记进 ``problem``。
+
+    节点残缺的方式很多（数据集被删、写成了组、引用了不存在的外部文件），逐种枚举
+    异常类型堵不住，所以这里一律接住。本函数只为入口选路径，不许它改变单块路径的
+    报错；严格读取走 :func:`_zone_header`，与以前相同。
+    """
+    name = _zone_name(node)
+    try:
+        zone_type = _text(node["ZoneType"]) if "ZoneType" in node else None
+        if zone_type is not None and zone_type != "Structured":
+            return CgnsZoneMeta(name=name, zone_type=zone_type, vertex_size=None,
+                                cell_size=None,
+                                problem=_structured_problem(name, zone_type))
+        return _zone_header(node)
+    except CgnsError as exc:
+        reason = str(exc)                        # 读取器的消息里已经带着 zone 名
+    except Exception as exc:                     # 其余残缺：带上 zone 名和原异常
+        reason = f"{name} 的 Zone_t 读不出来：{type(exc).__name__}: {exc}"
+    return CgnsZoneMeta(name=name, zone_type=None, vertex_size=None,
+                        cell_size=None, problem=reason)
+
+
+def _read_zone(node, keep_periodic: bool = False) -> CgnsZone:
+    """读一个 ``Zone_t``：尺寸、类型、坐标、边条和 1to1 连接；不做可执行校验。"""
+    header = _zone_header(node)
+    if header.zone_type != "Structured":
+        raise CgnsError(_structured_problem(header.name, header.zone_type))
+    return CgnsZone(
+        name=header.name, vertex_size=header.vertex_size,
+        cell_size=header.cell_size,
+        coords=_read_coords(node, header.vertex_size, header.name),
+        bcs=_read_bcs(node, header.vertex_size, header.name),
+        connections=_read_connections(node, header.vertex_size, header.name,
+                                      keep_periodic=keep_periodic))
+
+
 def read_cgns_zone(path, zone: str | None = None,
                    validate: bool = True) -> CgnsZone:
     """读取一个 HDF5/CGNS 结构化 zone。
@@ -311,23 +506,15 @@ def read_cgns_zone(path, zone: str | None = None,
     ``validate=False`` 只做结构校验，保留所有原始 BCType 和 1to1，供真实样例
     诊断；默认 ``True`` 会在返回前拒绝本步执行子集之外的内容。
     """
-    import h5py
-
-    try:
-        handle = h5py.File(str(path), "r")
-    except (OSError, ValueError) as exc:
-        raise CgnsError(f"无法打开 HDF5/CGNS 文件 {path}: {exc}") from exc
-    with handle:
+    with _open(path) as handle:
         bases = [obj for obj in handle.values() if _label(obj) == "CGNSBase_t"]
         if not bases:
             raise CgnsError(f"{path} 缺少 CGNSBase_t")
         zones = []
         for base in bases:
-            dims = np.asarray(base[" data"][()], dtype=np.int64)
-            if dims.shape != (2,) or tuple(int(v) for v in dims) != (3, 3):
-                raise CgnsError(
-                    f"{base.name} 的 CellDimension/PhysicalDimension={dims.tolist()}；"
-                    "本步只支持三维")
+            # 逐个 Base 先验维数、再列出它的 zone。次序与第六步之前相同：几个 Base 各
+            # 坏一处时，先报排在前面那个的错（2026-11-24，Astra 第 20 轮）。
+            _check_base(base)
             zones.extend(_zone_nodes(base))
         if not zones:
             raise CgnsError(f"{path} 没有 Zone_t")
@@ -345,21 +532,98 @@ def read_cgns_zone(path, zone: str | None = None,
                 raise CgnsError(f"{path} 找不到唯一 zone {zone!r}；现有 {names}")
             selected = matches[0]
 
-        name = _zone_name(selected)
-        vertex, cell = _decode_zone_data(_data(selected), name)
-        if "ZoneType" not in selected:
-            raise CgnsError(f"{name} 缺少 ZoneType")
-        zone_type = _text(selected["ZoneType"])
-        if zone_type != "Structured":
-            raise CgnsError(f"{name} 的 ZoneType={zone_type!r}；只支持 Structured")
-        coords = _read_coords(selected, vertex, name)
-        bcs = _read_bcs(selected, vertex, name)
-        connections = _read_connections(selected, vertex, name)
-        result = CgnsZone(name=name, vertex_size=vertex, cell_size=cell,
-                          coords=coords, bcs=bcs, connections=connections)
+        result = _read_zone(selected)
         if validate:
             _validate_executable(result)
         return result
+
+
+def read_cgns_zones(path) -> tuple[CgnsZone, ...]:
+    """读取一个多 zone 文件的全部原始 zone，按文件顺序返回。
+
+    文件只能有一个 ``CGNSBase_t``，所有 zone 都必须是 Structured。只做结构校验：
+    1to1 连接下 ``Periodic_t`` 的三个数组记进 ``CgnsConnection.periodic``，供体
+    范围不在这里验界；连接是否配对、范围和坐标是否对得上，由多块路径的拓扑
+    校验负责。
+
+    只抛 ``CgnsError``。节点残缺的方式枚举不完，所以这里出的其他异常都转成
+    ``CgnsError``，带上 zone 名（能知道是哪个 zone 时）和原始异常。Base 下打不开的
+    链接（悬空的软链接、缺失的外部文件）点名报错，不跳过：一个 zone 自己就是打不开
+    的链接时，跳过等于悄悄少算一块。
+    """
+    try:
+        with _open(path) as handle:
+            return _zones_under(handle, path)
+    except CgnsError:
+        raise
+    except Exception as exc:       # 列 Base 这一步出的其他异常：Base 不是组、根下有悬空链接
+        raise CgnsError(f"{path} 读不出来：{type(exc).__name__}: {exc}") from exc
+
+
+def _zones_under(handle, path) -> tuple[CgnsZone, ...]:
+    """文件只能有一个 Base；逐个 zone 读取。"""
+    bases = _bases(handle, path)
+    if len(bases) != 1:
+        names = [base.name.rsplit("/", 1)[-1] for base in bases]
+        raise CgnsError(
+            f"{path} 有 {len(bases)} 个 CGNSBase_t：{names}；只支持单个 Base")
+    zones = []
+    for name in bases[0]:
+        try:
+            node = bases[0][name]
+        except Exception as exc:
+            # 悬空的软链接、指向缺失文件的外部链接。不跳过：少读一个 zone 会悄悄
+            # 算错，宁可点名让它修文件。
+            raise CgnsError(
+                f"{path} 的 Base 下有打不开的链接 {name!r}：{type(exc).__name__}: {exc}"
+            ) from exc
+        if _label(node) != "Zone_t":
+            continue
+        try:
+            zones.append(_read_zone(node, keep_periodic=True))
+        except CgnsError:
+            raise                          # 读取器自己的消息里已经带着 zone 名
+        except Exception as exc:           # 节点残缺的其余情形：在这里补上 zone 名
+            raise CgnsError(
+                f"{_zone_name(node)} 读不出来：{type(exc).__name__}: {exc}") from exc
+    if not zones:
+        raise CgnsError(f"{path} 没有 Zone_t")
+    return tuple(zones)
+
+
+def _openable(group):
+    """``group`` 里能打开的子节点；悬空的链接（指向不存在的节点或文件）跳过。"""
+    for name in group:
+        try:
+            yield group[name]
+        except Exception:            # h5py 对悬空的软链接、缺失的外部链接抛 KeyError 或 OSError
+            continue
+
+
+def zone_metadata(path) -> tuple[CgnsZoneMeta, ...]:
+    """只读每个 zone 的原名、类型和尺寸，按文件顺序返回；不读坐标。
+
+    只抛 ``CgnsError``，而且只在打不开文件、没有 Base 或 Zone 时抛。zone 的内容有问题
+    （类型不是 ``Structured``、节点残缺、尺寸读不出来）时不在这里报错，原因记在
+    :attr:`CgnsZoneMeta.problem` 里：文件里只有一个 zone 时入口判定交回单块路径，由
+    那条路径报；不止一个时由多块路径报。悬空的链接当作不存在。不检查 Base 的个数
+    和维数。
+    """
+    try:
+        with _open(path) as handle:
+            bases = [obj for obj in _openable(handle) if _label(obj) == "CGNSBase_t"]
+            if not bases:
+                raise CgnsError(f"{path} 缺少 CGNSBase_t")
+            nodes = [node for base in bases for node in _openable(base)
+                     if _label(node) == "Zone_t"]
+            if not nodes:
+                raise CgnsError(f"{path} 没有 Zone_t")
+            return tuple(_zone_header_or_problem(node) for node in nodes)
+    except CgnsError:
+        raise
+    except Exception as exc:       # 其余残缺：标成 Base 的节点不是组、zone 名不是 UTF-8 等
+        raise CgnsError(
+            f"{path} 的元数据读不出来：{type(exc).__name__}: {exc}") from exc
 
 
 def _norm_name(name: str) -> str:
@@ -377,7 +641,7 @@ def _label_zone_name(node) -> str:
     return _zone_name(node)
 
 
-def _bc_kind(bc_type: str) -> str | None:
+def bc_kind(bc_type: str) -> str | None:
     """把 SIDS BCType 映射到执行 kind；不支持的返回 None。"""
     if bc_type in _BC_OUTFLOW:
         return OUTFLOW
@@ -417,7 +681,7 @@ def _collect_sides(zone: CgnsZone) -> dict[str, tuple[str, str, str]]:
             raise CgnsError(
                 f"{zone.name}/{bc.name} 的 PointRange={lo}..{hi} 不是整面；"
                 "本步只支持整面边界")
-        kind = _bc_kind(bc.bc_type)
+        kind = bc_kind(bc.bc_type)
         if kind is None:
             raise CgnsError(
                 f"{zone.name}/{bc.name} 的 BCType={bc.bc_type!r} 不在本步执行子集")
@@ -501,10 +765,7 @@ def to_block_mesh(zone: CgnsZone, axes: Iterable[int] = (0, 1, 2),
     # 开带；plate 的"远场关带"由 cases 的 plate-CGNS 分支按面覆盖）
     faces = []
     for side in SIDES:
-        kind = sides[side][0]
-        faces.append(FaceBoundary(
-            side=side, axis=side_axis(side), kind=kind, executor="halo",
-            dif_band=dif_band(kind, "halo"), detail=f"CGNS {sides[side][1]}"))
+        faces.append(face_boundary(side, sides[side][0], f"CGNS {sides[side][1]}"))
     grid = Grid(ni=zone.ni, nj=zone.nj, nk=zone.nk)
     return BlockMesh(
         grid=grid, dxs=(1.0, 1.0, 1.0), axes=axes, bcs=bcs,

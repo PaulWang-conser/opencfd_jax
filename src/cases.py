@@ -7,7 +7,7 @@ faces / dif_bound / plate 等边界、源项、曲线网格或几何信息。
 """
 
 from collections.abc import MutableMapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from typing import Any
 
 import numpy as np
@@ -36,6 +36,44 @@ def _dimension(args, name, default):
     """读取一个网格尺寸；缺省时返回算例的默认值。"""
     value = getattr(args, name, None)
     return default if value is None else value
+
+
+def physical_params(args) -> PhysParams:
+    """由 Re、Ama、参考温度和 Pr 组装物性参数（单块和多块共用）。
+
+    Ref_T 是**有量纲的参考温度（K）**，与原码 in 文件的 T_REF 同义：
+    Tsb = 110.4/Ref_T、amu_C0 = (1+110.4/Ref_T)/Re，所以 μ(T=1)=1/Re 与
+    Ref_T 无关，但 T≠1 的 Sutherland 曲线随 Ref_T 变——原码对拍必须同值。
+    缺省 288.15 K 取的是原码 read_parameters（parameters.c:290）在
+    T_REF<=0 时用的空气参考温度；算例不同请用 --ref-t 显式覆盖。
+    """
+    ref_t = getattr(args, "ref_t", None)
+    if ref_t is None:
+        ref_t = 288.15
+    return PhysParams(gamma=1.4, Ama=args.Ama, Re=args.Re,
+                      Ref_T=ref_t, Pr=getattr(args, "pr", 0.7))
+
+
+def cons_from_state(value, params) -> Any:
+    """原始量 {rho, u, v, w, T} 换成五分量守恒量 (ρ, ρu, ρv, ρw, ρE)。"""
+    rho, u, v, w, T = (value[k] for k in ("rho", "u", "v", "w", "T"))
+    return jnp.asarray([rho, rho*u, rho*v, rho*w,
+                        rho*(params.Cv*T + 0.5*(u*u + v*v + w*w))])
+
+
+def plate_faces(faces, wall_temperature, outlet_ghost="keep"):
+    """plate 的 CGNS 面改写：壁面等温并带壁温，远场关带。
+
+    ``outlet_ghost="copy"`` 时出口的状态鬼层改成零梯度延拓；缺省保持原值
+    （原码口径）。只改状态鬼层，黏性通量 Ev 的出口鬼层仍清零。
+    """
+    return tuple(replace(f, thermal="isothermal", params={"Tw": wall_temperature})
+                 if f.kind == WALL else
+                 replace(f, dif_band=False) if f.kind == FARFIELD else
+                 replace(f, params={"halo": "copy"})
+                 if (f.kind in (OUTFLOW, NONREFLECTING)
+                     and outlet_ghost == "copy") else f
+                 for f in faces)
 
 
 def make_initial_sod(grid, dx, x_diaphragm=0.5, gamma=1.4):
@@ -361,7 +399,6 @@ def _build_plate(args, params, nk):
     # Re_x = x·Re、M∞ = U∞/sqrt(γ R T) = Ama。验收基准是 blasius.py。
     from . import blasius, channel, inflow, plate
     if getattr(args, "mesh_format", "builtin") == "cgns":
-        from dataclasses import replace
         from . import mesh_cgns
         if getattr(args, "plate_dif_bound", None) is not None:
             raise ValueError(
@@ -382,25 +419,15 @@ def _build_plate(args, params, nk):
                     f"显式 --{name}={value} 与 CGNS VertexSize 的 {got} 不一致")
         block = mesh_cgns.build_cgns_block(zone, axes=(0, 1, 2))
         grid = block.grid
-        def state(value):
-            rho, u, v, w, T = (value[k] for k in ("rho", "u", "v", "w", "T"))
-            return jnp.asarray([rho, rho*u, rho*v, rho*w,
-                                rho*(params.Cv*T + 0.5*(u*u + v*v + w*w))])
-        initial = state(args.boundary_inflow)
+        initial = cons_from_state(args.boundary_inflow, params)
         cons = grid.alloc().at[grid.inner()].set(initial.reshape(5, 1, 1, 1))
         inlet = initial.reshape(5, 1, 1)
-        far = state(args.boundary_farfield)
+        far = cons_from_state(args.boundary_farfield, params)
         # 出口状态鬼层缺省保持原值（原码口径）；boundary.outlet_ghost="copy"
         # 时按零梯度延拓。只改状态鬼层，黏性通量 Ev 的出口鬼层仍清零。
         outlet_ghost = getattr(args, "boundary_outlet_ghost", None) or "keep"
-        faces = tuple(replace(f, thermal="isothermal",
-                              params={"Tw": args.boundary_wall_temperature})
-                      if f.kind == WALL else
-                      replace(f, dif_band=False) if f.kind == FARFIELD else
-                      replace(f, params={"halo": "copy"})
-                      if (f.kind in (OUTFLOW, NONREFLECTING)
-                          and outlet_ghost == "copy") else f
-                      for f in block.faces)
+        faces = plate_faces(block.faces, args.boundary_wall_temperature,
+                            outlet_ghost)
         return CaseSpec(grid=grid, cons0=cons, bcs=block.bcs, faces=faces,
                     dxs=block.dxs, axes=block.axes, params=params,
                     forcing=None, gamma=params.gamma, metrics=block.metrics,
@@ -471,19 +498,9 @@ CGNS_CASES = ("poiseuille", "plate")
 
 def build_case(args):
     """按 ``args.case`` 分派到注册的 builder；公共前置（物性/展向格数）在此。"""
-    gamma = 1.4
     # 横向/展向网格数：原码由 in 文件 GRID_3D 决定，这里不再写死 4。
     nk = int(_dimension(args, "nk", 4) or 4)
-    # Ref_T 是**有量纲的参考温度（K）**，与原码 in 文件的 T_REF 同义：
-    # Tsb = 110.4/Ref_T、amu_C0 = (1+110.4/Ref_T)/Re，所以 μ(T=1)=1/Re 与
-    # Ref_T 无关，但 T≠1 的 Sutherland 曲线随 Ref_T 变——原码对拍必须同值。
-    # 缺省 288.15 K 取的是原码 read_parameters（parameters.c:290）在
-    # T_REF<=0 时用的空气参考温度；算例不同请用 --ref-t 显式覆盖。
-    ref_t = getattr(args, "ref_t", None)
-    if ref_t is None:
-        ref_t = 288.15
-    params = PhysParams(gamma=gamma, Ama=args.Ama, Re=args.Re,
-                        Ref_T=ref_t, Pr=getattr(args, "pr", 0.7))
+    params = physical_params(args)
     builder = CASE_BUILDERS.get(args.case)
     if builder is None and args.case == "channel":
         # channel 已降级为内部库（README 口径）：compare 诊断入口与内部

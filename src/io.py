@@ -27,6 +27,25 @@ def checkpoint_name(prefix: str, step: int) -> str:
     return f"{prefix}-istep-{step:08d}.npz"
 
 
+def time_to_save(step: int, kstep_save: int, finished: bool) -> bool:
+    """保存条件：步号是保存间隔的整数倍，或者到达了终止时间。单独到达步数上限不保存。"""
+    return step % kstep_save == 0 or finished
+
+
+def inner_fields(cons, grid) -> dict:
+    """存盘用的五个守恒量，只取物理内区。"""
+    return {f"cons_{i}": np.asarray(cons[grid.inner()][i]) for i in range(5)}
+
+
+def checkpoint_meta(args, params, grid, t: float, step: int, dt: float) -> dict:
+    """NPZ 里 ``_meta`` 的内容：时间、步号、步长、算例、格式和物性。"""
+    return {"t": t, "step": step, "dt": dt, "case": args.case,
+            "N": grid.ni, "scheme": args.scheme,
+            "gamma": params.gamma, "Re": params.Re,
+            "Ama": params.Ama, "Ref_T": params.Ref_T,
+            "Pr": params.Pr}
+
+
 def save_npz(path, fields: dict, meta: dict | None = None):
     """未压缩 npz 存档。fields: {name: ndarray}; meta 任意可 json 化对象。"""
     arrays = {k: np.asarray(v) for k, v in fields.items()}

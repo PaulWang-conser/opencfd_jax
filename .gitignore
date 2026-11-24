@@ -29,3 +29,6 @@ outputest/*.tec
 
 # CGNS 官方样例网格：由 Grid/download_cgns_samples.py 重新下载，二进制不入库
 Grid/samples/
+
+# 第六步的验收网格：由 Grid/split_cgns.py 重新生成，不入库
+/Grid/step6_meshes/

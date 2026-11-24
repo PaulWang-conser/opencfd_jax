@@ -49,6 +49,16 @@ def _inner_slice_moved(axis, grid):
     return (slice(None),) + slices
 
 
+def scales_from_sizes(dims) -> tuple:
+    """由全局顶点数 (Ni, Nj, Nk) 算各方向的分裂通量尺度 s_axis = ∏_{m≠axis}(N_m - 1)。
+
+    单块按自己的网格尺寸调用，见 :func:`flux_scales_for`；多块路径按各块的尺寸
+    调用它，给参考尺度的下界校验用。
+    """
+    return tuple(int(np.prod([dims[m] - 1 for m in range(3) if m != axis]))
+                 for axis in range(3))
+
+
 def flux_scales_for(grid, dxs, metrics):
     """按度量口径推断各方向的分裂通量尺度 s_axis（不换算时返回 None）。
 
@@ -59,9 +69,7 @@ def flux_scales_for(grid, dxs, metrics):
     """
     if metrics is None or tuple(float(d) for d in dxs) != (1.0, 1.0, 1.0):
         return None
-    dims = (grid.ni, grid.nj, grid.nk)
-    return tuple(int(np.prod([dims[m] - 1 for m in range(3) if m != axis]))
-                 for axis in range(3))
+    return scales_from_sizes((grid.ni, grid.nj, grid.nk))
 
 
 def _rhs_along_axis(cons, axis, grid, gamma, epsl_sw, bcs, dxs,
@@ -254,29 +262,47 @@ def inviscid_rhs(cons, grid, gamma=1.4, epsl_sw=0.0, bcs=None, axes=(0,), dx=Non
     return du
 
 
+def rk3_q1(cons, dt, du1):
+    """RK3 第一阶段的组合：整步起点 ``cons`` 加上 ``dt`` 乘第一阶段的右端项。"""
+    return cons + dt * du1
+
+
+def rk3_q2(cons, dt, q1, du2):
+    """RK3 第二阶段的组合；``q1`` 是准备之前的第一阶段态。"""
+    return 0.75 * cons + 0.25 * (q1 + dt * du2)
+
+
+def rk3_q3(cons, dt, q2, du3):
+    """RK3 第三阶段的组合；``q2`` 是准备之前的第二阶段态。"""
+    return cons / 3.0 + (2.0 / 3.0) * (q2 + dt * du3)
+
+
 def rk3_step_stages(cons, dt, rhs_fn, bc_apply=None):
     """SSP-RK3 一步，同时返回三个子步的 RHS。
 
-    返回 (q_new, (du1, du2, du3))，其中 du1 = L(Q^n)、du2 = L(Q^*)、
-    du3 = L(Q^{**})——与原码主循环每个 RK 子步 dump 的 pdu 一一对应
+    返回 (q_new, (du1, du2, du3))，其中 du1 = L(Q^n)、du2 = L(Q*)、
+    du3 = L(Q**)——与原码主循环每个 RK 子步 dump 的 pdu 一一对应
     （OCFD_time.cu 的 ker1/2/3 系数：1、3/4+1/4、1/3+2/3）。
     对拍工具（compare.py jax-run）用它逐子步存 du；rk3_step 只是丢掉了 du。
+
+    三个阶段的组合是 :func:`rk3_q1`、:func:`rk3_q2`、:func:`rk3_q3`。多块路径
+    分阶段逐块求右端项，不能把 RHS 写成一个回调，直接调用这三个函数。
     """
     if bc_apply is not None:
         cons = bc_apply(cons)
     # stage1: Q*  = Q^n + dt*L(Q^n)
     du1 = rhs_fn(cons)
-    q1 = cons + dt * du1
+    q1 = rk3_q1(cons, dt, du1)
     if bc_apply is not None:
         q1 = bc_apply(q1)
     # stage2: Q** = 3/4*Q^n + 1/4*(Q* + dt*L(Q*))
     du2 = rhs_fn(q1)
-    q2 = 0.75 * cons + 0.25 * (q1 + dt * du2)
+    q2 = rk3_q2(cons, dt, q1, du2)
     if bc_apply is not None:
         q2 = bc_apply(q2)
     # stage3: Q^{n+1} = 1/3*Q^n + 2/3*(Q** + dt*L(Q**))
     du3 = rhs_fn(q2)
-    q3 = cons / 3.0 + (2.0 / 3.0) * (q2 + dt * du3)
+    q3 = rk3_q3(cons, dt, q2, du3)
     if bc_apply is not None:
         q3 = bc_apply(q3)
     return q3, (du1, du2, du3)

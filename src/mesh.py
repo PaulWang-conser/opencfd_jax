@@ -30,6 +30,7 @@ from .viscous import cd_along_axis
 
 METRIC_KEYS = ("Akx", "Aky", "Akz", "Aix", "Aiy", "Aiz",
                "Asx", "Asy", "Asz", "Ajac")
+COORD_KEYS = ("Axx", "Ayy", "Azz")     # 坐标场的三个键，形状 (nk, nj, ni)
 
 
 # 原码 comput_Jac3d_kernal 会把内区边界值复制进鬼胞；JAX 版不需要——
@@ -39,7 +40,8 @@ METRIC_KEYS = ("Akx", "Aky", "Akz", "Aix", "Aiy", "Aiz",
 
 def compute_metrics_from_coords(coords: dict, dxs, order=6,
                                 jac_bound=(1, 1, 1),
-                                periodic=(True, False, True)):
+                                periodic=(True, False, True),
+                                side_flags=None):
     """由坐标场（含鬼胞）计算度量。coords: {"Axx","Ayy","Azz"}，计算轴序 (k,j,i)。
 
     dxs: 三轴参考步长 (hx, hy, hz)——注意是计算空间步长（均匀网格索引间距），
@@ -55,6 +57,10 @@ def compute_metrics_from_coords(coords: dict, dxs, order=6,
     坐标鬼胞按**环绕**填（原码 MPI Sendrecv 自收自发），非周期轴边缘复制。
     注意：jac_bound 为 1 时边界带本来就被单侧覆盖，鬼胞填法只影响
     jac_bound=0 的轴，但为了与原码一致仍按 IPERIODIC 填。
+
+    side_flags: 每个计算轴一对 (低侧, 高侧) 的 0/1 标志，给出时优先于
+    jac_bound，逐侧决定边界带用不用单侧公式。多块路径用它：普通切口一侧是 0
+    （两侧都是内点，走中心模板），物理面和周期接缝一侧是 1。不给出时行为不变。
     """
     # 坐标场可能只在一个轴上有变化（如 y=y(j) 给成 (1,ny+2L,1)），先广播成同形
     shape = np.broadcast_shapes(*(np.shape(v) for v in coords.values()))
@@ -65,9 +71,13 @@ def compute_metrics_from_coords(coords: dict, dxs, order=6,
     combos = ((2, 0, 0), (1, 1, 1), (0, 2, 2))
 
     def deriv(f, axis, hidx, jbidx):
-        """计算一个坐标导数，并按对应方向的 JAC_BOUND 标志切换边界带公式。"""
-        b = int(jac_bound[jbidx]) if jac_bound else 0
-        return cd_along_axis(f, axis, dxs[hidx], order, bound=(b, b))
+        """计算一个坐标导数，并按对应方向两侧的标志切换边界带公式。"""
+        if side_flags is not None:
+            bound = (int(side_flags[jbidx][0]), int(side_flags[jbidx][1]))
+        else:
+            b = int(jac_bound[jbidx]) if jac_bound else 0
+            bound = (b, b)
+        return cd_along_axis(f, axis, dxs[hidx], order, bound=bound)
 
     xi, xj, xk = (deriv(Axx, *c) for c in combos)
     yi, yj, yk = (deriv(Ayy, *c) for c in combos)
@@ -113,7 +123,7 @@ def _edge_ghosts(a, lap=None):
     return a
 
 
-def pad_coords(arr, periodic=(True, False, True)):
+def pad_coords(arr, periodic=(True, False, True), lengths=None):
     """按 IPERIODIC 给坐标场补 LAP 层鬼胞（与 `pad_to_lap` 的边缘复制不同）。
 
     periodic 按计算方向 (i, j, k) 给出，数组轴是 (k, j, i)；周期轴取**对侧内区**
@@ -125,16 +135,20 @@ def pad_coords(arr, periodic=(True, False, True)):
     度量在壁面带崩坏（黄金标准 sin(y) 检验：内区精确 1.0000、近壁带比值
     偏至 15.7；handoff 第五轮已记录"Ajac(wall) 差 2 倍"）。线性外推与
     OCFD 准例补丁 P1 的 fill_ghost_edge_coord 同式，对线性/缓变坐标精确。
+
+    lengths: 每个计算轴 (i, j, k) 给一个轴长，非周期轴按它选规则：不短于
+    2·LAP 用奇镜像，否则边缘复制。缺省用数组自己的轴长。多块路径把等价单块
+    的轴长传进来，物理面旁的坐标鬼层就与单块相同。
     """
     out = arr
-    for axis, per in zip((2, 1, 0), periodic):
+    for index, (axis, per) in enumerate(zip((2, 1, 0), periodic)):
         n = out.shape[axis]
         if per and LAP >= n:
             raise ValueError(f"周期轴 {axis} 长 {n} < LAP={LAP}，无法环绕填鬼胞")
         if per:
             lo = np.take(out, np.arange(n - LAP, n), axis=axis)
             hi = np.take(out, np.arange(0, LAP), axis=axis)
-        elif n < 2 * LAP:
+        elif (n if lengths is None else lengths[index]) < 2 * LAP:
             # 短轴（退化坐标维度）：无足够内点做外推，回退边缘复制
             lo = np.take(out, np.zeros(LAP, dtype=int), axis=axis)
             hi = np.take(out, np.full(LAP, n - 1), axis=axis)

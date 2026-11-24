@@ -4,7 +4,8 @@
 
 - JSON 只承载运行参数，不设置网格维数、边界类型或 `DIF_BOUND/JAC_BOUND` 开关；
 - 优先级为 程序默认值 → JSON → 用户显式命令行；
-- 网格只支持程序内置网格或 CGNS 单块文件；CGNS 的维数由文件 `VertexSize` 决定；
+- 网格只支持程序内置网格或 CGNS 文件；CGNS 的维数由文件 `VertexSize` 决定，
+  多 zone 的文件由 `src/multiblock.py` 的路径读取；
 - JSON 内相对路径按配置文件所在目录解析，输出前缀取网格文件名主干。
 """
 
@@ -58,6 +59,7 @@ _SCHEMA = {
         "vis_order": ("str", "vis_order"),
         "viscous": ("bool", "viscous"),
         "weno_tv": ("bool", "weno_tv"),
+        "flux_scale": ("triple", "flux_scale"),
     },
     "time": {
         "dt": ("dt", "dt"),
@@ -92,6 +94,7 @@ _CASE_SCOPE = {
     "case.plate_x0": {"plate"},
     "case.plate_x1": {"plate"},
     "case.plate_h": {"plate"},
+    "numerics.flux_scale": {"plate"},
 }
 
 
@@ -121,6 +124,14 @@ def _check_number(value: Any, dotted: str, *, minimum: float | None = None,
         raise ConfigError(f"{dotted} 不能小于 {minimum:g}，得到 {result:g}")
     if maximum is not None and result > maximum:
         raise ConfigError(f"{dotted} 不能大于 {maximum:g}，得到 {result:g}")
+    return result
+
+
+def _check_positive(value: Any, dotted: str) -> float:
+    """有限正数；0、负数和非数值都报错。"""
+    result = _check_number(value, dotted)
+    if result <= 0.0:
+        raise ConfigError(f"{dotted} 必须是正数，得到 {result:g}")
     return result
 
 
@@ -185,6 +196,10 @@ def _validate_value(kind: str, value: Any, dotted: str, directory: Path) -> Any:
         if isinstance(value, str) and value.lower() in ("on", "off"):
             return value.lower()
         raise ConfigError(f"{dotted} 需要 true/false 或 \"on\"/\"off\"，得到 {value!r}")
+    if kind == "triple":
+        if not isinstance(value, (list, tuple)) or len(value) != 3:
+            raise ConfigError(f"{dotted} 需要三个数 [SX, SY, SZ]，得到 {value!r}")
+        return tuple(_check_positive(value[k], f"{dotted}[{k}]") for k in range(3))
     raise AssertionError(f"未实现的字段类型 {kind}")
 
 

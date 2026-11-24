@@ -1,6 +1,6 @@
 # OpenCFD-JAX 计算流程说明
 
-这套代码用 **JAX + NumPy** 求解五个守恒变量的可压缩流动方程，提供 Sod 激波管、Taylor–Green 涡、Poiseuille 槽道流和平板边界层四个命令行算例。代码包含无粘通量、可选粘性项、物理边界、体积力、三阶 Runge–Kutta 时间推进和 NPZ 存盘（激波选择性滤波已于 2026-11-23 删除）。单块 CGNS/HDF5 结构网格在 `poiseuille` 与 `plate` 上接入；`channel` 不再是命令行算例，只保留为内部壁面库。
+这套代码用 **JAX + NumPy** 求解五个守恒变量的可压缩流动方程，提供 Sod 激波管、Taylor–Green 涡、Poiseuille 槽道流和平板边界层四个命令行算例。代码包含无粘通量、可选粘性项、物理边界、体积力、三阶 Runge–Kutta 时间推进和 NPZ 存盘（激波选择性滤波已于 2026-11-23 删除）。单块 CGNS/HDF5 结构网格在 `poiseuille` 与 `plate` 上接入；多块 CGNS 在 `plate` 上以无粘、单进程的方式接入（7.1.2）；`channel` 不再是命令行算例，只保留为内部壁面库。
 
 阅读时只需要先记住一条主线：
 
@@ -58,8 +58,9 @@ output/sod-istep-00000100.npz
 | `--case`                  | 算例：`sod` / `tg` / `poiseuille` / `plate`；`channel` 只保留为内部库    |
 | `--ni --nj --nk`          | 计算 i/j/k 方向内区离散点数，缺省 256/64/4；CGNS 时按 `VertexSize` 校验 |
 | `--mesh-format`           | `builtin`（默认）或 `cgns`；只给 `--mesh` 时自动推断为 `cgns`       |
-| `--mesh`                  | CGNS/HDF5 文件路径；当前只能用于 `poiseuille`                     |
-| `--cgns-zone`             | 多 zone 文件中的 zone 名；单 zone 可省略                          |
+| `--mesh`                  | CGNS/HDF5 文件路径；单 zone 的文件走单块路径，多 zone 且没给 `--cgns-zone` 时走多块路径（7.1.2） |
+| `--cgns-zone`             | 只读文件里这一个 zone；不给时读全部 zone，`plate` 上不止一个就走多块路径          |
+| `--flux-scale`            | 多块必填：三轴参考尺度 `SX SY SZ`，取法见 7.1.2；对应 JSON 的 `numerics.flux_scale`   |
 | `--scheme`                | 无粘重构格式，默认 `UP7`                                         |
 | `--dt`                    | 固定时间步长，**必填且必须为正的有限数**；CFL 自适应已删除              |
 | `--end-time`              | 终止物理时间                                                  |
@@ -95,7 +96,7 @@ JSON 只分六组，外加顶层 `precision`：
 |---|---|
 | `mesh` | `format`（`builtin`/`cgns`）、`file` |
 | `physics` | `Re`、`Ama`、`ref_t`、`pr`、`tw`（壁温，无量纲，缺省与来流同温） |
-| `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv` |
+| `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv`、`flux_scale`（多块的三轴参考尺度，见 7.1.2） |
 | `time` | `dt`（必填）、`end_time`、`end_step` |
 | `case` | `name`、`inflow_profile`（OCFD 1D 剖面文件，空着用自由来流常数）、`p_grad`、`forcing_work`、`plate_x0`、`plate_x1`、`plate_h` |
 | `output` | `dir`、`kstep_show`、`kstep_save` |
@@ -110,10 +111,11 @@ JSON 只分六组，外加顶层 `precision`：
 
 `channel` 的 `.in`、场文件和旧 `OCFD3d-Mesh.dat` 入口已从 CLI/JSON 删除；`channel.py`、
 `infile.py`、`mesh.read_ocfd_mesh/read_ocfd_field` 只保留为内部库和旧测试依赖，不再从正式入口进入。
-CGNS 路径只适用于 `poiseuille`：`mesh.file` 指向 HDF5/CGNS 文件，`mesh.format="cgns"` 可由
+CGNS 路径适用于 `poiseuille` 和 `plate`：`mesh.file` 指向 HDF5/CGNS 文件，`mesh.format="cgns"` 可由
 `file` 自动推断；`VertexSize` 是离散点数，`CellSize` 只校验 `+1`，不做全局八点平均。未知字段、
 不属于当前算例的字段、`CellCenter`、`Rind>0`、`PointList`、二维 zone 和单侧对称面都会在启动前
-或 reader 中报错。
+或 reader 中报错。多 zone 的文件在没有给 `--cgns-zone` 时走多块路径：只放行 `plate`，
+并且要给 `numerics.flux_scale`（7.1.2）；给了 `--cgns-zone` 就只读那一块，照旧走单块。
 
 
 
@@ -421,6 +423,79 @@ CGNS plate 的入口、远场原始量和壁温由 JSON 的 `boundary` 提供；
 `validate=False` 保留所有原始 `BCType` 供诊断，但仍拒绝
 `CellCenter`、`Rind>0`、`PointList`、`Periodic_t` 和二维 zone。
 
+### 7.1.2 多块 CGNS 接入（第 6 步）
+
+文件：`multiblock.py`。给了 CGNS 网格、没有给 `--cgns-zone`、文件里不止一个 zone 时，
+`main.run` 把运行交给多块路径；其余情况照旧走单块。多块路径只认一种网格：
+
+- 一个 `CGNSBase_t`，所有 zone 都是三维 `Structured`；
+- 块与块之间用 `GridConnectivity1to1_t` 相接，`Transform` 是 `(1,2,3)`（缺省即是），
+  低侧面接高侧面；一个面可以分成几段，分别接不同的邻居；两个方向各写一条记录；
+- 周期方向被切开时，两端露出的面用带 `Periodic_t` 的 1to1 配成周期接缝：旋转中心、
+  旋转角必须有，旋转角为零；`Translation` 可以不写，写了就与实测核对，两条记录都写
+  时要彼此一致。周期方向没有被切开时，沿用同轴成对的 `BCSymmetryPolar`，或同块相对
+  整面的 1to1 自连接；
+- 每个面元恰好被一条边条或一段连接覆盖。
+
+启动后依次做两件事：
+
+1. **放行**：多块路径只验收过一组配置，不在清单里的在读坐标之前报错。这一步只读
+   各 zone 的名字、类型和尺寸；文件里不止一个 zone 而其中有读不出来的（不是
+   `Structured`、节点残缺、尺寸解不出），也在这里按多块网格的校验报错。只有一个
+   zone 的文件出了任何问题都交回单块路径，报错与没有多块路径时相同：单块路径自己
+   报什么仍由它决定，残缺的文件可能在那里直接抛出原始异常。
+   - 生效值：算例 `plate`、格式 `WENO7`、FP64、固定的正步长、粘性项关闭、不带特殊边界脚本。
+   - 不能显式给出，取值与缺省相同也不行：`--weno-tv`、`--outlet-ghost`、`--ni`、`--nj`、
+     `--nk`、`--tw`、`--inflow-profile`、`--plate-x0`、`--plate-x1`、`--plate-h`、
+     `--plate-dif-bound`。
+   - 入口、远场状态和壁温只从 JSON 的 `boundary` 读，壁温要大于 0，命令行没有对应的
+     选项。
+   - 参考尺度（`numerics.flux_scale` 或 `--flux-scale SX SY SZ`，多块必填）：WENO 的
+     ε 要按等价单块的全局顶点数换算。把等价单块的全局顶点数记作 (Ni, Nj, Nk)，第 axis
+     个分量是其余两轴 (N−1) 的乘积，与单块路径按网格尺寸推断的是同一个算法。
+     100×40×40 对应 `1521 3861 3861`。它不是顶点数，也不是某一块的尺寸：按某一块填
+     会让界面上的面值差出 2×10⁻⁵。校验只拦得住明显填小的，即某个分量小于任何一块按
+     自身尺寸算出的值；各块尺寸相同时，按单块尺寸填也能通过，所以数值要按上面的算法算。
+2. **校验**（`build_topology`）：读入全部 zone 后查连接、边条、覆盖表、每个面的归类和
+   块的尺寸。有问题就报错，消息用原名指出是哪个 zone 的哪条连接或哪条边条；读坐标、
+   校验时出的其他异常也报成这一句，消息里带原始异常的类型和文字；Base 下打不开的
+   链接点名报错。通过的网格打印一份接口报告：每个接口对的两侧块、面、范围、对应
+   点数；普通切口印最大坐标差，周期接缝印平移量和实测位移的最大偏离。
+
+每个 RK 阶段的顺序是：各块从自己的阶段态做物理准备，全块同步交换接口上的守恒量
+鬼胞，各块算无粘右端项，最后用准备之前的阶段态做 RK 组合。整步结束后全块再做一次
+带交换的准备。接口旁的坐标和度量在装配时就换好：普通切口旁取供体的内区值，周期
+接缝旁沿用单块周期端的规则。
+
+周期接缝的检查只用整面上的对称量：实测位移（供体坐标减接收坐标）在每个分量上的
+中点当作平移量，半个跨度当作最大偏离。半个跨度不超过容差，位移才算常向量；中点
+不超过容差，就算平移量约为零，报错。这样换 zone 的先后、记录怎么倒写，结论都不变。
+
+一个面分成几段时，几段只在棱或角上相接，相接的顶点只归一段：两个切向轴上下标都
+较小的那个相邻面元所属的段。T 形处它就是切向起点较小的段拥有那条棱；长棱对着两条
+短棱、四段相接的角点，也只有一个写入者，结果与段的先后无关。坐标、度量和守恒量
+共用这一张表，建表后自检每个接收槽恰好被一张表写到，逐槽比对，不只是数个数。
+
+`Grid/split_cgns.py` 切网格时，在网格旁边写一份同名的 JSON（旁记），记着源网格、
+等价单块的全局顶点数 `global_vertices` 和每块在全局上的起止下标。多块运行用其中的
+`global_vertices` 给物理面旁的坐标鬼层选规则，与等价单块相同。没有旁记文件、或旁记
+里没记这一项时，各块按自己的轴长选。文件在而读不出来，或者这一项不是三个 1 到
+2³¹−1 的整数，报错。
+
+输出每个保存步每块一个 NPZ，文件名是前缀、块名的 slug 和步号，`_meta` 多一项
+`zone`。两个块的 slug 不分大小写也要不同，否则在 Windows 上会写进同一个文件。
+每个显示步每块各打印一行诊断。
+
+验收网格可以用 `Grid/split_cgns.py` 从 plate 单块网格切出来：`python Grid/split_cgns.py`
+把七个预设写到 `Grid/step6_meshes/`（不入库）。五个验收网格各跑两个整步，三个阶段的
+右端项、准备之前的 `q1`、`q2` 和末态与等价单块按阈值比较，见
+`experiment/test_step6_acceptance.py`。阈值写在 `experiment/step6_support.py`：每个
+守恒量各有相对容差（1e-11 乘自身最大值）和绝对容差（1e-13 乘参考场五个分量的最大
+值），近零的守恒量由后者控制。
+
+还没做的：粘性项（第 7 步）、每个保存步一个 NPZ（第 8 步）、翻转和轴交换的连接
+（第 10 步再定）、特殊边界脚本配多块。
+
 ### 7.2 统一边界执行与扩展入口（第 2 步）
 
 文件：`boundary.py`、`mesh_data.py`、`main.py`。
@@ -528,9 +603,38 @@ python -m opencfd_jax.src.main --case poiseuille `
 
 只给 `--mesh` 时运行配置自动把 `mesh_format` 推断为 `cgns`。CGNS 的 `VertexSize`
 （离散点数）与物理间距进入 `Ajac`，`dxs` 固定为索引空间 `(1,1,1)`；因此不再需要
-`dt_dxs`。当前只支持单块、三维、整面边界；`multi_hdf5.cgns` 这类多 zone 文件必须
-用 `--cgns-zone` 指定 zone，且默认严格模式会拒绝 `BCInflow*`/`BCWallViscous*` 等
+`dt_dxs`。单块路径只支持单块、三维、整面边界；`multi_hdf5.cgns` 这类多 zone 文件要用
+`--cgns-zone` 指定一个 zone，且默认严格模式会拒绝 `BCInflow*`/`BCWallViscous*` 等
 未执行边界；`BCFarfield` 已执行，但来流状态需由算例提供。
+
+#### 多块 plate
+
+多 zone 的 CGNS 文件不给 `--cgns-zone`，在 `plate` 上走多块路径（7.1.2）。入口、
+远场和壁温只有 JSON 能给，所以配一份 `input.json`，网格路径相对这个文件：
+
+```json
+{
+  "case": {"name": "plate"},
+  "mesh": {"format": "cgns", "file": "x2.cgns"},
+  "boundary": {
+    "inflow": {"rho": 1, "u": 1, "v": 0, "w": 0, "T": 1},
+    "farfield": {"rho": 1, "u": 1, "v": 0, "w": 0, "T": 1},
+    "wall_temperature": 1.0
+  },
+  "numerics": {"scheme": "WENO7", "viscous": false, "flux_scale": [1521, 3861, 3861]},
+  "time": {"dt": 0.0001, "end_time": 0.0001, "end_step": 1},
+  "output": {"dir": "output", "kstep_save": 1}
+}
+```
+
+```powershell
+python -m opencfd_jax.src.main --config 多块目录\input.json --kstep-show 1
+```
+
+`x2.cgns` 可以用 `python Grid/split_cgns.py --preset x2 --out-dir 多块目录` 从 plate 单块
+网格切出来。运行时先打印接口报告，再每个显示步每块一行诊断，输出
+`x2-blk-i0j0k0-istep-00000001.npz` 和 `x2-blk-i1j0k0-istep-00000001.npz`。
+`flux_scale` 是等价单块 100×40×40 的参考尺度，换别的网格要按 7.1.2 的算法重算。
 
 旧 `channel` 的外部文件链（`--in`、`--field`、`--mesh` OCFD dat）已删除；`infile.py`、
 `mesh.read_ocfd_mesh/read_ocfd_field`、`channel.py` 只保留为内部库和旧测试依赖，
@@ -580,7 +684,8 @@ python -m opencfd_jax.src.main --case plate `
 | `solver.py`        | 单方向 / 多方向无粘 RHS、声速、SSP-RK3；无 CFL 步长 |
 | `schemes.py`       | Steger–Warming 分裂、各对流格式、边界面通量带    |
 | `viscous.py`       | 物性、CD6/CD8、单侧导数、应力与粘性通量散度         |
-| `mesh_cgns.py`     | CGNS/HDF5 单块读取、执行子集校验、BlockMesh 适配与度量（第 4 步） |
+| `mesh_cgns.py`     | CGNS/HDF5 读取（单块与多 zone）、执行子集校验、BlockMesh 适配与度量（第 4、6 步） |
+| `multiblock.py`    | 多块路径：入口判定与放行、拓扑校验、交换表、逐 RK 阶段的编排和运行循环（第 6 步） |
 | `channel.py`       | 内部槽道壁面/体积力库；不再是 CLI 算例               |
 | `plate.py`         | 平板形态封装：自由来流常数、入口剖面形状、`apply` = 只写壁面点 |
 | `inflow.py`        | OCFD 1D 入口剖面文件读取（`y rho u v T`，`w≡0`，不插值） |
@@ -655,3 +760,5 @@ python -m opencfd_jax.src.compare diff dump-npz dump-jax
 7. **Poiseuille 的曲线度量是可选的**：内置网格走直角假设（`Ajac=1`）；给 `--mesh` 才读取 CGNS 并计算曲线度量。
 
 8. **验证模块不参与正式求解**：`exact_riemann.py`、`blasius.py`、`compare.py` 都是基准或对拍工具。
+
+9. **多块的参考尺度不是块的尺寸**：`flux_scale` 取等价单块的全局顶点数来算，多块文件自己不携带这个数，所以要显式给（7.1.2）。

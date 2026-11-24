@@ -698,15 +698,20 @@ def _as_float(value, name):
 
 
 def _farfield_state(case):
-    """从 case 读取并校验通用远场的 5 分量守恒状态。
-
-    远场状态必须在 JIT 之前固定；这里做形状、有限值和密度检查，
-    避免把非法状态带进编译后的边界填充。
-    """
+    """从 case 取出通用远场的 5 分量守恒状态，交给 :func:`_check_farfield` 校验。"""
     raw = case.get("farfield")
     if raw is None:
         raise ValueError(
             "通用 FARFIELD 需要 case['farfield']（5 分量守恒量）")
+    return _check_farfield(raw)
+
+
+def _check_farfield(raw):
+    """校验通用远场的 5 分量守恒状态，返回转成数组的值。
+
+    远场状态必须在 JIT 之前固定；这里做形状、有限值和密度检查，
+    避免把非法状态带进编译后的边界填充。
+    """
     state = jnp.asarray(raw)
     if state.shape != (NVARS,):
         raise ValueError(f"case['farfield'] 形状必须是 ({NVARS},)，得到 {state.shape}")
@@ -790,6 +795,21 @@ def _check_faces(faces, kinds, executors, label):
             raise ValueError(
                 f"{label} 的 {side} 执行来源是 {face.executor!r}，但要求 "
                 f"{exec_expected[side]!r}")
+
+
+def _check_generic_faces(faces) -> None:
+    """逐面核对通用边界：都由鬼层填充执行，kind 在通用集合里，WALL 只在计算 j 方向。"""
+    for face in faces:
+        if face.executor != "halo":
+            raise ValueError(
+                f"通用边界 {face.side} 的执行来源必须是 halo，"
+                f"得到 {face.executor!r}")
+        if face.kind not in GENERIC_KINDS:
+            raise ValueError(
+                f"通用边界不支持 {face.side}={face.kind!r}")
+        if face.kind == WALL and face.axis != 1:
+            raise ValueError(
+                f"通用 WALL 只支持计算 j 方向（axis=1），得到 axis={face.axis}")
 
 
 def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
@@ -910,22 +930,40 @@ def build_execution(case: MappingABC, desc=None) -> BoundaryExecution:
         raise ValueError(
             "case 提供了 bc_apply，但没有 channel_bc / plate 特殊边界标记；"
             "未知特殊边界必须在 case 侧显式选择并补六侧描述")
-    for face in faces.values():
-        if face.executor != "halo":
-            raise ValueError(
-                f"通用边界 {face.side} 的执行来源必须是 halo，"
-                f"得到 {face.executor!r}")
-        if face.kind not in GENERIC_KINDS:
-            raise ValueError(
-                f"通用边界不支持 {face.side}={face.kind!r}")
-        if face.kind == WALL and face.axis != 1:
-            raise ValueError(
-                f"通用 WALL 只支持计算 j 方向（axis=1），得到 axis={face.axis}")
+    _check_generic_faces(faces.values())
     needs_farfield = any(f.kind == FARFIELD for f in faces.values())
     farfield = _farfield_state(case) if needs_farfield else None
     return BoundaryExecution("generic", bcs, None, face_tuple,
                              grid=desc.grid, farfield=farfield,
                              band=band, inflow=inflow, phys=phys)
+
+
+def build_block_execution(grid, faces, inflow, farfield, phys) -> BoundaryExecution:
+    """多块路径里一个块的边界执行器（第六步）。
+
+    ``faces`` 只含物理面和块内周期面，按规范六侧顺序的子集给出；接口面不在
+    其中，由多块编排模块接管。没有物理面的块传空元组，这时调用方要显式跳过
+    ``prepare``，不能走它对空 ``faces`` 的回退。
+
+    逐面的检查与 :func:`build_execution` 通用分支共用。轴级 ``bcs`` 在这里填成
+    占位值：每轴的低侧有面就填它的类型，否则填出口类型；``faces`` 非空时
+    ``prepare`` 不读它。
+    """
+    faces = tuple(faces)
+    sides = [face.side for face in faces]
+    if sides != [side for side in SIX_SIDES if side in sides]:
+        raise ValueError(f"块的 faces 必须按 {SIX_SIDES} 的顺序给出子集，得到 {sides}")
+    _check_generic_faces(faces)
+    if any(face.kind == FARFIELD for face in faces):
+        _check_farfield(farfield)
+    if inflow is None and farfield is None and any(
+            face.kind == INFLOW for face in faces):
+        raise ValueError("块的 INFLOW 面需要入口状态或远场状态")
+    bcs = tuple(next((face.kind for face in faces if face.side == SIDES[2 * axis]),
+                     OUTFLOW) for axis in range(3))
+    return BoundaryExecution("generic", bcs, None, faces, grid=grid,
+                             farfield=farfield, band=dif_bound_from_faces(faces),
+                             inflow=inflow, phys=phys)
 
 
 def kinds_for(bcs):
