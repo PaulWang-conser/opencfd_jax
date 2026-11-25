@@ -411,7 +411,7 @@ R20 说的“接低侧供体”“接高侧供体”就是这两列的意思，�
 10. **显式给了 `--cgns-zone ""` 算显式选了 zone**，走单块路径。
     - 原因：空串曾被当成没给，走进了多块路径（Astra 第 17 轮）。
     - 落点：`multiblock.enter`；`experiment/test_step6_config.py` 的 `test_empty_cgns_zone_keeps_the_single_block_path`。
-11. **验收阈值每个守恒量各定相对容差和绝对容差**（R37），数值和实测见下面风险表；绝对容差里的“五个分量的最大值”，给了 `mask` 时取掩码内的。R37 里“按变量、接口邻域和全域分别报告”这一句没有做。
+11. **验收阈值每个守恒量各定相对容差和绝对容差**（R37），数值和实测见下面风险表；绝对容差里的“五个分量的最大值”，给了 `mask` 时取掩码内的。R37 里“按变量、接口邻域和全域分别报告”由验收实现：`experiment/test_step6_acceptance.py` 的 `_check` 先逐块比，再拼回后比全域、接口邻域、其余三部分，每部分报出差得最多的变量。（2026-11-25 订正：这里原写“这一句没有做”，不对。）
     - 原因：五个分量共用一个容差时，能量分量是 1e4 的话，把原为零的动量改成 5e-9 仍能通过（Astra 第 17 轮）。
     - 落点：`experiment/step6_support.py` 的 `RTOL`、`ATOL`、`compare`；`experiment/test_step6_run.py` 的 `test_compare_gives_each_conserved_variable_its_own_tolerance`。
 12. **`compare` 的三条细则**：容差为零时超差倍数记无穷大，倍数相同时按绝对差挑；`mask` 只比其中的点，非有限值也只在其中查，掩码全为假直接报错；数组最后几个轴不是三维时（共线审计拿来比较的 `(5, 点数)`），下标按实际的维数报；掩码的形状要与单个守恒量的空间形状相同；定位最差的点只在掩码内做。
