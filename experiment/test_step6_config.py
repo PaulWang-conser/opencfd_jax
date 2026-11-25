@@ -2,9 +2,9 @@
 
 锁六件事：
   1. 放行的多块配置返回拓扑并打印接口报告；
-  2. 没验收过的开关都在读坐标之前被拦住：生效值（粘性、精度、格式、步长、算例、
-     特殊边界脚本）和显式给出的参数（``--weno-tv``、``--outlet-ghost``、网格尺寸、
-     内置 plate 专用的几个参数）各查各的；
+  2. 没验收过的开关都在读坐标之前被拦住：生效值（粘性导数的阶数、精度、格式、步长、
+     算例、特殊边界脚本）和显式给出的参数（``--weno-tv``、``--outlet-ghost``、网格尺寸、
+     内置 plate 专用的几个参数）各查各的；粘性本身从第七步起放行，只放行 CD8；
   3. 参考尺度必须给出、是有限正数、不小于任何一块按自身尺寸算出的分量；没有走
      多块路径时给出了也报错；
   4. 没有多 zone 的时候走原路径，报错与改动前相同；显式给了 ``--cgns-zone ""`` 算
@@ -131,8 +131,9 @@ def test_command_line_can_switch_off_a_viscous_json(tmp_path):
 
 UNRELEASED = [
     # (JSON 的改动, 命令行, 报错里应当出现的字样)
-    ({"numerics.viscous": True}, (), "viscous"),
-    ({}, ("--viscous",), "viscous"),
+    # 粘性可以打开（第七步），但粘性导数只放行 CD8：JSON 给的 CD6、命令行给的 CD6 都拦
+    ({"numerics.viscous": True, "numerics.vis_order": "CD6"}, (), "vis_order"),
+    ({}, ("--viscous", "--vis-order", "CD6"), "vis_order"),
     ({"precision": "fp32"}, (), "FP64"),
     ({}, ("--fp32",), "FP64"),
     ({"numerics.scheme": "UP7"}, (), "WENO7"),
@@ -381,15 +382,15 @@ def test_multiblock_path_runs_in_fp64(tmp_path):
 
 def test_unreleased_run_from_the_command_line_reports_one_line(tmp_path):
     path = tmp_path / "case.json"
-    path.write_text(json.dumps(_config(support.mesh_path("x2"),
-                                       {"numerics.viscous": True})), encoding="utf-8")
+    path.write_text(json.dumps(_config(support.mesh_path("x2"), {
+        "numerics.viscous": True, "numerics.vis_order": "CD6"})), encoding="utf-8")
     done = subprocess.run(
         [sys.executable, "-m", "opencfd_jax.src.main", "--config", str(path)],
         cwd=PROJECT, capture_output=True, text=True)
     assert done.returncode == 2, done.stderr
     assert "Traceback" not in done.stderr
     reported = [line for line in done.stderr.splitlines() if "初始化错误" in line]
-    assert len(reported) == 1 and "viscous" in reported[0]
+    assert len(reported) == 1 and "vis_order" in reported[0]
 
 
 def test_unreadable_mesh_from_the_command_line_keeps_one_line(tmp_path):

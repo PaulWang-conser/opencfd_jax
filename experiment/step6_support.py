@@ -482,18 +482,20 @@ RTOL = 1e-11      # 相对容差：乘上该守恒量在参考场里的最大值
 ATOL = 1e-13      # 绝对容差：乘上参考场五个分量的最大值
 
 
-def compare(reference, got, label="", mask=None) -> dict:
-    """按阈值比较两个 (5, nk, nj, ni) 的场，超差或出现非有限值时报 AssertionError。
+def compare(reference, got, label="", mask=None, count=5) -> dict:
+    """按阈值比较两个 (分量, nk, nj, ni) 的场，超差或出现非有限值时报 AssertionError。
 
-    每个守恒量的容差是 ``RTOL`` 乘它在参考场里的最大值，加上 ``ATOL`` 乘参考场五个
-    分量的最大值；近零的守恒量由后一项控制。``mask`` 是 (nk, nj, ni) 的布尔数组，
-    给出时只比其中的点，非有限值也只在其中查。返回 {变量号: (最大绝对差, 容差)}。
-    报错时先挑超出容差倍数最大的变量，倍数相同（比如容差都是零）时挑绝对差最大的，
-    再指出差得最多的下标。最后几个轴不是三维时（例如共线审计拿来比较的
-    (5, 点数) 数组），下标按它实际的维数报。
+    每个分量的容差是 ``RTOL`` 乘它在参考场里的最大值，加上 ``ATOL`` 乘参考场全部分量
+    的最大值；近零的分量由后一项控制。``mask`` 是 (nk, nj, ni) 的布尔数组，
+    给出时只比其中的点，非有限值也只在其中查。返回 {分量号: (最大绝对差, 容差)}。
+    ``count`` 是最前面一根轴上分量的个数：缺省 5 是守恒量；比粘性通量 ``Ev`` 时传 12
+    （第七步）。报错时先挑超出容差倍数最大的分量，倍数相同（比如容差都是零）时挑
+    绝对差最大的，再指出差得最多的下标。最后几个轴不是三维时（例如共线审计拿来
+    比较的 (5, 点数) 数组），下标按它实际的维数报。
     """
     reference, got = np.asarray(reference), np.asarray(got)
     assert reference.shape == got.shape, (label, reference.shape, got.shape)
+    assert reference.shape[0] == count, (label, "分量的个数", reference.shape[0], count)
     where = (np.ones(reference.shape[1:], dtype=bool) if mask is None
              else np.asarray(mask, dtype=bool))
     assert where.shape == reference.shape[1:], (label, "mask 的形状", where.shape)
@@ -507,7 +509,7 @@ def compare(reference, got, label="", mask=None) -> dict:
     biggest = float(np.max(np.abs(picked)))
     worst = {v: (float(np.max(np.abs(found[v] - picked[v]))),
                  RTOL * float(np.max(np.abs(picked[v]))) + ATOL * biggest)
-             for v in range(5)}
+             for v in range(count)}
     bad = [v for v in worst if worst[v][0] > worst[v][1]]
     if bad:
         def excess(v):                         # 超出容差多少倍；容差是零时记无穷大
@@ -518,8 +520,9 @@ def compare(reference, got, label="", mask=None) -> dict:
         far = int(np.argmax(np.abs(found[v] - picked[v])))     # 只在掩码内找，掩码外的不做减法
         index = tuple(int(axis[far]) for axis in inside)
         place = f" (k, j, i) = {index}" if len(index) == 3 else f"下标 {index}"
+        name = f"cons_{v}" if count == 5 else f"分量_{v}"
         raise AssertionError(
-            f"{label} 超出容差：cons_{v} 在{place} 差 "
+            f"{label} 超出容差：{name} 在{place} 差 "
             f"{worst[v][0]:.3e}，容差 {worst[v][1]:.3e}；参考值 {reference[(v,) + index]!r}，"
             f"实测值 {got[(v,) + index]!r}")
     return worst

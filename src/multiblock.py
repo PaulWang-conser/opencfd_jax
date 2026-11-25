@@ -20,8 +20,9 @@
 取出物理面和块内周期面，交给 ``boundary.build_block_execution``。
 
 ``solve_step`` 推进一个整步：每个 RK 阶段各块做准备，全块同步交换守恒量鬼胞，
-各块算无粘右端项，再用准备之前的阶段态做组合。``run`` 是正式入口的主循环，
-按块存盘。
+各块算无粘右端项，再用准备之前的阶段态做组合。粘性打开时，各块另外算自己的粘性
+通量 ``Ev``，全块同步交换一次 ``Ev``，对换过的 ``Ev`` 求导并累加（第七步）。
+``run`` 是正式入口的主循环，按块存盘。
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ import re
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 from typing import Any, Mapping
 
 import jax
@@ -51,6 +52,7 @@ from .mesh import (COORD_KEYS, METRIC_KEYS, compute_metrics_from_coords,
 from .mesh_cgns import (CgnsError, CgnsZone, bc_kind, check_extent, face_axes,
                         face_boundary, side_of_face)
 from .solver import (inviscid_rhs, rk3_q1, rk3_q2, rk3_q3, scales_from_sizes)
+from .viscous import viscous_divergence, viscous_fluxes
 
 CUT, SEAM, SELF = "cut", "seam", "self"     # 接口段的类别：普通切口、跨块周期接缝、块内自连接
 PHYSICAL, INTERFACE, PERIODIC_FACE = "physical", "interface", "periodic"   # 面的归类
@@ -59,6 +61,12 @@ GEOMETRY_ATOL = 1e-12       # 几何容差的下限
 MIN_FACE_VERTICES = 7       # 物理面、周期接缝、块内周期面所在的轴：度量的单侧带
 MIN_DONOR_VERTICES = 5      # 普通切口的供体在法向
 MAX_VERTICES = 2**31 - 1    # 旁记里全局顶点数的上限：CGNS 的下标范围是 32 位整数
+CD_ORDER = {"CD6": 6, "CD8": 8}           # 粘性导数的阶数，与 main.build_rhs 里的表相同；
+                                          # runtime_config.VIS_ORDERS 是允许的名字，不是这张表
+# 粘性打开而参考温度取缺省值时的提示，与单块 main.run 打印的那一句逐字相同
+REF_T_WARNING = ("WARNING: Ref_T 用了缺省 288.15 K（空气）。Ref_T 是有量纲参考温度"
+                 "（对应原码 T_REF），只影响 μ 的温度曲线（μ(T=1)=1/Re 与它无关）；"
+                 "与原码对拍时必须用 --ref-t 给出 in 文件里的同值。")
 
 
 @dataclass(frozen=True)
@@ -594,7 +602,8 @@ class Exchange:
     ``slots`` 是接收块含鬼胞数组里的 (k, j, i) 下标，``sources`` 是供体块里对应
     的下标，都是 (3, 点数) 的整数数组。点按数组轴 (k, j, i) 的 C 序铺开，法向轴
     上排的是鬼层号。接收槽全在鬼胞，供体源全在内区，两者不相交，所以从一个快照
-    里读、往另一个块里写，先后顺序无关。坐标、度量、守恒量共用这一张表。
+    里读、往另一个块里写，先后顺序无关。坐标、度量、守恒量、粘性通量 ``Ev`` 共用
+    这一张表。
 
     ``yielded_slots`` / ``yielded_sources`` 是本段让给别的段的顶点：T 形共线处的一条
     棱，阶梯或角点上的一个点。本段本来会往这些槽里写的值取自这些源。运行时不写
@@ -632,7 +641,8 @@ class Block:
 class BlockSet:
     """装配好的全部块和它们的交换表。
 
-    ``gamma`` 是物性参数里的比热比；``kernels`` 缓存按参考尺度编好的求解函数。
+    ``gamma`` 是物性参数里的比热比；``kernels`` 缓存编好的求解函数，按（参考尺度、
+    粘性导数的阶数）分开。
     """
 
     blocks: tuple[Block, ...]
@@ -910,9 +920,12 @@ class StepTrace:
     """一个整步里各阶段的量，验收和诊断用。
 
     ``final`` 是整步后准备并交换过的状态，也是下一步的起点。``du`` 是三个阶段的
-    右端项，``prepared`` 是三个阶段和整步末尾的四次准备，都是 {块名: 数组}。
-    ``q1``、``q2`` 是准备之前的阶段态。``audits`` 是四次准备各次的共线候选，
-    没开审计时每项都是空元组。
+    右端项（粘性打开时含粘性项），``prepared`` 是三个阶段和整步末尾的四次准备，都是
+    {块名: 数组}。``q1``、``q2`` 是准备之前的阶段态。``audits`` 是四次准备各次的共线
+    候选，没开审计时每项都是空元组。
+
+    ``viscous`` 是粘性打开时三个阶段的粘性分项 {块名: 数组}，关闭时是空元组。
+    ``flux`` 是审计打开且粘性打开时三个阶段交换过的 ``Ev``，否则是空元组。
     """
 
     final: dict
@@ -921,10 +934,12 @@ class StepTrace:
     q1: dict
     q2: dict
     audits: tuple
+    viscous: tuple = ()
+    flux: tuple = ()
 
 
 class BlockKernels:
-    """各块 jit 好的物理准备、无粘 RHS，以及整轮的同步交换。
+    """各块 jit 好的物理准备、无粘 RHS、粘性的两段，以及整轮的同步交换。
 
     无粘 RHS 直接调 :func:`inviscid_rhs`，实参与单块 ``main.build_rhs`` 逐项对应：
 
@@ -947,49 +962,125 @@ class BlockKernels:
     flux_scale       flux_scales_for(grid, dxs, ...)   配置给的三元组，按 i、j、k 排列
     ===============  ===============================  ==================================
 
-    多块里恒为空的项：粘性项、体积力、槽道源项。没有物理面的块没有 ``prepare``。
+    ``vis_order`` 不是 ``None`` 时粘性打开，每块多两个函数，阶数是 ``vis_order``
+    （CD6 是 6，CD8 是 8）。``flux`` 由状态算粘性通量 ``Ev``，直接调
+    :func:`viscous_fluxes`，实参与单块 ``main.build_rhs`` 调用 ``viscous_rhs`` 时逐项对应：
+
+    ====================  ===============================  ==================================
+    实参                  单块 main.build_rhs               多块
+    ====================  ===============================  ==================================
+    cons                  右端项函数里准备过的 q            准备且交换过的块状态
+    grid                  desc.grid                        block.grid
+    params                case["params"]                   block.execution.phys
+    bcs                   execution.bcs                    block.execution.bcs（占位值）
+    axes                  desc.axes                        (0, 1, 2)
+    dx                    desc.dxs                         block.dxs，即 (1.0, 1.0, 1.0)
+    order                 vis_order                        ``vis_order``
+    metrics               desc.metrics                     block.metrics
+    dif_bound             execution.band                   block.execution.band
+    dif_axis_map          desc.dif_axis_map                (0, 1, 2)
+    boundary_execution    execution                        block.execution
+    farfield              execution.farfield               block.execution.farfield
+    faces                 execution.faces                  block.faces；没有面时是空元组
+    zero_state_ghosts     False                            False
+    fill_state_halos      False                            False
+    ====================  ===============================  ==================================
+
+    ``divergence`` 对交换过的 ``Ev`` 求导，直接调 :func:`viscous_divergence`；
+    ``grid``、``axes``、``dx``、``order``、``metrics``、``dif_bound``、``dif_axis_map``
+    与上表相同。
+
+    ``swap`` 搬的是含鬼胞数组的下标，最前面一根轴整段一起搬：守恒量是 5 个分量，
+    ``Ev`` 是 12 个平面，都用它。
+
+    多块里恒为空的项：体积力、槽道源项。没有物理面的块没有 ``prepare``。
     """
 
-    def __init__(self, built: BlockSet, flux_scale):
+    def __init__(self, built: BlockSet, flux_scale, vis_order=None, plain=None):
         self.blocks = built.blocks
         self.names = [block.name for block in built.blocks]
         self.tables = built.tables
-        gamma = built.gamma
-
-        def rhs_of(block):
-            return jax.jit(lambda q: inviscid_rhs(
-                q, block.grid, gamma=gamma, bcs=block.execution.bcs,
-                axes=block.axes, dx=block.dxs, scheme="WENO7", weno_tv=None,
-                metrics=block.metrics, dif_bound=block.execution.band,
-                zero_state_ghosts=False, dif_axis_map=(0, 1, 2),
-                farfield=block.execution.farfield, faces=block.faces,
-                fill_state_halos=False, flux_scale=flux_scale))
-
-        self.prepare = [jax.jit(block.execution.prepare) if block.faces else None
-                        for block in built.blocks]
-        self.rhs = [rhs_of(block) for block in built.blocks]
-        self.q1, self.q2, self.q3 = (jax.jit(rk3_q1), jax.jit(rk3_q2), jax.jit(rk3_q3))
-        # 整轮交换编成一个函数：接口多、块小时，逐表在 jit 外做会被宿主开销压倒
-        where = {name: n for n, name in enumerate(self.names)}
-        plan = [(where[t.interface.zone], where[t.interface.donor_zone],
-                 jnp.asarray(t.slots), jnp.asarray(t.sources))
-                for t in self.tables]
-
-        def swap(*states):                 # 读的都是交换前的快照
-            out = list(states)
-            for recv, give, slots, sources in plan:
-                out[recv] = out[recv].at[(slice(None),) + tuple(slots)].set(
-                    states[give][(slice(None),) + tuple(sources)])
-            return tuple(out)
-
-        self.swap = jax.jit(swap)
+        self.vis_order = vis_order
+        if plain is None:
+            plain = _plain_kernels(built, flux_scale)
+        # 与粘性阶数无关的函数用同一批：compile_blocks 在同一组参考尺度下已经编过时就传进来
+        self.prepare, self.rhs = plain.prepare, plain.rhs
+        self.q1, self.q2, self.q3, self.swap = plain.q1, plain.q2, plain.q3, plain.swap
+        # 粘性关闭时不编这两个函数，求解函数与无粘时相同
+        self.flux = ([flux_kernel(block, vis_order) for block in built.blocks]
+                     if vis_order is not None else [])
+        self.divergence = ([divergence_kernel(block, vis_order) for block in built.blocks]
+                           if vis_order is not None else [])
 
 
-def compile_blocks(built: BlockSet, flux_scale) -> BlockKernels:
-    """给一套块编求解函数；同一套块、同一组参考尺度只编一次。"""
-    key = tuple(float(value) for value in flux_scale)
+def flux_kernel(block, order):
+    """一块“由状态算 Ev”的 jit 函数，实参见 :class:`BlockKernels` 说明里的第二张表。
+
+    测试里只要换粘性这两段时直接用它，不必为了改动粘性把无粘的部分整套重编。
+    """
+    execution = block.execution
+    return jax.jit(lambda q: viscous_fluxes(
+        q, block.grid, execution.phys, bcs=execution.bcs, axes=block.axes,
+        dx=block.dxs, order=order, metrics=block.metrics,
+        dif_bound=execution.band, zero_state_ghosts=False,
+        dif_axis_map=(0, 1, 2), boundary_execution=execution,
+        farfield=execution.farfield, faces=block.faces, fill_state_halos=False))
+
+
+def divergence_kernel(block, order):
+    """一块“对 Ev 求导”的 jit 函数，实参见 :class:`BlockKernels` 的说明。"""
+    execution = block.execution
+    return jax.jit(lambda ev: viscous_divergence(
+        ev, block.grid, axes=block.axes, dx=block.dxs, order=order,
+        metrics=block.metrics, dif_bound=execution.band, dif_axis_map=(0, 1, 2)))
+
+
+def _plain_kernels(built: BlockSet, flux_scale):
+    """与粘性无关的那部分求解函数：各块的物理准备、无粘 RHS、RK 组合和整轮的守恒量交换。"""
+    gamma = built.gamma
+
+    def rhs_of(block):
+        return jax.jit(lambda q: inviscid_rhs(
+            q, block.grid, gamma=gamma, bcs=block.execution.bcs,
+            axes=block.axes, dx=block.dxs, scheme="WENO7", weno_tv=None,
+            metrics=block.metrics, dif_bound=block.execution.band,
+            zero_state_ghosts=False, dif_axis_map=(0, 1, 2),
+            farfield=block.execution.farfield, faces=block.faces,
+            fill_state_halos=False, flux_scale=flux_scale))
+
+    prepare = [jax.jit(block.execution.prepare) if block.faces else None
+               for block in built.blocks]
+    rhs = [rhs_of(block) for block in built.blocks]
+    q1, q2, q3 = jax.jit(rk3_q1), jax.jit(rk3_q2), jax.jit(rk3_q3)
+    # 整轮交换编成一个函数：接口多、块小时，逐表在 jit 外做会被宿主开销压倒
+    where = {block.name: n for n, block in enumerate(built.blocks)}
+    plan = [(where[t.interface.zone], where[t.interface.donor_zone],
+             jnp.asarray(t.slots), jnp.asarray(t.sources))
+            for t in built.tables]
+
+    def swap(*states):                         # 读的都是交换前的快照
+        out = list(states)
+        for recv, give, slots, sources in plan:
+            out[recv] = out[recv].at[(slice(None),) + tuple(slots)].set(
+                states[give][(slice(None),) + tuple(sources)])
+        return tuple(out)
+
+    return SimpleNamespace(prepare=prepare, rhs=rhs, q1=q1, q2=q2, q3=q3,
+                           swap=jax.jit(swap))
+
+
+def compile_blocks(built: BlockSet, flux_scale, vis_order=None) -> BlockKernels:
+    """给一套块编求解函数；同一套块、同一组参考尺度、同一个粘性导数的阶数只编一次。
+
+    ``vis_order`` 是粘性导数的阶数，CD6 是 6、CD8 是 8（表见 ``CD_ORDER``）；
+    ``None`` 关闭粘性，编出来的求解函数与无粘时相同。与粘性无关的函数（物理准备、无粘
+    RHS、RK 组合、守恒量交换）在同一组参考尺度下只编一次，几种阶数共用同一批。
+    """
+    key = (tuple(float(value) for value in flux_scale), vis_order)
     if key not in built.kernels:
-        built.kernels[key] = BlockKernels(built, key)
+        plain = next((kernels for (scale, _), kernels in built.kernels.items()
+                      if scale == key[0]), None)
+        built.kernels[key] = BlockKernels(built, key[0], key[1], plain)
     return built.kernels[key]
 
 
@@ -1002,21 +1093,31 @@ def solve_step(kernels: BlockKernels, cons: dict, dt, order=None,
     起点做 RK 组合。整步组合完成后全块再做一次带交换的准备，交给下一步。
 
     ``cons`` 是 {块名: 状态}。``order`` 是交换表的遍历顺序，缺省按拓扑里的顺序，
-    结果与它无关。``audit`` 打开时导出每次准备的共线候选。
+    结果与它无关。``audit`` 打开时导出每次准备的共线候选；粘性打开时另外导出
+    三个阶段交换过的 ``Ev``。
+
+    粘性打开时（``kernels.vis_order`` 不是 ``None``），算完无粘右端项以后，各块再用
+    同一份状态算自己的 ``Ev``，全块同步交换一次 ``Ev``，各块对换过的 ``Ev`` 求导，
+    累加进右端项。
     """
     names = kernels.names
     tables = kernels.tables if order is None else [
         kernels.tables[index] for index in order]
     count = len(names)
 
+    def swap_all(pieces):
+        """全块同步交换一次，守恒量和 ``Ev`` 都走这里，读的都是交换前的快照。jit
+        路径整轮编成一个函数；急切路径按 ``tables`` 的顺序。"""
+        if order is None:
+            return list(kernels.swap(*pieces))
+        swapped = exchange(tables, dict(zip(names, pieces)))
+        return [swapped[name] for name in names]
+
     def get_ready(stage):
         """物理准备，然后同步交换；返回 (准备好的各块, 准备并交换过的各块)。"""
         ready = [prepare(state) if prepare is not None else state
                  for prepare, state in zip(kernels.prepare, stage)]
-        if order is None:
-            return ready, list(kernels.swap(*ready))
-        swapped = exchange(tables, dict(zip(names, ready)))
-        return ready, [swapped[name] for name in names]
+        return ready, swap_all(ready)
 
     def get_audit(ready, state):
         if not audit:
@@ -1024,11 +1125,19 @@ def solve_step(kernels: BlockKernels, cons: dict, dt, order=None,
         return audit_collinear(tables, dict(zip(names, ready)), dict(zip(names, state)))
 
     raw = [cons[name] for name in names]
-    force, prepared, audits = [], [], []
+    force, viscous, fluxes, prepared, audits = [], [], [], [], []
     stage, first, second = raw, None, None
     for index in range(3):
         ready, state = get_ready(stage)
         du = [rhs(q) for rhs, q in zip(kernels.rhs, state)]
+        if kernels.vis_order is not None:
+            own = [flux(q) for flux, q in zip(kernels.flux, state)]
+            moved = swap_all(own)
+            part = [divergence(ev) for divergence, ev in zip(kernels.divergence, moved)]
+            du = [a + b for a, b in zip(du, part)]
+            viscous.append(dict(zip(names, part)))
+            if audit:
+                fluxes.append(dict(zip(names, moved)))
         force.append(dict(zip(names, du)))
         prepared.append(dict(zip(names, state)))
         audits.append(get_audit(ready, state))
@@ -1045,7 +1154,8 @@ def solve_step(kernels: BlockKernels, cons: dict, dt, order=None,
     audits.append(get_audit(ready, state))
     return StepTrace(final=dict(zip(names, state)), du=tuple(force),
                      prepared=tuple(prepared), q1=dict(zip(names, first)),
-                     q2=dict(zip(names, second)), audits=tuple(audits))
+                     q2=dict(zip(names, second)), audits=tuple(audits),
+                     viscous=tuple(viscous), flux=tuple(fluxes))
 
 
 def solve(kernels: BlockKernels, dt, steps: int, initial=None, order=None,
@@ -1128,7 +1238,8 @@ def run(args, setup: MultiSetup) -> None:
 
     步长、终止条件和保存时机与单块的 ``main.run`` 相同。每个显示步对每块各打印
     一行诊断；每个保存步每块各存一个 NPZ，文件名带块名的 slug，``_meta`` 多一项
-    ``zone``。
+    ``zone``。粘性打开时启动信息多一行：粘性导数的阶数和 Re、Ama、参考温度、Pr；
+    参考温度取缺省值时的提示与单块相同。
     """
     whole = _global_sizes(args.mesh)
     try:
@@ -1138,14 +1249,21 @@ def run(args, setup: MultiSetup) -> None:
     except ValueError as exc:
         raise SetupError(f"多块网格装配失败：{exc}") from exc
     slugs = block_slugs([block.name for block in built.blocks])
-    kernels = compile_blocks(built, setup.flux_scale)
+    # plate 不强制粘性，生效的粘性就是 args.viscous；导数的阶数与单块同一张表
+    vis_order = CD_ORDER[args.vis_order] if args.viscous else None
+    kernels = compile_blocks(built, setup.flux_scale, vis_order)
     params = physical_params(args)
     prefix = getattr(args, "out_prefix", None) or args.case
     print(f"case={args.case} blocks={len(built.blocks)} scheme={args.scheme} "
-          f"viscous=False precision={config.precision_name()} "
+          f"viscous={vis_order is not None} precision={config.precision_name()} "
           f"flux_scale={tuple(setup.flux_scale)} dt-mode=fixed({args.dt}) "
           f"out-prefix={prefix} "
           f"config={getattr(args, 'config_path', None) or 'cli'}")
+    if vis_order is not None:
+        print(f"vis-order={args.vis_order} Re={params.Re} Ama={params.Ama} "
+              f"Ref_T={params.Ref_T} Pr={params.Pr}")
+        if args.ref_t is None:
+            print(REF_T_WARNING)
 
     cons = {block.name: block.cons0 for block in built.blocks}
     t0 = time.time()
@@ -1222,8 +1340,9 @@ def _check_release(args) -> None:
     dt = getattr(args, "dt", None)
     if dt is None or not np.isfinite(dt) or dt <= 0.0:
         stop(f"步长 dt={dt!r}，需要有限正数的固定步长")
-    if getattr(args, "viscous", False):
-        stop("粘性项是开的，只放行无粘；用 --no-viscous 关掉")
+    if getattr(args, "viscous", False) and getattr(args, "vis_order", None) != "CD8":
+        stop(f"粘性项是开的，粘性导数的阶数 vis_order={getattr(args, 'vis_order', None)!r}，"
+             "只放行 CD8")
     if getattr(args, "specificboundary", None):
         stop(f"带了特殊边界脚本 {args.specificboundary!r}（specificboundary），"
              "多块暂不支持")
