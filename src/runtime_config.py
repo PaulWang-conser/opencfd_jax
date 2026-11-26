@@ -65,6 +65,7 @@ _SCHEMA = {
         "dt": ("dt", "dt"),
         "end_time": ("number", "end_time"),
         "end_step": ("int", "end_step"),
+        "restart": ("path", "restart"),
     },
     "case": {
         "name": ("str", "case"),

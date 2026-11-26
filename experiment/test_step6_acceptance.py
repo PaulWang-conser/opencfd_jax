@@ -291,12 +291,12 @@ def test_saved_files_reassemble_to_the_single_block_state(tmp_path):
     out.mkdir()
     main.run(support.run_args("x2", out_dir=str(out), end_time=STEPS * DT,
                               end_step=STEPS, kstep_save=STEPS))
-    pieces = {}
-    for path in sorted(out.iterdir()):
-        fields, meta = io.load_npz(str(path))
-        assert meta["step"] == STEPS and meta["t"] == pytest.approx(STEPS * DT)
-        assert meta["dt"] == pytest.approx(DT) and meta["zone"] in {"blk-i0j0k0", "blk-i1j0k0"}
-        pieces[meta["zone"]] = np.stack([fields[f"cons_{i}"] for i in range(5)])
-    assert sorted(pieces) == ["blk-i0j0k0", "blk-i1j0k0"]
-    back = support.reassemble(support.sidecar("x2"), pieces)
-    support.compare(cons[state.desc.grid.inner()], back, "存盘读回")
+    [path] = out.iterdir()
+    meta, blocks, fields = io.load_checkpoint(str(path))
+    assert meta["step"] == STEPS and meta["t"] == pytest.approx(STEPS * DT)
+    assert meta["dt"] == pytest.approx(DT) and "zone" not in meta
+    assert [entry["name"] for entry in blocks["blocks"]] == ["blk-i0j0k0", "blk-i1j0k0"]
+    back = support.reassemble(blocks, {
+        entry["name"]: np.asarray(io.conservative_of(field, state.case["params"]))
+        for entry, field in zip(blocks["blocks"], fields)})
+    support.compare(np.asarray(cons)[state.desc.grid.inner()], back, "存盘读回")

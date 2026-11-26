@@ -52,9 +52,13 @@ def sha256_file(path: Path) -> str:
 
 
 def npz_summary(path: Path) -> dict:
-    """读一个 npz，返回 {变量名: 形状/统计} 与 _meta。"""
+    """读一个 npz，返回 {变量名: 形状/统计}、rho 的范围 [min, max] 与 _meta。
+
+    第八步起的检查点每块一个数组 b{块号}，第一根轴依次是 rho、u、v、w、T，密度取 b0
+    的第 0 个分量；旧的 cons_0..4 取 cons_0。
+    """
     data = np.load(path)
-    fields, meta = {}, None
+    fields, meta, rho = {}, None, None
     for key in data.files:
         arr = data[key]
         if key == "_meta":
@@ -70,7 +74,10 @@ def npz_summary(path: Path) -> dict:
                 "mean": float(a.mean()) if a.size else None,
                 "nan": int(np.count_nonzero(~np.isfinite(a))),
             }
-    return {"fields": fields, "meta": meta}
+        if key in ("b0", "cons_0"):
+            rho = a[0] if key == "b0" else a
+    return {"fields": fields, "meta": meta,
+            "rho": None if rho is None or rho.size == 0 else [float(rho.min()), float(rho.max())]}
 
 
 def git_info() -> dict:
@@ -178,9 +185,12 @@ def write_markdown(manifest: dict, path: Path):
         mb = sum(f["bytes"] for f in rec["files"]) / 1e6
         rho_lo = rho_hi = None
         for f in rec["files"]:
-            s = f.get("fields", {}).get("cons_0")
-            if s:
-                lo, hi = s["min"], s["max"]
+            span = f.get("rho")                      # 这一步之前登记的清单没有这一项
+            if not span:
+                s = f.get("fields", {}).get("cons_0")
+                span = [s["min"], s["max"]] if s else None
+            if span:
+                lo, hi = span
                 rho_lo = lo if rho_lo is None else min(rho_lo, lo)
                 rho_hi = hi if rho_hi is None else max(rho_hi, hi)
         rng = ("—" if rho_lo is None else f"{rho_lo:.6g} ~ {rho_hi:.6g}")

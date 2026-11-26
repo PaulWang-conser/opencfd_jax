@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""三维快照 (.npz: 5 个守恒量) -> Tecplot 二进制 .plt（v112）
+"""三维快照 (.npz: 原始变量 rho,u,v,w,T) -> Tecplot 二进制 .plt（v112）
 
 自包含实现：不依赖 Tecplot 程序（不用 preplot / tecplot.exe），也不依赖其它脚本。
 
-守恒量 cons_0..4 = rho, rho*u, rho*v, rho*w, rhoE，数组形状 (nz, ny, nx)，x 变化最快。
+第八步起的检查点每块一个数组 b{块号}，第一根轴依次是 rho, u, v, w, T，数组形状
+(nz, ny, nx)，x 变化最快。多块的检查点不转（只导出一块会丢掉其余的），报错；要转先用
+opencfd_jax.src.io.assemble 拼回等价单块。旧的 cons_0..4（守恒量）也认，按 _meta 里的
+gamma、Ama 换成原始量，_meta 里没有这两项时用下面 GAMMA、M_R 的缺省值。
 派生量：
-    u,v,w = rho{u,v,w}/rho
-    p     = (gamma-1) * (rhoE - 0.5*rho*(u²+v²+w²))
-    T     = p * gamma * Mr² / rho
+    p     = rho*T / (gamma*Mr²)
     Ma    = Mr * |V| / sqrt(T)
 坐标：优先读 OCFD3d-Mesh.dat（record = int32 标记 + nx*ny 个值 + int32 标记，x 最快），
       找不到时按 case iiA 解析网格重建（Lx=4π, Lz=4π/3, tanh 拉伸 β=1.7）。
@@ -33,6 +34,7 @@ import argparse
 import json
 import math
 import os
+import re
 import struct
 import sys
 import time
@@ -235,18 +237,32 @@ def read_plt(path):
 
 # ------------------------------------------------------------------ 快照/网格
 def load_snapshot(path):
+    """返回 (原始变量 (5, nz, ny, nx), meta)；第一根轴依次是 rho, u, v, w, T。"""
     z = np.load(path, allow_pickle=True)
-    keys = [k for k in z.files if k.startswith("cons_")]
-    if len(keys) != 5:
-        raise ValueError("期望 cons_0..4 共 5 个守恒量，实际 %s" % z.files)
-    cons = np.stack([z[k] for k in keys], axis=0)          # (5, nz, ny, nx)
     meta = {}
     if "_meta" in z.files:
         try:
             meta = json.loads(z["_meta"].tobytes().decode("utf-8"))
         except Exception:
             pass
-    return cons, meta
+    blocks = sorted((k for k in z.files if re.fullmatch(r"b\d+", k)), key=lambda k: int(k[1:]))
+    if len(blocks) > 1 or "_blocks" in z.files:
+        # 只导出第 0 块会悄悄丢掉其余的；本脚本也没有各块的坐标，拼不回等价单块
+        raise ValueError("这是多块的检查点（%d 块），本脚本只转单块的；"
+                         "要转多块，请先用 opencfd_jax.src.io.assemble 拼回等价单块" % len(blocks))
+    if blocks:
+        return np.asarray(z[blocks[0]]), meta
+    keys = sorted(k for k in z.files if re.fullmatch(r"cons_\d", k))
+    if len(keys) != 5:
+        raise ValueError("期望 b{块号} 或 cons_0..4，实际 %s" % z.files)
+    cons = np.stack([z[k] for k in keys], axis=0)          # (5, nz, ny, nx)
+    gamma = float(meta.get("gamma", GAMMA))
+    mr = float(meta.get("Ama", M_R))
+    cv = 1.0 / (gamma * (gamma - 1.0) * mr * mr)
+    rho = cons[0]
+    u, v, w = cons[1] / rho, cons[2] / rho, cons[3] / rho
+    T = (cons[4] / rho - 0.5 * (u * u + v * v + w * w)) / cv
+    return np.stack([rho, u, v, w, T], axis=0), meta
 
 
 def read_mesh_records(path, nx, ny, nz):
@@ -306,8 +322,8 @@ def main():
 
     snap = os.path.abspath(args.snapshot)
     t0 = time.time()
-    cons, meta = load_snapshot(snap)
-    nz, ny, nx = cons.shape[1:]
+    prim, meta = load_snapshot(snap)
+    nz, ny, nx = prim.shape[1:]
     step = int(meta.get("step", 0))
     npts = nx * ny * nz
 
@@ -316,7 +332,7 @@ def main():
     print("  meta    : step=%s  t=%s  dt=%s  scheme=%s  source=%s"
           % (meta.get("step"), meta.get("t"), meta.get("dt"),
              meta.get("scheme"), meta.get("source")))
-    print("  读入    : %.1f s, %.1f MB" % (time.time() - t0, cons.nbytes / 1e6))
+    print("  读入    : %.1f s, %.1f MB" % (time.time() - t0, prim.nbytes / 1e6))
 
     mesh = args.mesh or find_mesh(snap, meta)
     if mesh:
@@ -329,14 +345,12 @@ def main():
           % (x.min(), x.max(), y.min(), y.max(), z.min(), z.max()))
 
     # 派生量
-    rho = cons[0]
-    u = cons[1] / rho
-    v = cons[2] / rho
-    w = cons[3] / rho
+    rho, u, v, w, T = prim
+    gamma = float(meta.get("gamma", GAMMA))
+    mr = float(meta.get("Ama", M_R))
     q2 = u * u + v * v + w * w
-    p = (GAMMA - 1.0) * (cons[4] - 0.5 * rho * q2)
-    T = p * GAMMA * M_R ** 2 / rho
-    Ma = M_R * np.sqrt(q2) / np.sqrt(T)
+    p = rho * T / (gamma * mr * mr)
+    Ma = mr * np.sqrt(q2) / np.sqrt(T)
 
     print("\n派生量范围（可与 run.log 对照）:")
     for nm, a in (("rho", rho), ("u", u), ("v", v), ("w", w), ("T", T), ("p", p), ("Ma", Ma)):

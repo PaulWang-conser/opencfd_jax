@@ -85,6 +85,59 @@ class CheckStep0Test(unittest.TestCase):
             self.assertEqual(result["status"], "FAIL")
             self.assertTrue(any("_meta.step" in p for p in result["problems"]))
 
+    def test_old_baseline_against_new_candidate(self):
+        """基准是第八步以前的格式（cons_0..4）、候选是第八步起的格式（b0）：基准的
+        守恒量先换成原始量再逐位比；值差一点判 FAIL。"""
+        from opencfd_jax.src import io
+        rng = np.random.default_rng(0)
+        cons = rng.uniform(0.5, 1.5, (5, 2, 3, 4))
+        meta = {"t": 0.1, "step": 1, "dt": 0.1, "gamma": 1.4, "Ama": 0.1}
+        meta_bytes = np.frombuffer(json.dumps(meta).encode(), dtype=np.uint8)
+        prim = io.primitive_of(cons, io.phys_from_meta(meta))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base, candidate = root / "base", root / "candidate"
+            base.mkdir()
+            candidate.mkdir()
+            np.savez(base / "a.npz", **{f"cons_{i}": cons[i] for i in range(5)},
+                     _meta=meta_bytes)
+            digest = hashlib.sha256((base / "a.npz").read_bytes()).hexdigest()
+            (base / "case.json").write_text(json.dumps(
+                {"files": [{"name": "a.npz", "sha256": digest}]}))
+
+            def compare(field):
+                np.savez(candidate / "a.npz", b0=field, _meta=meta_bytes)
+                return check.compare_case(base, candidate, 0)["status"]
+
+            self.assertEqual(compare(prim), "PASS")
+            damaged = prim.copy()
+            damaged[4, 1, 1, 1] = np.nextafter(damaged[4, 1, 1, 1], np.inf)
+            self.assertEqual(compare(damaged), "FAIL")
+
+    def test_npz_summary_reads_both_layouts(self):
+        """登记清单：新格式按 b0 记一项，密度取 b0 的第 0 个分量；旧的取 cons_0。"""
+        import run_step0
+        rng = np.random.default_rng(1)
+        cons = rng.uniform(0.5, 1.5, (5, 2, 3, 4))
+        meta_bytes = np.frombuffer(b'{"t": 0.1, "step": 1, "dt": 0.1}', dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as tmp:
+            old, new = Path(tmp) / "old.npz", Path(tmp) / "new.npz"
+            np.savez(old, **{f"cons_{i}": cons[i] for i in range(5)}, _meta=meta_bytes)
+            np.savez(new, b0=cons, _meta=meta_bytes)        # 只看数组的排法，不求解
+            for path, keys in ((old, ["cons_0", "cons_1", "cons_2", "cons_3", "cons_4"]),
+                               (new, ["b0"])):
+                summary = run_step0.npz_summary(path)
+                self.assertEqual(sorted(summary["fields"]), keys)
+                self.assertEqual(summary["rho"], [float(cons[0].min()), float(cons[0].max())])
+            # 这一步以前登记的清单没有 rho 一项：报告照旧从 cons_0 的统计取密度范围
+            manifest = {"created": "", "env": {"python": "", "numpy": ""}, "git": {},
+                        "cases": [{"id": "x", "title": "t", "wall_seconds": 1.0, "files": [
+                            {"bytes": 10, "fields": {"cons_0": {"min": 0.9, "max": 1.1}}},
+                            {"bytes": 10, "rho": [0.95, 1.05]}]}]}
+            report = Path(tmp) / "report.md"
+            run_step0.write_markdown(manifest, report)
+            self.assertIn("| 0.9 ~ 1.1 |", report.read_text(encoding="utf-8"))
+
     def test_step_of_supports_both_output_names(self):
         self.assertEqual(check.step_of("channel_step000001.npz"), 1)
         self.assertEqual(check.step_of("OCFD3d-Mesh-istep-00000001.npz"), 1)

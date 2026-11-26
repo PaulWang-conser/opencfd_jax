@@ -57,30 +57,15 @@ def sidecar(preset: str) -> dict:
 
 
 def block_window(entry: dict, shift: int = 0) -> tuple:
-    """旁记里一块的范围在全局数组上的切片，轴序 (k, j, i)。
-
-    ``entry`` 是旁记 ``blocks`` 里的一项。``shift`` 同时加在起止上：含四层鬼胞的
-    数组传 ``LAP``，全局内区的数组传 0。
-    """
-    k0, j0, i0 = (value + shift for value in entry["start"][::-1])
-    k1, j1, i1 = (value + shift for value in entry["stop"][::-1])
-    return (slice(k0, k1), slice(j0, j1), slice(i0, i1))
+    """旁记或块清单里一块的范围在全局数组上的切片，轴序 (k, j, i)；见 ``io.block_window``。"""
+    from opencfd_jax.src import io
+    return io.block_window(entry, shift)
 
 
 def reassemble(note: dict, pieces: dict) -> np.ndarray:
-    """按旁记把各块顶点上的数组拼回全局。
-
-    ``pieces`` 是 {块名: 数组}，数组的最后三个轴是 (k, j, i)，长度是各块的顶点数；
-    前面可以再带别的轴，例如守恒量最前面的变量轴。切口那一层两块各有一份，后写
-    的盖住先写的；要比各份副本就先比，再拼回。
-    """
-    nk, nj, ni = note["global_vertices"][::-1]
-    first = next(iter(pieces.values()))
-    lead = (slice(None),) * (first.ndim - 3)
-    out = np.empty(first.shape[:-3] + (nk, nj, ni), dtype=first.dtype)
-    for entry in note["blocks"]:
-        out[lead + block_window(entry)] = pieces[entry["name"]]
-    return out
+    """按旁记把各块内区的数组拼回等价单块的内区；见 ``io.assemble``。"""
+    from opencfd_jax.src import io
+    return io.assemble(note, pieces)
 
 
 def topology(preset: str):

@@ -22,14 +22,14 @@
 ``solve_step`` 推进一个整步：每个 RK 阶段各块做准备，全块同步交换守恒量鬼胞，
 各块算无粘右端项，再用准备之前的阶段态做组合。粘性打开时，各块另外算自己的粘性
 通量 ``Ev``，全块同步交换一次 ``Ev``，对换过的 ``Ev`` 求导并累加（第七步）。
-``run`` 是正式入口的主循环，按块存盘。
+``run`` 是正式入口的主循环，每个保存步存一个检查点，每块一个数组、带一份块清单；给了
+``--restart`` 就从那张检查点接着算（第八步）。
 """
 
 from __future__ import annotations
 
 import json
 import numbers
-import re
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -1171,25 +1171,8 @@ def solve(kernels: BlockKernels, dt, steps: int, initial=None, order=None,
     return traces
 
 
-def block_slugs(names) -> dict:
-    """块名到文件名用的 slug：连续空白换成下划线，其余不是字母、数字、下划线、点、
-    短横的字符也换成下划线。两个块的 slug 不分大小写比较也相同时报错：Windows 的
-    文件名不分大小写，文件要靠它区分。"""
-    slugs, owners = {}, {}
-    for name in names:
-        slug = re.sub(r"[^A-Za-z0-9_.-]", "_", re.sub(r"\s+", "_", str(name)))
-        if slug.casefold() in owners:
-            raise SetupError(
-                f"块 {name!r} 的文件名 slug {slug!r} 与块 {owners[slug.casefold()]!r} 的 "
-                f"{slugs[owners[slug.casefold()]]!r} 不分大小写时相同，会写进同一个文件")
-        slugs[name] = slug
-        owners[slug.casefold()] = name
-    return slugs
-
-
-def _global_sizes(mesh):
-    """网格旁边的旁记 JSON 记着等价单块的全局顶点数时取它；没有旁记文件、或旁记里
-    没记这一项时返回 None。
+def _sidecar(mesh):
+    """网格旁边的旁记 JSON。没有旁记文件时返回 None；内容不是对象时返回空字典。
 
     旁记文件在而内容读不出来是 ``SetupError``：悄悄当作没有，各块就按自己的轴长选
     坐标鬼层的规则，短块物理面旁的坐标会变。
@@ -1201,13 +1184,59 @@ def _global_sizes(mesh):
         return None
     except Exception as exc:      # 语法坏了、读不了、嵌套太深：一律算旁记读不出来
         raise SetupError(f"多块网格的旁记 {path} 读不出来：{exc}") from exc
-    if not isinstance(note, dict) or "global_vertices" not in note:
+    return note if isinstance(note, dict) else {}
+
+
+def _block_list(blocks, note) -> dict:
+    """检查点的块清单：每块的名字和尺寸。旁记记着等价单块的全局顶点数和各块的起止
+    下标、并且与网格对得上时，把它们也记进去。
+
+    对得上是指块名按顺序与网格的 zone 一致，每一块 ``stop − start`` 等于该块的尺寸。
+    旁记里没有这些项，或者尺寸对不上时，只记名字和尺寸，不提示；旁记在、块名却对
+    不上时另外打印一句提示。
+    """
+    sizes = [[block.grid.ni, block.grid.nj, block.grid.nk] for block in blocks]
+    plain = [{"name": block.name, "size": size} for block, size in zip(blocks, sizes)]
+    entries = note.get("blocks") if note else None
+    names = ([entry.get("name") for entry in entries]
+             if isinstance(entries, list) and all(isinstance(entry, dict) for entry in entries)
+             else [])
+    if names != [block.name for block in blocks]:
+        if note:
+            print("提示：多块网格的旁记里的块名与网格的 zone 顺序对不上，"
+                  "检查点不记各块的位置")
+        return {"blocks": plain}
+    if ("global_vertices" in note and len(entries) == len(blocks)
+            and all(_window(entry, size) for entry, size in zip(entries, sizes))):
+        return {"global_vertices": list(note["global_vertices"]),
+                "blocks": [dict(entry, size=size) for entry, size in zip(entries, sizes)]}
+    return {"blocks": plain}
+
+
+def _window(entry, size) -> bool:
+    """旁记里这一块的起止下标是三个数，并且 ``stop − start`` 等于 ``size``。"""
+    start, stop = entry.get("start"), entry.get("stop")
+    if not (isinstance(start, list) and isinstance(stop, list)
+            and len(start) == len(stop) == 3):
+        return False
+    return [b - a for a, b in zip(start, stop)] == size
+
+
+def _global_sizes(mesh):
+    """网格旁边的旁记 JSON 记着等价单块的全局顶点数时取它；没有旁记文件、或旁记里
+    没记这一项时返回 None。
+
+    旁记文件在而内容读不出来是 ``SetupError``，见 :func:`_sidecar`。
+    """
+    note = _sidecar(mesh)
+    if note is None or "global_vertices" not in note:
         return None                               # 旁记里没记这一项
     whole = note["global_vertices"]
     reason = _why_not_sizes(whole)
     if reason is not None:
         raise SetupError(
-            f"多块网格的旁记 {path} 里 global_vertices={whole!r} 不对：{reason}")
+            f"多块网格的旁记 {Path(mesh).with_suffix('.json')} 里 "
+            f"global_vertices={whole!r} 不对：{reason}")
     return tuple(int(value) for value in whole)
 
 
@@ -1233,13 +1262,53 @@ def _why_not_sizes(whole) -> str | None:
     return None
 
 
+def _restart(args, built, params):
+    """读多块的检查点，核对网格，给出续算的起点、时间和步号。
+
+    每块以自己的 ``cons0`` 为底，只把内区换成检查点的原始变量换算出的守恒量。报错分
+    两类，与单块相同。``ConfigError``：这一次的输出会覆盖这张检查点、网格对不上。
+    ``SetupError``：检查点读不了、给反了。返回 ({块名: 起点}, t, step, 启动时要提示的事)。
+    """
+    try:
+        meta, blocks, fields = io.load_checkpoint(args.restart, params)
+        step, t = io.restart_clock(meta)
+    except io.CheckpointError as exc:
+        raise SetupError(f"续算的检查点不可用：{exc}") from exc
+    if not blocks:
+        raise SetupError("续算的检查点不可用：这是单块的检查点，多块运行只能从多块的检查点续算")
+    prefix = getattr(args, "out_prefix", None) or args.case
+    clash = io.clobber_step(args.restart, args.out_dir, prefix, step)
+    if clash is not None:
+        raise runtime_config.ConfigError(
+            f"续算的检查点 {args.restart} 会被这次运行在第 {clash} 步写出的文件覆盖"
+            "（文件名里的步号比它记的步号大）；换一个输出目录，或把检查点挪走")
+    zones = [(block.name, (block.grid.ni, block.grid.nj, block.grid.nk)) for block in built.blocks]
+    problems, unchecked = io.check_mesh(meta, args.case, zones, blocks["blocks"])
+    if problems:
+        raise runtime_config.ConfigError(
+            "续算的检查点与这一次的网格对不上：" + "；".join(problems))
+    start, changed, dtype = {}, [], None
+    for block, field in zip(built.blocks, fields):
+        dtype = np.asarray(block.cons0).dtype
+        changed.append(field.dtype != dtype)
+        own = np.array(block.cons0)
+        own[block.grid.inner()] = np.asarray(io.conservative_of(field.astype(dtype), params))
+        start[block.name] = own
+    messages = []
+    if unchecked:
+        messages.append("检查点里没有记这些项，没有核对：" + "、".join(unchecked))
+    if any(changed):
+        messages.append(f"精度变了：检查点是 {field.dtype}，这一次是 {dtype}，续出来的值会跟着变")
+    return start, t, step, messages
+
+
 def run(args, setup: MultiSetup) -> None:
-    """多块运行的主循环：逐块串行推进，按块存盘（R30、R33、KTD10）。
+    """多块运行的主循环：逐块串行推进，每个保存步存一个检查点（R30、R33、KTD10）。
 
     步长、终止条件和保存时机与单块的 ``main.run`` 相同。每个显示步对每块各打印
-    一行诊断；每个保存步每块各存一个 NPZ，文件名带块名的 slug，``_meta`` 多一项
-    ``zone``。粘性打开时启动信息多一行：粘性导数的阶数和 Re、Ama、参考温度、Pr；
-    参考温度取缺省值时的提示与单块相同。
+    一行诊断。检查点里每块一个数组，带一份块清单，``_meta`` 不写 ``N``。粘性打开时
+    启动信息多一行：粘性导数的阶数和 Re、Ama、参考温度、Pr；参考温度取缺省值时的
+    提示与单块相同。给了 ``--restart`` 就从那张检查点接着算。
     """
     whole = _global_sizes(args.mesh)
     try:
@@ -1248,12 +1317,12 @@ def run(args, setup: MultiSetup) -> None:
         raise SetupError(f"多块网格没有通过校验：{exc}") from exc
     except ValueError as exc:
         raise SetupError(f"多块网格装配失败：{exc}") from exc
-    slugs = block_slugs([block.name for block in built.blocks])
     # plate 不强制粘性，生效的粘性就是 args.viscous；导数的阶数与单块同一张表
     vis_order = CD_ORDER[args.vis_order] if args.viscous else None
     kernels = compile_blocks(built, setup.flux_scale, vis_order)
     params = physical_params(args)
     prefix = getattr(args, "out_prefix", None) or args.case
+    listing = _block_list(built.blocks, _sidecar(args.mesh))
     print(f"case={args.case} blocks={len(built.blocks)} scheme={args.scheme} "
           f"viscous={vis_order is not None} precision={config.precision_name()} "
           f"flux_scale={tuple(setup.flux_scale)} dt-mode=fixed({args.dt}) "
@@ -1265,10 +1334,13 @@ def run(args, setup: MultiSetup) -> None:
         if args.ref_t is None:
             print(REF_T_WARNING)
 
-    cons = {block.name: block.cons0 for block in built.blocks}
+    cons, t, step = {block.name: block.cons0 for block in built.blocks}, 0.0, 0
+    if getattr(args, "restart", None):            # 给了空字符串也算没给，从头算
+        cons, t, step, messages = _restart(args, built, params)
+        print(f"restart: file={args.restart} step={step} t={t}")
+        for message in messages:
+            print(f"提示：{message}")
     t0 = time.time()
-    t = 0.0
-    step = 0
     while t < args.end_time and step < args.end_step:
         dt = min(args.dt, args.end_time - t)
         try:
@@ -1286,13 +1358,14 @@ def run(args, setup: MultiSetup) -> None:
                 print(f"{block.name}: " + diagnostic_line(
                     cons[block.name], block.grid, t, step, time.time() - t0))
         if io.time_to_save(step, args.kstep_save, t >= args.end_time):
-            for block in built.blocks:
-                io.save_npz(
-                    f"{args.out_dir}/{io.checkpoint_name(prefix + '-' + slugs[block.name], step)}",
-                    io.inner_fields(cons[block.name], block.grid),
-                    meta=dict(
-                        io.checkpoint_meta(args, params, block.grid, t, step, dt),
-                        zone=block.name))
+            io.save_checkpoint(
+                f"{args.out_dir}/{io.checkpoint_name(prefix, step)}",
+                {f"b{index}": io.primitive_field(cons[block.name], block.grid, params)
+                 for index, block in enumerate(built.blocks)},
+                meta=io.checkpoint_meta(
+                    args, params, t, step, dt, viscous=bool(args.viscous),
+                    mesh={"format": "cgns", "file": args.mesh}),
+                blocks=listing)
     print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")
 
 

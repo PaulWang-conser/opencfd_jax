@@ -276,6 +276,8 @@ Product Contract 保留说明：Product Contract unchanged。R1–R38 和 AE1–
 - **KTD8. 时间推进照抄 `rk3_step_stages` 的三条公式，诊断量在准备之前导出。** 逐块的 RK 组合做成 `src/solver.py` 里的一个小函数，多块专用；`rk3_step_stages` 本身不动。每个阶段：各块 `prepare` → 交换 → 各块 `inviscid_rhs` → 组合，组合只用原始阶段态和整步起点。整步后做一次带交换的准备。步长累加在 Python 里做，与 `main.run` 相同。组合分在单独的 jit 里，与正式入口整步一个 jit 的写法可能差在舍入上；一致性阈值因此在 U4 实测并写定，U6 沿用。
 - **KTD9. 放行校验分两组判断，并与入口判定放在一起。** 生效值读 `args`；是否显式给出读 `args.config_sources`，取值不是 `default` 就算给了。判定与校验做成一个接收 `args` 的函数 `enter`，`main.run` 只调用它，测试也能直接调用。它只用 `mesh_cgns.zone_metadata` 读 zone 的个数和类型，不读坐标。
 - **KTD10. 输出文件名带块名，元数据带原始 zone 名。** 文件名是前缀、块名的 slug、步号。slug 把连续空白换成下划线，把字母、数字、下划线、点、短横以外的字符换成下划线，冲突就报错。`_meta` 只增加 `zone`。拼回用 `_meta["zone"]`，不从文件名反推。多块标记留给第八步。
+
+  2026-11-26 补记：第八步已替换这一条的做法。多块每个保存步一个 NPZ，里面每块一个数组 `b{块号}`（原始变量），块清单 `_blocks` 是多块标记。见 `docs/plans/2026-11-25-002-feat-step8-checkpoint-restart-plan.md`。
 - **KTD11. 验收夹具现生成，不入库。** `Grid/make_cgns_fixture.py` 增加写多 zone 文件的函数，建数据集时关闭时间戳。`Grid/split_cgns.py` 用它从 plate 单块切出验收网格，同时写一份旁记 JSON 记录各块的全局顶点范围。脚本缺省写到 `Grid/step6_meshes/`，这个目录加进 `.gitignore`。测试不用这个目录：辅助模块在一个进程里只生成一次，放系统临时目录。
 - **KTD12. 模块划分。** `src/mesh_cgns.py` 只加“读全部 zone”“只读元数据”、解析 `Periodic_t`，并把逐 zone 的读取抽成两个读取器共用的一段。`src/multiblock.py` 承担拓扑、装配、交换表、编排和运行循环。`src/cases.py` 从生效的 `build_case` 和 `_build_plate` 的 CGNS 分支里，把物理参数、原始量换算和面改写原样抽成函数；第 196 行那段同名残片不碰。`src/main.py` 把保存条件和存盘元数据原样抽成小函数，两个运行循环共用。
 

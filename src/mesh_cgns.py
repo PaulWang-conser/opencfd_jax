@@ -626,6 +626,17 @@ def zone_metadata(path) -> tuple[CgnsZoneMeta, ...]:
             f"{path} 的元数据读不出来：{type(exc).__name__}: {exc}") from exc
 
 
+def zone_title(path, zone: str | None = None) -> str:
+    """所选 zone 的原名，只读元数据。选法与 :func:`read_cgns_zone` 相同：``zone`` 为空时
+    取文件里的第一个 zone；给了名字时按归一化以后的名字找（两头的空白不算）。找不到
+    时原样返回 ``zone``，由读取器去报错。"""
+    zones = zone_metadata(path)
+    if zone is None:
+        return zones[0].name
+    wanted = _norm_name(zone)
+    return next((item.name for item in zones if _norm_name(item.name) == wanted), zone)
+
+
 def _norm_name(name: str) -> str:
     """把 CGNS 名字中的连续空格归一化，便于用户输入 ``Zone 1`` 匹配。"""
     return " ".join(str(name).split())

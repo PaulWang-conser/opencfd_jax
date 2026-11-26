@@ -166,6 +166,9 @@ def build_parser(explicit_only=False):
         help="显式关闭粘性项（覆盖 JSON 的 true；channel/poiseuille 仍强制粘性）")
     add("--kstep-show", type=int, default=50)
     add("--kstep-save", type=int, default=500)
+    add("--restart", default=None,
+        help="从这张检查点续算（第八步起的格式，或这一步之前写的单块检查点）；"
+             "不给就从初始场算起")
     add("--out-dir", default="output")
     add("--fp64", action="store_true",
         help="FP64（现在已是缺省，保留仅为兼容旧命令）")
@@ -204,6 +207,62 @@ def _warn_forced_viscous(args, case, effective_viscous):
         print(f"WARNING: {args.case} 强制粘性，显式 viscous=false 不会关闭粘性项")
 
 
+def _mesh_meta(args, grid):
+    """检查点 ``_meta`` 里的网格一项：格式、文件、所选 zone 的原名和尺寸。"""
+    size = [grid.ni, grid.nj, grid.nk]
+    if not getattr(args, "mesh", None):
+        return {"format": "builtin", "file": "", "zone": "", "size": size}
+    from . import mesh_cgns
+    return {"format": "cgns", "file": args.mesh,
+            "zone": mesh_cgns.zone_title(args.mesh, args.cgns_zone), "size": size}
+
+
+def _restart(args, state):
+    """读检查点，核对网格，给出续算的起点、时间和步号。
+
+    以初场 ``cons0`` 为底，只把内区换成检查点的原始变量换算出的守恒量；鬼胞留初场的，
+    再由物理准备按规则填。报错分两类。``ConfigError``：这一次的输出会覆盖这张检查点、
+    网格对不上。``SetupError``：检查点读不了、给反了、场放不进这一次的内区。
+    先核对网格，再看场放不放得进：新格式的检查点记了网格，换了网格报配置错误；旧检查点
+    没记的维度放不进，才报初始化错误。返回 (起点, t, step, 启动时要提示的事)。
+    """
+    grid, params = state.desc.grid, state.case["params"]
+    try:
+        meta, blocks, fields = io.load_checkpoint(args.restart, params)
+        step, t = io.restart_clock(meta)
+    except io.CheckpointError as exc:
+        raise SetupError(f"续算的检查点不可用：{exc}") from exc
+    if blocks:
+        raise SetupError("续算的检查点不可用：这是多块的检查点，单块运行只能从单块的检查点续算")
+    [field] = fields
+    prefix = getattr(args, "out_prefix", None) or args.case
+    clash = io.clobber_step(args.restart, args.out_dir, prefix, step)
+    if clash is not None:
+        raise runtime_config.ConfigError(
+            f"续算的检查点 {args.restart} 会被这次运行在第 {clash} 步写出的文件覆盖"
+            "（文件名里的步号比它记的步号大）；换一个输出目录，或把检查点挪走")
+    mesh = _mesh_meta(args, grid)
+    problems, unchecked = io.check_mesh(
+        meta, args.case, [(mesh["zone"] or None, (grid.ni, grid.nj, grid.nk))])
+    if problems:
+        raise runtime_config.ConfigError(
+            "续算的检查点与这一次的网格对不上：" + "；".join(problems))
+    inner = tuple(s.stop - s.start for s in grid.inner()[1:])
+    if tuple(field.shape[1:]) != inner:
+        raise SetupError(
+            "续算的检查点不可用：场放不进这一次的内区，内区的形状不同，"
+            f"检查点是 {field.shape[1:]}，这一次是 {inner}")
+    messages = []
+    if unchecked:
+        messages.append("检查点里没有记这些项，没有核对：" + "、".join(unchecked))
+    dtype = np.asarray(state.cons0).dtype
+    if field.dtype != dtype:
+        messages.append(f"精度变了：检查点是 {field.dtype}，这一次是 {dtype}，续出来的值会跟着变")
+    start = np.array(state.cons0)
+    start[grid.inner()] = np.asarray(io.conservative_of(field.astype(dtype), params))
+    return start, float(t), int(step), messages
+
+
 def run(args):
     """执行一次完整计算：初始化状态、装配 RHS，然后推进、滤波、诊断并存盘。
 
@@ -213,6 +272,10 @@ def run(args):
     multi = multiblock.enter(args)        # 多块网格的入口判定与放行校验
     if multi is not None:
         return multiblock.run(args, multi)
+    for name in ("kstep_show", "kstep_save"):
+        if getattr(args, name, 0) <= 0:
+            raise runtime_config.ConfigError(
+                f"输出间隔 {name} 必须是正数，得到 {getattr(args, name)}")
     try:
         state = init.prepare(args)
     except (ValueError, OSError) as exc:
@@ -273,9 +336,16 @@ def run(args):
     if effective_viscous and case.get("viscous_convention_note"):
         print(f"WARNING: {case['viscous_convention_note']}")
 
+    cons, t, step = state.cons0, 0.0, 0
+    if getattr(args, "restart", None):            # 给了空字符串也算没给，从头算
+        cons, t, step, messages = _restart(args, state)
+        print(f"restart: file={args.restart} step={step} t={t}")
+        for message in messages:
+            print(f"提示：{message}")
+        if getattr(args, "specificboundary", None):
+            print("提示：带了特殊边界脚本，不保证与不中断的运行在阈值内一致")
+
     t0 = time.time()
-    t = 0.0
-    step = 0
     # 定 dt 时可以 jit 整步 + donate 输入缓冲（省一次全场分配，也把 3 次 RHS
     # dispatch 合成 1 次）。变 dt 时 dt 是参数，仍走同一编译体（不重新编译）。
     step_jit = jax.jit(
@@ -296,10 +366,12 @@ def run(args):
         if step % args.kstep_show == 0:
             print(diagnostic_line(cons, grid, t, step, time.time() - t0))
         if io.time_to_save(step, args.kstep_save, t >= args.end_time):
-            io.save_npz(
+            io.save_checkpoint(
                 f"{args.out_dir}/{io.checkpoint_name(prefix, step)}",
-                io.inner_fields(cons, grid),
-                meta=io.checkpoint_meta(args, params, grid, t, step, dt))
+                {"b0": io.primitive_field(cons, grid, params)},
+                meta=io.checkpoint_meta(args, params, t, step, dt,
+                                        viscous=effective_viscous,
+                                        mesh=_mesh_meta(args, grid), ni=grid.ni))
     print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")
 
 
@@ -313,6 +385,9 @@ def _validate_input_paths(args, parser):
     value = getattr(args, "mesh", None)
     if value and not os.path.isfile(value):
         parser.error(f"--mesh 指向的文件不存在或不可读：{value}")
+    value = getattr(args, "restart", None)
+    if value and not os.path.isfile(value):
+        parser.error(f"配置错误：--restart 指向的文件不存在或不可读：{value}")
 
 
 def main(argv=None):

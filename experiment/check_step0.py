@@ -12,6 +12,8 @@
     可放宽到 ``--tol 1e-12``（与方案里"原版对拍判据"同一量级），
     但必须在改动说明里写清是哪个文件、为什么。
   - ``_meta`` 里的 t / step / dt 要求严格一致：dt 序列变了就说明 CFL 口径变了。
+  - 基准是第八步以前的格式（cons_0..4）、候选是第八步起的格式（b0）时，基准的守恒量
+    先用同一份换算换成原始量再比，物性取基准自己 ``_meta`` 里的 gamma、Ama。
 """
 
 import argparse
@@ -25,10 +27,12 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.append(str(HERE.parent.parent))      # opencfd_jax.src.io，换算旧格式的基准时用
 from step0_cases import CASES, by_id        # noqa: E402
 
 _STEP_RE = re.compile(
     r"(?:_step(?P<legacy>\d{6})|-istep-(?P<istep>\d{8,}))$")
+_OLD_KEYS = {f"cons_{i}" for i in range(5)}
 
 
 def step_of(name: str):
@@ -114,6 +118,19 @@ def compare_arrays(a: np.ndarray, b: np.ndarray, tol: float) -> dict:
     }
 
 
+def _as_candidate_layout(base, candidate) -> dict:
+    """基准文件读成 {名字: 数组}；基准是第八步以前的格式（cons_0..4）而候选是第八步
+    起的格式（b0）时，守恒量先换成原始量。"""
+    fields = {name: base[name] for name in base.files}
+    if set(fields) - {"_meta"} == _OLD_KEYS and "b0" in candidate.files:
+        from opencfd_jax.src import io
+        meta = json.loads(fields["_meta"].tobytes().decode())
+        cons = np.stack([fields[f"cons_{i}"] for i in range(5)])
+        fields = {"_meta": fields["_meta"],
+                  "b0": io.primitive_of(cons, io.phys_from_meta(meta))}
+    return fields
+
+
 def compare_case(base_dir: Path, cand_dir: Path, tol: float) -> dict:
     """比较一个用例目录：文件集合、_meta、逐场数值。"""
     base_json = base_dir / "case.json"
@@ -142,14 +159,16 @@ def compare_case(base_dir: Path, cand_dir: Path, tol: float) -> dict:
                 problems.append(f"{base_name}: 基准 SHA-256 不匹配")
             with np.load(base_dir / base_name, allow_pickle=False) as A, \
                     np.load(cand_dir / cand_name, allow_pickle=False) as B:
-                if not set(A.files) - {"_meta"}:
+                A = _as_candidate_layout(A, B)
+                names, other = set(A), set(B.files)
+                if not names - {"_meta"}:
                     problems.append(f"{base_name}: 没有数值字段")
-                if set(A.files) != set(B.files):
+                if names != other:
                     problems.append(
                         f"基准 {base_name} / 候选 {cand_name}: 字段不一致，"
-                        f"缺少 {sorted(set(A.files)-set(B.files))}，"
-                        f"多出 {sorted(set(B.files)-set(A.files))}")
-                if "_meta" not in A.files or "_meta" not in B.files:
+                        f"缺少 {sorted(names - other)}，"
+                        f"多出 {sorted(other - names)}")
+                if "_meta" not in names or "_meta" not in other:
                     problems.append(f"基准 {base_name} / 候选 {cand_name}: 缺少 _meta")
                 else:
                     ma = json.loads(A["_meta"].tobytes().decode())
@@ -164,7 +183,7 @@ def compare_case(base_dir: Path, cand_dir: Path, tol: float) -> dict:
                         problems.append(
                             f"候选 {cand_name}: _meta.step={mb.get('step')} "
                             f"与文件名步号 {expected} 不一致")
-                for key in sorted((set(A.files) & set(B.files)) - {"_meta"}):
+                for key in sorted((names & other) - {"_meta"}):
                     res = compare_arrays(A[key], B[key], tol)
                     rows.append({"file": cand_name, "baseline": base_name,
                                  "var": key, **res})

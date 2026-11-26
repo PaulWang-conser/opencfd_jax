@@ -5,8 +5,8 @@
   2. 只有一块、没有接口的多块跑一步，末态与正式路径在 R37 的容差内一致；
   3. 每个阶段的右端项都来自所有块同一阶段的准备态，q1、q2 是准备之前的值；
   4. 参考尺度的三个分量按 i、j、k 的顺序到达 inviscid_rhs；
-  5. 保存时机与单块相同，每个保存步每块一个文件，文件名带块名的 slug，``_meta``
-     带 zone；显示步对每块各打印一行诊断；
+  5. 保存时机与单块相同，每个保存步一个文件，里面每块一个数组，带块清单；显示步对
+     每块各打印一行诊断；
   6. 全周期小网格的中心块跳过物理准备；``main.run`` 按 zone 的个数选路径；注入的
      初场被使用；比较函数能报出最差的变量、位置和数值。
 """
@@ -182,15 +182,18 @@ def test_saving_follows_the_single_block_rule(tmp_path, capsys):
     short = tmp_path / "short"
     _run("t3", short, end_time=0.00045, end_step=5, kstep_save=2, kstep_show=5)
 
-    def names(steps):
-        return sorted(f"t3-{name}-istep-{step:08d}.npz"
-                      for name in T3_BLOCKS for step in steps)
+    def name(step):
+        return io.checkpoint_name("t3", step)
 
-    assert sorted(p.name for p in short.iterdir()) == names((2, 4, 5))
-    _, meta = io.load_npz(str(short / "t3-blk-rhi-istep-00000005.npz"))
-    assert meta["zone"] == "blk-rhi" and meta["step"] == 5
+    assert sorted(p.name for p in short.iterdir()) == sorted(map(name, (2, 4, 5)))
+    meta, blocks, fields = io.load_checkpoint(str(short / name(5)))
+    assert "zone" not in meta and "N" not in meta and meta["step"] == 5
     assert meta["dt"] == pytest.approx(5e-5) and meta["t"] == pytest.approx(0.00045)
-    _, earlier = io.load_npz(str(short / "t3-blk-rhi-istep-00000002.npz"))
+    assert [entry["name"] for entry in blocks["blocks"]] == T3_BLOCKS
+    assert [field.shape[1:] for field in fields] == [
+        tuple(s.stop - s.start for s in block.grid.inner()[1:])
+        for block in support.blocks("t3").blocks]
+    earlier = io.load_checkpoint(str(short / name(2)))[0]
     assert earlier["dt"] == pytest.approx(DT) and earlier["t"] == pytest.approx(2 * DT)
     lines = [line for line in capsys.readouterr().out.splitlines()
              if line.startswith("blk-")]
@@ -199,23 +202,7 @@ def test_saving_follows_the_single_block_rule(tmp_path, capsys):
 
     long = tmp_path / "long"
     _run("t3", long, end_time=0.001, end_step=5, kstep_save=2, kstep_show=5)
-    assert sorted(p.name for p in long.iterdir()) == names((2, 4))
-
-
-def test_block_slugs_replace_whitespace_and_reject_collisions():
-    slugs = multiblock.block_slugs(["Zone  1", "blk-i0j0k0", "左 块", "a-b.c_d"])
-    assert slugs == {"Zone  1": "Zone_1", "blk-i0j0k0": "blk-i0j0k0",
-                     "左 块": "___", "a-b.c_d": "a-b.c_d"}
-    with pytest.raises(SetupError, match="slug"):
-        multiblock.block_slugs(["a b", "a_b"])
-
-
-def test_block_slugs_that_differ_only_in_case_are_rejected():
-    """Windows 的文件名不分大小写：slug 只差大小写的两个块会写进同一个文件。"""
-    with pytest.raises(SetupError, match="slug"):
-        multiblock.block_slugs(["A", "a"])
-    with pytest.raises(SetupError, match="slug"):
-        multiblock.block_slugs(["Zone 1", "ZONE 1"])
+    assert sorted(p.name for p in long.iterdir()) == sorted(map(name, (2, 4)))
 
 
 def test_sidecar_that_cannot_be_read_is_an_error(tmp_path):
@@ -287,8 +274,8 @@ def test_center_block_skips_prepare_and_matches_a_periodic_single_block(tmp_path
 
 def test_main_run_chooses_the_path_by_zone_count(tmp_path):
     _run("x2", tmp_path / "many", end_time=DT, end_step=1)
-    assert sorted(p.name for p in (tmp_path / "many").iterdir()) == [
-        "x2-blk-i0j0k0-istep-00000001.npz", "x2-blk-i1j0k0-istep-00000001.npz"]
+    assert [p.name for p in (tmp_path / "many").iterdir()] == [
+        io.checkpoint_name("x2", 1)]
     # 显式选了 zone 就走原路径；这一块带着跨块的连接，原路径照旧拒绝它
     args = _args("x2", out_dir=str(tmp_path / "one"), end_time=DT, end_step=1,
                  cgns_zone="blk-i0j0k0", flux_scale=None)

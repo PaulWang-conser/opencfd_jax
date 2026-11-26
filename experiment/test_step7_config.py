@@ -53,15 +53,15 @@ def _run(out, **changes):
 
 
 def _read_back(out, step=STEPS):
-    """把 x2 各块第 ``step`` 步存下的文件读回来，拼回等价单块。返回 (末态, 各块的 _meta)。"""
-    built = support.blocks("x2")
-    slugs = multiblock.block_slugs(NAMES)
-    pieces, meta = {}, {}
-    for block in built.blocks:
-        fields, meta[block.name] = io.load_npz(
-            str(out / io.checkpoint_name(f"x2-{slugs[block.name]}", step)))
-        pieces[block.name] = np.stack([fields[f"cons_{i}"] for i in range(5)])
-    return support.reassemble(support.sidecar("x2"), pieces), meta
+    """把 x2 第 ``step`` 步的检查点读回来，各块的原始变量换成守恒量，拼回等价单块的内区。
+
+    返回 (末态, 块清单)。
+    """
+    _, blocks, fields = io.load_checkpoint(str(out / io.checkpoint_name("x2", step)))
+    params = support.reference().case["params"]
+    pieces = {entry["name"]: np.asarray(io.conservative_of(field, params))
+              for entry, field in zip(blocks["blocks"], fields)}
+    return io.assemble(blocks, pieces), blocks
 
 
 # ---- 1. 粘性打开的运行走通入口 ----
@@ -70,12 +70,16 @@ def test_viscous_run_through_the_entry_matches_the_viscous_single_block(tmp_path
     on, plain = tmp_path / "on", tmp_path / "plain"
     _run(on, viscous=True)
     _run(plain)
-    files = [f"x2-{name}-istep-00000002.npz" for name in NAMES]
-    assert sorted(p.name for p in on.iterdir()) == files            # 两个整步，最后一步存盘
-    assert sorted(p.name for p in plain.iterdir()) == files         # 与无粘时相同
-    saved, meta = _read_back(on)
-    _, other = _read_back(plain)
-    assert meta == other and [meta[name]["zone"] for name in NAMES] == NAMES
+    name = io.checkpoint_name("x2", STEPS)
+    assert sorted(p.name for p in on.iterdir()) == [name]            # 两个整步，最后一步存盘
+    assert sorted(p.name for p in plain.iterdir()) == [name]         # 与无粘时相同
+    saved, blocks = _read_back(on)
+    assert [entry["name"] for entry in blocks["blocks"]] == NAMES
+    on_meta = io.load_checkpoint(str(on / name))[0]
+    other_meta = io.load_checkpoint(str(plain / name))[0]
+    assert {key: value for key, value in on_meta.items() if key != "viscous"} == {
+        key: value for key, value in other_meta.items() if key != "viscous"}
+    assert on_meta["viscous"] is True and other_meta["viscous"] is False
     # 单块参考：从缺省的初场走两步。plate 的初场内区是入口状态、鬼胞为零，各块的 cons0
     # 是同一个写法
     state = step7.reference()
