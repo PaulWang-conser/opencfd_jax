@@ -19,3 +19,16 @@ venv/
 .idea/
 Thumbs.db
 .DS_Store
+
+# 大体积运行产物：原码 dump、网格/初场副本和导出的 plt/tec 不入库
+# （本地保留，可重新生成；单文件超过 100 MB 会阻塞推送）
+experiment/ocfd/**/dump/
+experiment/ocfd/**/*.dat
+outputest/*.plt
+outputest/*.tec
+
+# CGNS 官方样例网格：由 Grid/download_cgns_samples.py 重新下载，二进制不入库
+Grid/samples/
+
+# 第六步的验收网格：由 Grid/split_cgns.py 重新生成，不入库
+/Grid/step6_meshes/

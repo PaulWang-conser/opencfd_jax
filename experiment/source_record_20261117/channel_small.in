@@ -1,0 +1,36 @@
+# OpenCFD-SCU input file -- 第0步回归基准用的小型单块槽道
+# 与 channel_case_iiA/quick 同一套 IBC=200 口径（等温冷壁 + 恒定体积力），
+# 只把 GRID_3D 缩到 24x25x16，用于"多步连续演化"的逐点冻结。
+# 注意：不给 --mesh 时 JAC_BOUND 实际不生效（Ajac=1），故这里写 0。
+GRID_3D = 24   25   16
+PARALLEL_3D = 1   1   1
+STREAM = 0
+CHARTERIC = 0
+TEST = 0
+
+IPERIODIC = 1   0   1
+JAC_BOUND = 0   0   0
+DIF_BOUND = 0   0   1   1   0   0
+NON_REFLETION = 0   0   0   0   0   0
+
+SCHEME_INVIS = WENO7
+SCHEME_VIS = CD8
+
+RE = 190.7
+AMA = 0.0955
+GAMMA = 1.4
+PR = 0.7
+T_REF = 300.0
+EPSL_SW = 0.0
+
+DT = 5e-05
+END_TIME = 0.005
+KSTEP_SHOW = 20
+KSTEP_SAVE = 20
+INIT_STAT = 0
+
+IBC = 200
+# unused, one dummy integer
+BC_NPARA = 0
+# Tw_bottom  Tw_top  F
+BC_RPARA = 1.0   1.0   1.0

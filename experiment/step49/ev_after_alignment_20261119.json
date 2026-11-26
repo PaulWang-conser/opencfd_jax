@@ -1,0 +1,4423 @@
+{
+  "index_order": "含鬼层的(k,j,i)",
+  "normalization": "原版 Ev 除以另外两方向 (N-1) 的乘积",
+  "note": "原版复用 Ev 工作数组；横向鬼层可能保留此前方向的值。",
+  "stages": {
+    "1": {
+      "i": {
+        "momentum_x": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.2526065174565133e-19,
+            "max_abs_index": [
+              41,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00028299561140210616,
+            "relative": 1.149348748322076e-15
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.2526065174565133e-19,
+            "max_abs_index": [
+              41,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00028299561140210616,
+            "relative": 1.149348748322076e-15
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0164395367051604e-20,
+            "max_abs_index": [
+              41,
+              6,
+              103
+            ],
+            "max_abs_ref": 6.823541449604849e-06,
+            "relative": 1.4896070379465818e-15
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.2526065174565133e-19,
+            "max_abs_index": [
+              41,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00028299561140210616,
+            "relative": 1.149348748322076e-15
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0002829956114020975,
+            "max_abs_index": [
+              2,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00028299561140209705,
+            "max_abs_index": [
+              47,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "momentum_y": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2197274440461925e-19,
+            "max_abs_index": [
+              41,
+              4,
+              81
+            ],
+            "max_abs_ref": 7.692307692307817e-05,
+            "relative": 1.5856456772600244e-15
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0842021724855044e-19,
+            "max_abs_index": [
+              41,
+              4,
+              100
+            ],
+            "max_abs_ref": 7.692307692307756e-05,
+            "relative": 1.4094628242311441e-15
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2197274440461925e-19,
+            "max_abs_index": [
+              41,
+              4,
+              81
+            ],
+            "max_abs_ref": 7.692307692307817e-05,
+            "relative": 1.5856456772600244e-15
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.131516293641283e-20,
+            "max_abs_index": [
+              41,
+              43,
+              31
+            ],
+            "max_abs_ref": 4.8809523809524584e-05,
+            "relative": 1.6659691918679438e-15
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.692307692307756e-05,
+            "max_abs_index": [
+              1,
+              4,
+              47
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.692307692307724e-05,
+            "max_abs_index": [
+              46,
+              4,
+              99
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "momentum_z": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4202330363206672e-19,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.252563798003973e-18,
+            "relative": 0.11338608369361178
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4202330363206672e-19,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.252563798003973e-18,
+            "relative": 0.11338608369361178
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.688961097215432e-21,
+            "max_abs_index": [
+              41,
+              5,
+              102
+            ],
+            "max_abs_ref": 3.020160260298287e-20,
+            "relative": 0.1221445479469719
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4202330363206672e-19,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.252563798003973e-18,
+            "relative": 0.11338608369361178
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0891859113078024e-18,
+            "max_abs_index": [
+              1,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.391048663443008e-19,
+            "max_abs_index": [
+              47,
+              43,
+              102
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        },
+        "energy": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.71445146547012e-17,
+            "max_abs_index": [
+              41,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.07608539152268055,
+            "relative": 1.2767827399001167e-15
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.71445146547012e-17,
+            "max_abs_index": [
+              41,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.07608539152268055,
+            "relative": 1.2767827399001167e-15
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.6020852139652106e-18,
+            "max_abs_index": [
+              41,
+              6,
+              103
+            ],
+            "max_abs_ref": 0.0018345578583080467,
+            "relative": 1.4183718448460545e-15
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.71445146547012e-17,
+            "max_abs_index": [
+              41,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.07608539152268055,
+            "relative": 1.2767827399001167e-15
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.07608539152267822,
+            "max_abs_index": [
+              2,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0760853915226781,
+            "max_abs_index": [
+              47,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          }
+        }
+      },
+      "j": {
+        "momentum_x": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.3010426069826053e-18,
+            "max_abs_index": [
+              41,
+              4,
+              10
+            ],
+            "max_abs_ref": 0.0007770007770008142,
+            "relative": 1.674441835186533e-15
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0842021724855044e-18,
+            "max_abs_index": [
+              41,
+              4,
+              100
+            ],
+            "max_abs_ref": 0.000777000777000802,
+            "relative": 1.3953681959887992e-15
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.3010426069826053e-18,
+            "max_abs_index": [
+              41,
+              4,
+              10
+            ],
+            "max_abs_ref": 0.0007770007770008142,
+            "relative": 1.674441835186533e-15
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.8634724839594607e-20,
+            "max_abs_index": [
+              41,
+              43,
+              31
+            ],
+            "max_abs_ref": 1.1224530315548915e-05,
+            "relative": 1.6601785834887568e-15
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0007770007770007963,
+            "max_abs_index": [
+              0,
+              4,
+              100
+            ],
+            "max_abs_ref": 4.290732377879194e-18,
+            "relative": 181088147330421.28
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0007770007770008099,
+            "max_abs_index": [
+              47,
+              4,
+              87
+            ],
+            "max_abs_ref": 2.5176858371139133e-18,
+            "relative": 308617050446415.25
+          }
+        },
+        "momentum_y": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.743384504624082e-20,
+            "max_abs_index": [
+              41,
+              6,
+              103
+            ],
+            "max_abs_ref": 3.253968253968278e-05,
+            "relative": 1.4577230428844632e-15
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.743384504624082e-20,
+            "max_abs_index": [
+              41,
+              6,
+              103
+            ],
+            "max_abs_ref": 3.253968253968278e-05,
+            "relative": 1.4577230428844632e-15
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.743384504624082e-20,
+            "max_abs_index": [
+              41,
+              6,
+              103
+            ],
+            "max_abs_ref": 3.2539682539682774e-05,
+            "relative": 1.4577230428844634e-15
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.0657581468206416e-20,
+            "max_abs_index": [
+              41,
+              40,
+              103
+            ],
+            "max_abs_ref": 3.2539682539682774e-05,
+            "relative": 1.2494768939009688e-15
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.253968253968313e-05,
+            "max_abs_index": [
+              1,
+              4,
+              4
+            ],
+            "max_abs_ref": 8.067620645609468e-19,
+            "relative": 40333679493707.68
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.2539682539682685e-05,
+            "max_abs_index": [
+              46,
+              6,
+              103
+            ],
+            "max_abs_ref": 1.0084525807011839e-19,
+            "relative": 322669435949656.9
+          }
+        },
+        "momentum_z": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.392839240082674e-20,
+            "max_abs_index": [
+              41,
+              40,
+              103
+            ],
+            "max_abs_ref": 4.696419620041336e-20,
+            "relative": 2.0000000000000004
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.392839240082674e-20,
+            "max_abs_index": [
+              41,
+              40,
+              103
+            ],
+            "max_abs_ref": 4.696419620041336e-20,
+            "relative": 2.0000000000000004
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.338155656314589e-22,
+            "max_abs_index": [
+              41,
+              7,
+              103
+            ],
+            "max_abs_ref": 3.6690778281572945e-22,
+            "relative": 2.0
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.392839240082674e-20,
+            "max_abs_index": [
+              41,
+              40,
+              103
+            ],
+            "max_abs_ref": 4.696419620041336e-20,
+            "relative": 2.0000000000000004
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00018580519940541583,
+            "max_abs_index": [
+              0,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00018580519940541583,
+            "relative": 1.0
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00018580519940541583,
+            "max_abs_index": [
+              46,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00018580519940541583,
+            "relative": 1.0
+          }
+        },
+        "energy": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.806255641895632e-18,
+            "max_abs_index": [
+              41,
+              43,
+              31
+            ],
+            "max_abs_ref": 0.004019985357297306,
+            "relative": 1.941861710447595e-15
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.336808689942018e-18,
+            "max_abs_index": [
+              41,
+              43,
+              100
+            ],
+            "max_abs_ref": 0.004019985357297243,
+            "relative": 1.0788120613597918e-15
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.505213034913027e-19,
+            "max_abs_index": [
+              41,
+              5,
+              55
+            ],
+            "max_abs_ref": 0.00038588819135335783,
+            "relative": 1.6857766525838577e-15
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.806255641895632e-18,
+            "max_abs_index": [
+              41,
+              43,
+              31
+            ],
+            "max_abs_ref": 0.004019985357297306,
+            "relative": 1.941861710447595e-15
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.004019985357297533,
+            "max_abs_index": [
+              2,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.53669515304902e-15,
+            "relative": 2615994037152.5967
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.004019985357297715,
+            "max_abs_index": [
+              45,
+              43,
+              102
+            ],
+            "max_abs_ref": 9.016911990920833e-16,
+            "relative": 4458272811518.462
+          }
+        }
+      },
+      "k": {
+        "momentum_x": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.594857415808724e-19,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 4.934342234561077e-18,
+            "relative": 0.11338608369361315
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.594857415808724e-19,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 4.934342234561077e-18,
+            "relative": 0.11338608369361315
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.3452258527613163e-20,
+            "max_abs_index": [
+              41,
+              7,
+              102
+            ],
+            "max_abs_ref": 2.3671278052437203e-19,
+            "relative": 0.05682945592465851
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.594857415808724e-19,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 4.934342234561077e-18,
+            "relative": 0.11338608369361315
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.594857415808724e-19,
+            "max_abs_index": [
+              1,
+              43,
+              102
+            ],
+            "max_abs_ref": 4.290732377879194e-18,
+            "relative": 0.13039399624765524
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1555579666323415e-33,
+            "max_abs_index": [
+              47,
+              43,
+              102
+            ],
+            "max_abs_ref": 2.5176858371139133e-18,
+            "relative": 4.58976235079825e-16
+          }
+        },
+        "momentum_y": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.851859888774472e-34,
+            "max_abs_index": [
+              37,
+              4,
+              15
+            ],
+            "max_abs_ref": 1.4654943925052064e-18,
+            "relative": 2.6283689029951625e-16
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.62964972193618e-35,
+            "max_abs_index": [
+              42,
+              43,
+              103
+            ],
+            "max_abs_ref": 4.440892098500625e-19,
+            "relative": 2.1684043449710094e-16
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.851859888774472e-34,
+            "max_abs_index": [
+              37,
+              4,
+              15
+            ],
+            "max_abs_ref": 1.4654943925052064e-18,
+            "relative": 2.6283689029951625e-16
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.851859888774472e-34,
+            "max_abs_index": [
+              38,
+              43,
+              50
+            ],
+            "max_abs_ref": 9.298910847681846e-19,
+            "relative": 4.1422699409304625e-16
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.8888949165808538e-34,
+            "max_abs_index": [
+              2,
+              4,
+              81
+            ],
+            "max_abs_ref": 8.067620645609468e-19,
+            "relative": 3.580851211878731e-16
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.8055593228630336e-35,
+            "max_abs_index": [
+              46,
+              4,
+              36
+            ],
+            "max_abs_ref": 1.0084525807011839e-19,
+            "relative": 1.790425605939365e-16
+          }
+        },
+        "momentum_z": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0842021724855044e-19,
+            "max_abs_index": [
+              28,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00018580519940541583,
+            "relative": 5.835155183789234e-16
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0842021724855044e-19,
+            "max_abs_index": [
+              28,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00018580519940541583,
+            "relative": 5.835155183789234e-16
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.3881317890172014e-21,
+            "max_abs_index": [
+              7,
+              6,
+              103
+            ],
+            "max_abs_ref": 4.480102971962601e-06,
+            "relative": 7.562620346498332e-16
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0842021724855044e-19,
+            "max_abs_index": [
+              28,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00018580519940541583,
+            "relative": 5.835155183789234e-16
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.131516293641283e-20,
+            "max_abs_index": [
+              0,
+              39,
+              103
+            ],
+            "max_abs_ref": 0.00018580519940541583,
+            "relative": 4.3763663878419255e-16
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.131516293641283e-20,
+            "max_abs_index": [
+              44,
+              40,
+              103
+            ],
+            "max_abs_ref": 0.00018580519940541583,
+            "relative": 4.3763663878419255e-16
+          }
+        },
+        "energy": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.7671994260063746e-15,
+            "relative": 0.11338608369361315
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.7671994260063746e-15,
+            "relative": 0.11338608369361315
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.831389350031894e-18,
+            "max_abs_index": [
+              41,
+              7,
+              102
+            ],
+            "max_abs_ref": 4.2610408243887857e-17,
+            "relative": 0.1133851927064069
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.7671994260063746e-15,
+            "relative": 0.11338608369361315
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              1,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.53669515304902e-15,
+            "relative": 0.13039399624765524
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.9582283945787943e-31,
+            "max_abs_index": [
+              47,
+              41,
+              102
+            ],
+            "max_abs_ref": 9.016911990920833e-16,
+            "relative": 3.2807555375470527e-16
+          }
+        }
+      }
+    },
+    "2": {
+      "i": {
+        "momentum_x": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.3540895276120636e-13,
+            "max_abs_index": [
+              42,
+              5,
+              103
+            ],
+            "max_abs_ref": 0.00028299561504344773,
+            "relative": 4.784842787773136e-10
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.3540895276120636e-13,
+            "max_abs_index": [
+              42,
+              5,
+              103
+            ],
+            "max_abs_ref": 0.00028299561504344773,
+            "relative": 4.784842787773136e-10
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.3540895276120636e-13,
+            "max_abs_index": [
+              42,
+              5,
+              103
+            ],
+            "max_abs_ref": 6.817284404626014e-06,
+            "relative": 1.986259406594827e-08
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.920449878242366e-18,
+            "max_abs_index": [
+              21,
+              42,
+              103
+            ],
+            "max_abs_ref": 0.00028299561504344773,
+            "relative": 3.505513637276429e-14
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0002829956150434432,
+            "max_abs_index": [
+              2,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0891859113077954e-17,
+            "relative": 25982305876840.418
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00028299561504343857,
+            "max_abs_index": [
+              47,
+              43,
+              103
+            ],
+            "max_abs_ref": 6.3910486634430104e-18,
+            "relative": 44279996906013.555
+          }
+        },
+        "momentum_y": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4894295784781755e-12,
+            "max_abs_index": [
+              32,
+              4,
+              103
+            ],
+            "max_abs_ref": 7.842461417055115e-05,
+            "relative": 1.8991863641676213e-08
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4894295784781755e-12,
+            "max_abs_index": [
+              32,
+              4,
+              103
+            ],
+            "max_abs_ref": 7.842461417055115e-05,
+            "relative": 1.8991863641676213e-08
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4894295784781755e-12,
+            "max_abs_index": [
+              32,
+              4,
+              103
+            ],
+            "max_abs_ref": 7.842461417055115e-05,
+            "relative": 1.8991863641676213e-08
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.523155938337964e-19,
+            "max_abs_index": [
+              4,
+              42,
+              16
+            ],
+            "max_abs_ref": 5.036756287866896e-05,
+            "relative": 8.980295412017154e-15
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.842461268112231e-05,
+            "max_abs_index": [
+              2,
+              4,
+              103
+            ],
+            "max_abs_ref": 2.0479344715777882e-18,
+            "relative": 38294493192793.28
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.842461268112126e-05,
+            "max_abs_index": [
+              46,
+              4,
+              103
+            ],
+            "max_abs_ref": 2.5599180894722358e-19,
+            "relative": 306355945542342.06
+          }
+        },
+        "momentum_z": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.20772034440984e-19,
+            "max_abs_index": [
+              41,
+              42,
+              100
+            ],
+            "max_abs_ref": 1.2525638624715812e-18,
+            "relative": 0.41576485642287925
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.20772034440984e-19,
+            "max_abs_index": [
+              41,
+              42,
+              100
+            ],
+            "max_abs_ref": 1.2525638624715812e-18,
+            "relative": 0.41576485642287925
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4771430281900566e-20,
+            "max_abs_index": [
+              41,
+              7,
+              100
+            ],
+            "max_abs_ref": 2.279999095730426e-20,
+            "relative": 0.6478700061575399
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.20772034440984e-19,
+            "max_abs_index": [
+              41,
+              42,
+              100
+            ],
+            "max_abs_ref": 1.2525638624715812e-18,
+            "relative": 0.41576485642287925
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0004716593523368257,
+            "max_abs_index": [
+              1,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0004716593523368248,
+            "relative": 1.000000000000002
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0004716593523368248,
+            "max_abs_index": [
+              46,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0004716593523368248,
+            "relative": 1.0
+          }
+        },
+        "energy": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9441205264571215e-11,
+            "max_abs_index": [
+              4,
+              5,
+              102
+            ],
+            "max_abs_ref": 0.07608539152632189,
+            "relative": 2.5551823910698406e-10
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9441205264571215e-11,
+            "max_abs_index": [
+              4,
+              5,
+              102
+            ],
+            "max_abs_ref": 0.07608539152632189,
+            "relative": 2.5551823910698406e-10
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9441205264571215e-11,
+            "max_abs_index": [
+              4,
+              5,
+              102
+            ],
+            "max_abs_ref": 0.0018329235855551614,
+            "relative": 1.0606664357304784e-08
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.689893001203927e-15,
+            "max_abs_index": [
+              17,
+              42,
+              103
+            ],
+            "max_abs_ref": 0.07608539152632189,
+            "relative": 7.478298904771355e-14
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.07608539152632067,
+            "max_abs_index": [
+              2,
+              43,
+              103
+            ],
+            "max_abs_ref": 3.9008415423552044e-15,
+            "relative": 19504865988579.152
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.07608539152631943,
+            "max_abs_index": [
+              47,
+              43,
+              103
+            ],
+            "max_abs_ref": 2.2889084284645188e-15,
+            "relative": 33240906704756.305
+          }
+        }
+      },
+      "j": {
+        "momentum_x": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.504474322899796e-11,
+            "max_abs_index": [
+              32,
+              4,
+              103
+            ],
+            "max_abs_ref": 0.0007921678199045761,
+            "relative": 1.8991863656883002e-08
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.504474322899796e-11,
+            "max_abs_index": [
+              32,
+              4,
+              103
+            ],
+            "max_abs_ref": 0.0007921678199045761,
+            "relative": 1.8991863656883002e-08
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.504474322899796e-11,
+            "max_abs_index": [
+              32,
+              4,
+              103
+            ],
+            "max_abs_ref": 0.0007921678199045761,
+            "relative": 1.8991863656883002e-08
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.0926725019580474e-19,
+            "max_abs_index": [
+              4,
+              42,
+              16
+            ],
+            "max_abs_ref": 1.1582826307795484e-05,
+            "relative": 9.433556827340629e-15
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0007921678048598127,
+            "max_abs_index": [
+              0,
+              4,
+              103
+            ],
+            "max_abs_ref": 4.290732377879194e-18,
+            "relative": 184622981601887.34
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0007921678048598333,
+            "max_abs_index": [
+              46,
+              4,
+              103
+            ],
+            "max_abs_ref": 2.724864644247913e-18,
+            "relative": 290718222107681.5
+          }
+        },
+        "momentum_y": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.792946061337166e-13,
+            "max_abs_index": [
+              42,
+              5,
+              103
+            ],
+            "max_abs_ref": 3.253968421445217e-05,
+            "relative": 2.0875881943316916e-08
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.792946061337166e-13,
+            "max_abs_index": [
+              42,
+              5,
+              103
+            ],
+            "max_abs_ref": 3.253968421445217e-05,
+            "relative": 2.0875881943316916e-08
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.792946061337166e-13,
+            "max_abs_index": [
+              42,
+              5,
+              103
+            ],
+            "max_abs_ref": 3.2539682539682665e-05,
+            "relative": 2.0875883017767793e-08
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1993986533120893e-18,
+            "max_abs_index": [
+              40,
+              42,
+              103
+            ],
+            "max_abs_ref": 3.253968421445217e-05,
+            "relative": 3.685956647297113e-14
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.253968421445201e-05,
+            "max_abs_index": [
+              3,
+              43,
+              103
+            ],
+            "max_abs_ref": 8.158815025686689e-19,
+            "relative": 39882855674514.2
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.253968421445208e-05,
+            "max_abs_index": [
+              46,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.467766879765566e-19,
+            "relative": 221695179684456.2
+          }
+        },
+        "momentum_z": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.925873544998788e-19,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 1.1290514459735108e-18,
+            "relative": 0.7905639354903409
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.925873544998788e-19,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 1.1290514459735108e-18,
+            "relative": 0.7905639354903409
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.925873544998788e-19,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 1.1290514459735108e-18,
+            "relative": 0.7905639354903409
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.621889724239804e-20,
+            "max_abs_index": [
+              41,
+              40,
+              103
+            ],
+            "max_abs_ref": 4.922091257309292e-20,
+            "relative": 1.9548377348655055
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00018580519462385624,
+            "max_abs_index": [
+              2,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00018580519462385624,
+            "relative": 1.0
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00018580519462385622,
+            "max_abs_index": [
+              47,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00018580519462385622,
+            "relative": 1.0
+          }
+        },
+        "energy": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.3242997172659256e-09,
+            "max_abs_index": [
+              13,
+              4,
+              103
+            ],
+            "max_abs_ref": 0.004020002472286034,
+            "relative": 5.781836536891924e-07
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.3242997172659256e-09,
+            "max_abs_index": [
+              13,
+              4,
+              103
+            ],
+            "max_abs_ref": 0.004020002472286034,
+            "relative": 5.781836536891924e-07
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.3242997172659256e-09,
+            "max_abs_index": [
+              13,
+              4,
+              103
+            ],
+            "max_abs_ref": 0.00038588801558477406,
+            "relative": 6.023249293564315e-06
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.5874484846366563e-16,
+            "max_abs_index": [
+              13,
+              41,
+              101
+            ],
+            "max_abs_ref": 0.004020002472286034,
+            "relative": 6.436435058123895e-14
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.004020002472285755,
+            "max_abs_index": [
+              3,
+              43,
+              101
+            ],
+            "max_abs_ref": 1.53669515304902e-15,
+            "relative": 2616005174682.5015
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.004020002472285817,
+            "max_abs_index": [
+              47,
+              43,
+              101
+            ],
+            "max_abs_ref": 9.016911990920833e-16,
+            "relative": 4458291792504.546
+          }
+        }
+      },
+      "k": {
+        "momentum_x": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.890380309004476e-19,
+            "max_abs_index": [
+              41,
+              42,
+              102
+            ],
+            "max_abs_ref": 4.934342234561077e-18,
+            "relative": 0.20043969061834344
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.890380309004476e-19,
+            "max_abs_index": [
+              41,
+              42,
+              102
+            ],
+            "max_abs_ref": 4.934342234561077e-18,
+            "relative": 0.20043969061834344
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.4272487739672822e-20,
+            "max_abs_index": [
+              41,
+              7,
+              102
+            ],
+            "max_abs_ref": 2.192501611137222e-19,
+            "relative": 0.11070681825899777
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.890380309004476e-19,
+            "max_abs_index": [
+              41,
+              42,
+              102
+            ],
+            "max_abs_ref": 4.934342234561077e-18,
+            "relative": 0.20043969061834344
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.890380309004476e-19,
+            "max_abs_index": [
+              1,
+              42,
+              102
+            ],
+            "max_abs_ref": 4.290732377879194e-18,
+            "relative": 0.23050564421109515
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.661199051672265e-19,
+            "max_abs_index": [
+              44,
+              41,
+              21
+            ],
+            "max_abs_ref": 2.724864644247913e-18,
+            "relative": 0.097663531922217
+          }
+        },
+        "momentum_y": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1603635527950643e-19,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 1.4448482278865055e-18,
+            "relative": 0.0803104111836314
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1603635527950643e-19,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 4.85178957505996e-19,
+            "relative": 0.23916196999964168
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1603635527950643e-19,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 1.4448482278865055e-18,
+            "relative": 0.0803104111836314
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.325782994701959e-20,
+            "max_abs_index": [
+              41,
+              43,
+              101
+            ],
+            "max_abs_ref": 9.26120897269047e-19,
+            "relative": 0.07910179995186685
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1603635527950643e-19,
+            "max_abs_index": [
+              1,
+              4,
+              101
+            ],
+            "max_abs_ref": 8.158815025686689e-19,
+            "relative": 0.142222068908518
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.171032933197285e-20,
+            "max_abs_index": [
+              44,
+              4,
+              85
+            ],
+            "max_abs_ref": 1.467766879765566e-19,
+            "relative": 0.21604472596518645
+          }
+        },
+        "momentum_z": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.89036718185578e-14,
+            "max_abs_index": [
+              8,
+              5,
+              103
+            ],
+            "max_abs_ref": 0.00018580519462385624,
+            "relative": 4.784778595589551e-10
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.89036718185578e-14,
+            "max_abs_index": [
+              8,
+              5,
+              103
+            ],
+            "max_abs_ref": 0.00018580519462385624,
+            "relative": 4.784778595589551e-10
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.89036718185578e-14,
+            "max_abs_index": [
+              8,
+              5,
+              103
+            ],
+            "max_abs_ref": 4.476276864692443e-06,
+            "relative": 1.9861075287769586e-08
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.478107980600889e-18,
+            "max_abs_index": [
+              35,
+              42,
+              103
+            ],
+            "max_abs_ref": 0.00018580519462385624,
+            "relative": 3.486505312036707e-14
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.890366588932717e-14,
+            "max_abs_index": [
+              1,
+              5,
+              103
+            ],
+            "max_abs_ref": 0.00018580519462385624,
+            "relative": 4.784778276479493e-10
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.890366419526128e-14,
+            "max_abs_index": [
+              46,
+              5,
+              103
+            ],
+            "max_abs_ref": 0.00018580519462385622,
+            "relative": 4.784778185305192e-10
+          }
+        },
+        "energy": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.7671994260063746e-15,
+            "relative": 0.11338608369361315
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.7671994260063746e-15,
+            "relative": 0.11338608369361315
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.788118328666289e-18,
+            "max_abs_index": [
+              41,
+              7,
+              102
+            ],
+            "max_abs_ref": 4.255712433580078e-17,
+            "relative": 0.11251038230133253
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.7671994260063746e-15,
+            "relative": 0.11338608369361315
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              1,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.53669515304902e-15,
+            "relative": 0.13039399624765524
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.4729813524619124e-17,
+            "max_abs_index": [
+              44,
+              40,
+              49
+            ],
+            "max_abs_ref": 9.016911990920833e-16,
+            "relative": 0.06069684785625812
+          }
+        }
+      }
+    },
+    "3": {
+      "i": {
+        "momentum_x": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.198022994863468e-10,
+            "max_abs_index": [
+              39,
+              6,
+              103
+            ],
+            "max_abs_ref": 0.00028299571145903456,
+            "relative": 7.766983405971669e-07
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.198022994863468e-10,
+            "max_abs_index": [
+              39,
+              6,
+              103
+            ],
+            "max_abs_ref": 0.00028299571145903456,
+            "relative": 7.766983405971669e-07
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.198022994863468e-10,
+            "max_abs_index": [
+              39,
+              6,
+              103
+            ],
+            "max_abs_ref": 6.820595519259465e-06,
+            "relative": 3.222626218864412e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.831976841590722e-11,
+            "max_abs_index": [
+              40,
+              40,
+              101
+            ],
+            "max_abs_ref": 0.00028299571145903456,
+            "relative": 2.0608004310464393e-07
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0002829957114889903,
+            "max_abs_index": [
+              2,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0891859113077954e-17,
+            "relative": 25982314731669.16
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0002829957114889857,
+            "max_abs_index": [
+              47,
+              43,
+              103
+            ],
+            "max_abs_ref": 6.91696409693701e-18,
+            "relative": 40913283273264.734
+          }
+        },
+        "momentum_y": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4016711075051298e-09,
+            "max_abs_index": [
+              11,
+              7,
+              103
+            ],
+            "max_abs_ref": 7.766207102335796e-05,
+            "relative": 1.8048335423395514e-05
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4016711075051298e-09,
+            "max_abs_index": [
+              11,
+              7,
+              103
+            ],
+            "max_abs_ref": 7.766207102335796e-05,
+            "relative": 1.8048335423395514e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4016711075051298e-09,
+            "max_abs_index": [
+              11,
+              7,
+              103
+            ],
+            "max_abs_ref": 7.766207102335796e-05,
+            "relative": 1.8048335423395514e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.338183867653005e-12,
+            "max_abs_index": [
+              7,
+              41,
+              103
+            ],
+            "max_abs_ref": 4.958417064645324e-05,
+            "relative": 1.0765903307560607e-07
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.766317804259441e-05,
+            "max_abs_index": [
+              2,
+              4,
+              103
+            ],
+            "max_abs_ref": 2.071083814212775e-18,
+            "relative": 37498809806552.62
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.766317804259327e-05,
+            "max_abs_index": [
+              46,
+              4,
+              103
+            ],
+            "max_abs_ref": 3.7258697717125907e-19,
+            "relative": 208443082558131.12
+          }
+        },
+        "momentum_z": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.004153527548561e-19,
+            "max_abs_index": [
+              41,
+              42,
+              100
+            ],
+            "max_abs_ref": 1.2525655694475041e-18,
+            "relative": 0.2398400212193017
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.004153527548561e-19,
+            "max_abs_index": [
+              41,
+              42,
+              100
+            ],
+            "max_abs_ref": 1.2525655694475041e-18,
+            "relative": 0.2398400212193017
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.420905940005855e-21,
+            "max_abs_index": [
+              41,
+              7,
+              100
+            ],
+            "max_abs_ref": 2.7461363060851835e-20,
+            "relative": 0.3066455922579629
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.004153527548561e-19,
+            "max_abs_index": [
+              41,
+              42,
+              100
+            ],
+            "max_abs_ref": 1.2525655694475041e-18,
+            "relative": 0.2398400212193017
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0004716593401990207,
+            "max_abs_index": [
+              1,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00047165934019901965,
+            "relative": 1.0000000000000022
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0004716593401990196,
+            "max_abs_index": [
+              47,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.0004716593401990196,
+            "relative": 1.0
+          }
+        },
+        "energy": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2944964466240355e-08,
+            "max_abs_index": [
+              6,
+              37,
+              101
+            ],
+            "max_abs_ref": 0.07608539162273747,
+            "relative": 1.7013731795489454e-07
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.2944964466240355e-08,
+            "max_abs_index": [
+              6,
+              37,
+              101
+            ],
+            "max_abs_ref": 0.07608539162273747,
+            "relative": 1.7013731795489454e-07
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.4937249726124378e-09,
+            "max_abs_index": [
+              41,
+              5,
+              102
+            ],
+            "max_abs_ref": 0.0018337487852262751,
+            "relative": 1.3599054530823997e-06
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.1039825209818027e-08,
+            "max_abs_index": [
+              9,
+              40,
+              101
+            ],
+            "max_abs_ref": 0.07608539162273747,
+            "relative": 1.4509782987722534e-07
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.07608539162276622,
+            "max_abs_index": [
+              2,
+              43,
+              103
+            ],
+            "max_abs_ref": 3.9008415423552044e-15,
+            "relative": 19504866013303.445
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.07608539162276498,
+            "max_abs_index": [
+              47,
+              43,
+              103
+            ],
+            "max_abs_ref": 2.2889084284645188e-15,
+            "relative": 33240906746892.348
+          }
+        }
+      },
+      "j": {
+        "momentum_x": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.3368405013765349e-08,
+            "max_abs_index": [
+              11,
+              7,
+              103
+            ],
+            "max_abs_ref": 0.0007844653638723216,
+            "relative": 1.7041421622205832e-05
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.3368405013765349e-08,
+            "max_abs_index": [
+              11,
+              7,
+              103
+            ],
+            "max_abs_ref": 0.0007844653638723216,
+            "relative": 1.7041421622205832e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.3368405013765349e-08,
+            "max_abs_index": [
+              11,
+              7,
+              103
+            ],
+            "max_abs_ref": 0.0007844653638723216,
+            "relative": 1.7041421622205832e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4623025741542428e-12,
+            "max_abs_index": [
+              39,
+              41,
+              103
+            ],
+            "max_abs_ref": 1.1402672739942914e-05,
+            "relative": 1.282420891579112e-07
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0007844765458847824,
+            "max_abs_index": [
+              0,
+              4,
+              103
+            ],
+            "max_abs_ref": 4.290732377879194e-18,
+            "relative": 182830453357832.2
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0007844765458848032,
+            "max_abs_index": [
+              46,
+              4,
+              103
+            ],
+            "max_abs_ref": 2.5252070918044847e-18,
+            "relative": 310658301424389.3
+          }
+        },
+        "momentum_y": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.7175609505950943e-09,
+            "max_abs_index": [
+              39,
+              6,
+              103
+            ],
+            "max_abs_ref": 3.253972855906335e-05,
+            "relative": 5.278350578363073e-05
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.7175609505950943e-09,
+            "max_abs_index": [
+              39,
+              6,
+              103
+            ],
+            "max_abs_ref": 3.253972855906335e-05,
+            "relative": 5.278350578363073e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.7175609505950943e-09,
+            "max_abs_index": [
+              39,
+              6,
+              103
+            ],
+            "max_abs_ref": 3.2539682539682665e-05,
+            "relative": 5.2783580432922205e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.979501676928728e-12,
+            "max_abs_index": [
+              42,
+              40,
+              101
+            ],
+            "max_abs_ref": 3.253972855906335e-05,
+            "relative": 2.7595502711800133e-07
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.253972857284287e-05,
+            "max_abs_index": [
+              3,
+              43,
+              103
+            ],
+            "max_abs_ref": 8.072456446386393e-19,
+            "relative": 40309574649249.63
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.253972857284294e-05,
+            "max_abs_index": [
+              46,
+              43,
+              103
+            ],
+            "max_abs_ref": 1.0653670105591335e-19,
+            "relative": 305432102273987.3
+          }
+        },
+        "momentum_z": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.483587183639408e-19,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 5.604553304690358e-19,
+            "relative": 0.7999901044543851
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.483587183639408e-19,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 5.604553304690358e-19,
+            "relative": 0.7999901044543851
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.483587183639408e-19,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 5.604553304690358e-19,
+            "relative": 0.7999901044543851
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 9.493198044965838e-20,
+            "max_abs_index": [
+              41,
+              40,
+              103
+            ],
+            "max_abs_ref": 4.787184965860797e-20,
+            "relative": 1.9830439209400466
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00018580506801753002,
+            "max_abs_index": [
+              0,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00018580506801753002,
+            "relative": 1.0
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.00018580506801753002,
+            "max_abs_index": [
+              46,
+              43,
+              103
+            ],
+            "max_abs_ref": 0.00018580506801753002,
+            "relative": 1.0
+          }
+        },
+        "energy": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9392413730261285e-07,
+            "max_abs_index": [
+              11,
+              4,
+              102
+            ],
+            "max_abs_ref": 0.004019993853944652,
+            "relative": 4.823990890242859e-05
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9392413730261285e-07,
+            "max_abs_index": [
+              11,
+              4,
+              102
+            ],
+            "max_abs_ref": 0.004019993853944652,
+            "relative": 4.823990890242859e-05
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.9392413730261285e-07,
+            "max_abs_index": [
+              11,
+              4,
+              102
+            ],
+            "max_abs_ref": 0.00038588825894694194,
+            "relative": 0.0005025396155659575
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 6.365492302099623e-10,
+            "max_abs_index": [
+              39,
+              41,
+              103
+            ],
+            "max_abs_ref": 0.004019993853944652,
+            "relative": 1.5834582174431513e-07
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.004019993827477244,
+            "max_abs_index": [
+              3,
+              43,
+              101
+            ],
+            "max_abs_ref": 1.53669515304902e-15,
+            "relative": 2615999549097.9517
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.004019993827477307,
+            "max_abs_index": [
+              47,
+              43,
+              101
+            ],
+            "max_abs_ref": 9.016911990920833e-16,
+            "relative": 4458282205177.399
+          }
+        }
+      },
+      "k": {
+        "momentum_x": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.554075907939167e-19,
+            "max_abs_index": [
+              41,
+              42,
+              102
+            ],
+            "max_abs_ref": 4.934342234561077e-18,
+            "relative": 0.1530918519398386
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.554075907939167e-19,
+            "max_abs_index": [
+              41,
+              42,
+              102
+            ],
+            "max_abs_ref": 4.934342234561077e-18,
+            "relative": 0.1530918519398386
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.917300775776528e-20,
+            "max_abs_index": [
+              41,
+              5,
+              102
+            ],
+            "max_abs_ref": 2.2831426853157367e-19,
+            "relative": 0.08397638869037148
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.554075907939167e-19,
+            "max_abs_index": [
+              41,
+              42,
+              102
+            ],
+            "max_abs_ref": 4.934342234561077e-18,
+            "relative": 0.1530918519398386
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.554075907939167e-19,
+            "max_abs_index": [
+              1,
+              42,
+              102
+            ],
+            "max_abs_ref": 4.290732377879194e-18,
+            "relative": 0.17605562973081454
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.85340655232983e-19,
+            "max_abs_index": [
+              44,
+              41,
+              21
+            ],
+            "max_abs_ref": 2.5252070918044847e-18,
+            "relative": 0.07339621999102681
+          }
+        },
+        "momentum_y": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.828734875766718e-20,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 1.4558752042936811e-18,
+            "relative": 0.04003595128604812
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.828734875766718e-20,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 4.643966197945391e-19,
+            "relative": 0.1255120004608453
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.828734875766718e-20,
+            "max_abs_index": [
+              41,
+              4,
+              101
+            ],
+            "max_abs_ref": 1.4558752042936811e-18,
+            "relative": 0.04003595128604812
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.673982402763358e-20,
+            "max_abs_index": [
+              41,
+              43,
+              101
+            ],
+            "max_abs_ref": 9.284321336266434e-19,
+            "relative": 0.03957190051589491
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 5.828734875766718e-20,
+            "max_abs_index": [
+              1,
+              4,
+              101
+            ],
+            "max_abs_ref": 8.072456446386393e-19,
+            "relative": 0.07220521924743156
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.4380402954598916e-20,
+            "max_abs_index": [
+              44,
+              4,
+              85
+            ],
+            "max_abs_ref": 1.0653670105591335e-19,
+            "relative": 0.1349807419609482
+          }
+        },
+        "momentum_z": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.515724894172144e-10,
+            "max_abs_index": [
+              41,
+              6,
+              5
+            ],
+            "max_abs_ref": 0.00018580506801753002,
+            "relative": 8.157607918580245e-07
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 7.437168010329424e-11,
+            "max_abs_index": [
+              16,
+              6,
+              101
+            ],
+            "max_abs_ref": 0.00018580506801753002,
+            "relative": 4.002672311192155e-07
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.515724894172144e-10,
+            "max_abs_index": [
+              41,
+              6,
+              5
+            ],
+            "max_abs_ref": 4.4783918416870146e-06,
+            "relative": 3.384529419831135e-05
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 3.82605852517837e-11,
+            "max_abs_index": [
+              40,
+              40,
+              101
+            ],
+            "max_abs_ref": 0.00018580506801753002,
+            "relative": 2.059178775907983e-07
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.515724894172144e-10,
+            "max_abs_index": [
+              1,
+              6,
+              5
+            ],
+            "max_abs_ref": 0.00018580506801753002,
+            "relative": 8.157607918580245e-07
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 1.5157248941347368e-10,
+            "max_abs_index": [
+              45,
+              6,
+              5
+            ],
+            "max_abs_ref": 0.00018580506801753002,
+            "relative": 8.15760791837892e-07
+          }
+        },
+        "energy": {
+          "physical": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.7671994260063746e-15,
+            "relative": 0.11338608369361315
+          },
+          "outlet": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.7671994260063746e-15,
+            "relative": 0.11338608369361315
+          },
+          "wall": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 4.879240368342713e-18,
+            "max_abs_index": [
+              41,
+              6,
+              102
+            ],
+            "max_abs_ref": 4.2364878951762174e-17,
+            "relative": 0.11517182366786298
+          },
+          "farfield": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              41,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.7671994260063746e-15,
+            "relative": 0.11338608369361315
+          },
+          "inlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              0
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "outlet_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              4,
+              104
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "wall_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              0,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "farfield_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 0.0,
+            "max_abs_index": [
+              4,
+              44,
+              4
+            ],
+            "max_abs_ref": 0.0,
+            "relative": null
+          },
+          "periodic_minus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 2.003758220204639e-16,
+            "max_abs_index": [
+              1,
+              43,
+              102
+            ],
+            "max_abs_ref": 1.53669515304902e-15,
+            "relative": 0.13039399624765524
+          },
+          "periodic_plus_ghost": {
+            "nonfinite_reference": 0,
+            "nonfinite_jax": 0,
+            "max_abs": 8.121215958531497e-17,
+            "max_abs_index": [
+              45,
+              42,
+              101
+            ],
+            "max_abs_ref": 9.016911990920833e-16,
+            "relative": 0.09006648802504433
+          }
+        }
+      }
+    }
+  }
+}

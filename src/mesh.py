@@ -9,25 +9,28 @@
     Aix = yk*zi - zk*yi,  Aiy = zk*xi - xk*zi,  Aiz = xk*yi - yk*xi
     Asx = yi*zj - zi*yj,  Asy = zi*xj - xi*zj,  Asz = xi*yj - yi*xj
 
-其中 xi = d(x)/d(i)，i/j/k 依次对应数组的 x/y/z 三轴（已核对：直角坐标
-i=x,j=y,k=z 时 Akx=Aiy=Asz=1，与原码初始化一致）。偏导用 CD6/CD8
+其中 xi = d(x)/dξ，xj = d(x)/dη，xk = d(x)/dζ；计算方向
+(i,j,k) 对应 (ξ,η,ζ)，物理坐标是 (x,y,z)。直角单位度量时
+Akx=Aiy=Asz=1。偏导用 CD6/CD8
 （复用 viscous.cd_along_axis），鬼胞复制最近内点（等价原码 kernel 的
 边界复制，此处用 OUTFLOW 填充实现）。
 
-度量语义（与 viscous.py 的 (k,i,s) 命名对齐）：Akx/Aky/Akz 是 k 方向
-（≡x 轴）度量向量的 x/y/z 分量；Aix/Aiy/Aiz 是 i 方向（≡y 轴）；Asx..Asz
-是 s 方向（≡z 轴）。
+度量键沿用原码：Akx/Aky/Akz 对应计算 i（ξ）方向，Aix/Aiy/Aiz 对应
+计算 j（η）方向，Asx/Asy/Asz 对应计算 k（ζ）方向；末尾 x/y/z 是
+物理坐标分量。这些键中的 k/i/s 是原码名称，不是这里的 i/j/k 索引。
 """
 
 import numpy as np
 
 import jax.numpy as jnp
 
+from .axes import resolve_dimensions
 from .fields import LAP
 from .viscous import cd_along_axis
 
 METRIC_KEYS = ("Akx", "Aky", "Akz", "Aix", "Aiy", "Aiz",
                "Asx", "Asy", "Asz", "Ajac")
+COORD_KEYS = ("Axx", "Ayy", "Azz")     # 坐标场的三个键，形状 (nk, nj, ni)
 
 
 # 原码 comput_Jac3d_kernal 会把内区边界值复制进鬼胞；JAX 版不需要——
@@ -37,35 +40,44 @@ METRIC_KEYS = ("Akx", "Aky", "Akz", "Aix", "Aiy", "Aiz",
 
 def compute_metrics_from_coords(coords: dict, dxs, order=6,
                                 jac_bound=(1, 1, 1),
-                                periodic=(True, False, True)):
-    """由坐标场（含鬼胞）计算度量。coords: {"Axx","Ayy","Azz"}，3 维 (z,y,x)。
+                                periodic=(True, False, True),
+                                side_flags=None):
+    """由坐标场（含鬼胞）计算度量。coords: {"Axx","Ayy","Azz"}，计算轴序 (k,j,i)。
 
     dxs: 三轴参考步长 (hx, hy, hz)——注意是计算空间步长（均匀网格索引间距），
-    非 x 方向物理步长。返回 METRIC_KEYS 的度量场 dict（含鬼胞）。
+    不是物理 x 方向步长。返回 METRIC_KEYS 的度量场 dict（含鬼胞）。
 
-    jac_bound: 原码 `JAC_BOUND`（x/y/z 三标志）。为 1 的轴，每侧 LAP 层
+    jac_bound: 原码 `JAC_BOUND`（计算 i/j/k 三标志）。为 1 的轴，每侧 LAP 层
     坐标导数覆盖成单侧公式（`OCFD_Dx0_bound/Dy0_bound/Dz0_bound`，
     OCFD_bound_Scheme.cu:232-269 / viscous.band_one_sided）。
     原码缺省 `JAC_BOUND=1 1 1`，槽道 in 文件也是 `1 1 1`；只有全 0 时才
     与旧的"全场中心 CD6"逐位相同。
 
-    periodic: 原码 `IPERIODIC`（x/y/z），按数组轴 (z,y,x) 使用。周期轴的
+    periodic: 原码 `IPERIODIC`（计算 i/j/k），按数组轴 (k,j,i) 使用。周期轴的
     坐标鬼胞按**环绕**填（原码 MPI Sendrecv 自收自发），非周期轴边缘复制。
     注意：jac_bound 为 1 时边界带本来就被单侧覆盖，鬼胞填法只影响
     jac_bound=0 的轴，但为了与原码一致仍按 IPERIODIC 填。
+
+    side_flags: 每个计算轴一对 (低侧, 高侧) 的 0/1 标志，给出时优先于
+    jac_bound，逐侧决定边界带用不用单侧公式。多块路径用它：普通切口一侧是 0
+    （两侧都是内点，走中心模板），物理面和周期接缝一侧是 1。不给出时行为不变。
     """
     # 坐标场可能只在一个轴上有变化（如 y=y(j) 给成 (1,ny+2L,1)），先广播成同形
     shape = np.broadcast_shapes(*(np.shape(v) for v in coords.values()))
     Axx, Ayy, Azz = (jnp.broadcast_to(jnp.asarray(coords[k]), shape)
                      for k in ("Axx", "Ayy", "Azz"))
-    # 数组轴 (z,y,x)=(0,1,2) ↔ 物理方向 (x,y,z)=(2,1,0) ↔ dxs[0..2]
+    # 标量数组轴 (k,j,i)=(0,1,2)；计算方向 (i,j,k) 对应 dxs[0..2]
     # 每项 (array_axis, dxs_index, jac_bound_index)
     combos = ((2, 0, 0), (1, 1, 1), (0, 2, 2))
 
     def deriv(f, axis, hidx, jbidx):
-        """计算一个坐标导数，并按对应方向的 JAC_BOUND 标志切换边界带公式。"""
-        b = int(jac_bound[jbidx]) if jac_bound else 0
-        return cd_along_axis(f, axis, dxs[hidx], order, bound=(b, b))
+        """计算一个坐标导数，并按对应方向两侧的标志切换边界带公式。"""
+        if side_flags is not None:
+            bound = (int(side_flags[jbidx][0]), int(side_flags[jbidx][1]))
+        else:
+            b = int(jac_bound[jbidx]) if jac_bound else 0
+            bound = (b, b)
+        return cd_along_axis(f, axis, dxs[hidx], order, bound=bound)
 
     xi, xj, xk = (deriv(Axx, *c) for c in combos)
     yi, yj, yk = (deriv(Ayy, *c) for c in combos)
@@ -111,31 +123,52 @@ def _edge_ghosts(a, lap=None):
     return a
 
 
-def pad_coords(arr, periodic=(True, False, True)):
+def pad_coords(arr, periodic=(True, False, True), lengths=None):
     """按 IPERIODIC 给坐标场补 LAP 层鬼胞（与 `pad_to_lap` 的边缘复制不同）。
 
-    periodic 按 (x, y, z) 给出，数组轴是 (z, y, x)；周期轴取**对侧内区**
+    periodic 按计算方向 (i, j, k) 给出，数组轴是 (k, j, i)；周期轴取**对侧内区**
     （原码 `exchange_boundary_x/y/z_packed_dev` 单块自收自发等价于环绕），
-    非周期轴边缘复制。
+    非周期轴做**奇镜像外推**（OCFD 准例补丁 P1 同式）：从壁向外第 r 层
+    ghost = 2·p0 − p_r（p0 为首个物理点，r=1..LAP）。
+
+    2026-11-23 修正：非周期轴曾用边缘复制——鬼胞坐标恒定使近壁 ∂y/∂j=0、
+    度量在壁面带崩坏（黄金标准 sin(y) 检验：内区精确 1.0000、近壁带比值
+    偏至 15.7；handoff 第五轮已记录"Ajac(wall) 差 2 倍"）。线性外推与
+    OCFD 准例补丁 P1 的 fill_ghost_edge_coord 同式，对线性/缓变坐标精确。
+
+    lengths: 每个计算轴 (i, j, k) 给一个轴长，非周期轴按它选规则：不短于
+    2·LAP 用奇镜像，否则边缘复制。缺省用数组自己的轴长。多块路径把等价单块
+    的轴长传进来，物理面旁的坐标鬼层就与单块相同。
     """
     out = arr
-    for axis, per in zip((2, 1, 0), periodic):
+    for index, (axis, per) in enumerate(zip((2, 1, 0), periodic)):
         n = out.shape[axis]
-        if LAP >= n:
-            raise ValueError(f"axis {axis} 长 {n} < LAP={LAP}，无法环绕填鬼胞")
+        if per and LAP >= n:
+            raise ValueError(f"周期轴 {axis} 长 {n} < LAP={LAP}，无法环绕填鬼胞")
         if per:
             lo = np.take(out, np.arange(n - LAP, n), axis=axis)
             hi = np.take(out, np.arange(0, LAP), axis=axis)
-        else:
+        elif (n if lengths is None else lengths[index]) < 2 * LAP:
+            # 短轴（退化坐标维度）：无足够内点做外推，回退边缘复制
             lo = np.take(out, np.zeros(LAP, dtype=int), axis=axis)
             hi = np.take(out, np.full(LAP, n - 1), axis=axis)
+        else:
+            # 奇镜像外推（OCFD 准例补丁 P1 同式）：ghost[i] = 2·p0 − p_in[i+1]
+            # （i=0 最外→用第 LAP 个内点；i=LAP−1 最内→用次内点）。
+            # 均匀网格给出真·等差延拓 [p0−LAP·h … p0−h]。
+            head = np.take(out, np.arange(0, LAP + 1), axis=axis)
+            tail = np.take(out, np.arange(n - LAP - 1, n), axis=axis)
+            lo = 2.0 * np.take(head, [0], axis=axis) - np.flip(
+                np.take(head, np.arange(1, LAP + 1), axis=axis), axis=axis)
+            hi = 2.0 * np.take(tail, [LAP], axis=axis) - np.flip(
+                np.take(tail, np.arange(0, LAP), axis=axis), axis=axis)
         out = np.concatenate([lo, out, hi], axis=axis)
     return out
 
 
 def make_metrics_cartesian(grid, dxs=(1.0, 1.0, 1.0)):
     """均匀笛卡尔度量：Ajac=1、Akx=Aiy=Asz=1、其余 0（与原码初始化一致）。"""
-    shape = (grid.nz + 2 * LAP, grid.ny + 2 * LAP, grid.nx + 2 * LAP)
+    shape = (grid.nk + 2 * LAP, grid.nj + 2 * LAP, grid.ni + 2 * LAP)
     one = np.ones(shape)
     zero = np.zeros(shape)
     return {
@@ -146,66 +179,68 @@ def make_metrics_cartesian(grid, dxs=(1.0, 1.0, 1.0)):
     }
 
 
-def read_ocfd_mesh(path, nx, ny, nz):
-    """读原码的 `OCFD3d-Mesh.dat`（X/Y/Z 三个坐标场，内区 (nz, ny, nx)）。
+def read_ocfd_mesh(path, ni, nj, nk):
+    """读原码的 `OCFD3d-Mesh.dat`（X/Y/Z 三个坐标场，内区 (nk, nj, ni)）。
 
-    格式（由 channel_case_iiA/gen_case.py 写、原码 OCFD_Comput_Jacobian3d.cu:126-130
-    + read_3d1 读，两边一致）：
+    尺寸参数只接受规范 ``ni/nj/nk``。格式（由 channel_case_iiA/gen_case.py 写、
+    原码 OCFD_Comput_Jacobian3d.cu:126-130 + read_3d1 读，两边一致）：
       - 无文件头；三个场依次是 X、Y、Z；
-      - 每个场按 k 面一条记录：`int32 长度标记 + nx*ny 个 float64 + int32 长度标记`
-        （长度标记 = nx*ny*8 字节），数组内 i 最快、j 次之（C 序）；
+      - 每个场按 k 面一条记录：`int32 长度标记 + ni*nj 个 float64 + int32 长度标记`
+        （长度标记 = ni*nj*8 字节），数组内 i 最快、j 次之（C 序）；
       - 长度标记只用作完整性校验（原码的 offset 步长
         `(2*sizeof(int) + NX*NY*sizeof(REAL)) * NZ` 就来自它）。
 
-    nx/ny/nz 由 in 文件的 GRID_3D 给出（原码也是从 in 文件读，网格文件里没有维数）。
-    返回 {"Axx": x, "Ayy": y, "Azz": z}，均为 (nz, ny, nx)，**不含鬼胞**。
+    尺寸由 in 文件的 GRID_3D 给出（原码也是从 in 文件读，网格文件里没有维数）。
+    返回 {"Axx": x, "Ayy": y, "Azz": z}，均为 (nk, nj, ni)，**不含鬼胞**。
     """
-    n = nx * ny
+    ni, nj, nk = resolve_dimensions(ni, nj, nk)
+    n = ni * nj
     payload = 8 * n
     rec = 8 + payload
-    nbytes = 3 * nz * rec
+    nbytes = 3 * nk * rec
     import os
     size = os.path.getsize(path)
     if size != nbytes:
         raise ValueError(
-            f"{path} 大小 {size} 与 nx,ny,nz=({nx},{ny},{nz}) 推出的 {nbytes} 不符"
+            f"{path} 大小 {size} 与 ni,nj,nk=({ni},{nj},{nk}) 推出的 {nbytes} 不符"
             f"（每面 {rec} 字节 = 2×int32 + {n}×float64）——in 文件的 GRID_3D 与"
             f"网格文件不是同一套，或该目录的 Mesh.dat 是空文件（0 字节）")
     buf = np.fromfile(path, dtype=np.uint8)
     out = {}
     for f, key in enumerate(("Axx", "Ayy", "Azz")):
-        blk = buf[f * nz * rec:(f + 1) * nz * rec].reshape(nz, rec)
+        blk = buf[f * nk * rec:(f + 1) * nk * rec].reshape(nk, rec)
         head = blk[:, :4].copy().view("<i4").ravel()
         tail = blk[:, 4 + payload:].copy().view("<i4").ravel()
         if not np.all(head == payload) or not np.all(tail == payload):
             raise ValueError(f"{path} 记录标记不是 {payload}，不是原码网格格式")
-        arr = blk[:, 4:4 + payload].copy().view("<f8").reshape(nz, ny, nx)
+        arr = blk[:, 4:4 + payload].copy().view("<f8").reshape(nk, nj, ni)
         out[key] = arr
     return out
 
 
 def pad_to_lap(arr):
-    """把内区 (nz, ny, nx) 场按 LAP 鬼胞扩展，鬼胞复制最近内点（原码做法）。"""
+    """把内区 (nk, nj, ni) 场按 LAP 鬼胞扩展，鬼胞复制最近内点（原码做法）。"""
     return np.pad(arr, ((LAP, LAP), (LAP, LAP), (LAP, LAP)), mode="edge")
 
 
-def read_ocfd_field(path, nx, ny, nz, nvars=5):
+def read_ocfd_field(path, ni, nj, nk, nvars=5):
     """读原码的场文件（`opencfd.dat` / `OCFD00056000.dat`），返回内区数组列表。
 
-    格式（OCFD_IO.c read_file + gen_case.py write）：
+    尺寸参数只接受规范 ``ni/nj/nk``。格式（OCFD_IO.c read_file + gen_case.py write）：
       - 文件头 20 字节：`int32(12) + int32(Istep) + float64(tt) + int32(12)`；
       - 之后 nvars 个场依次排列，每个场按 k 面一条记录
-        `int32 长度标记 + nx*ny float64 + int32 长度标记`；
+        `int32 长度标记 + ni*nj float64 + int32 长度标记`；
       - 场顺序 **rho, U, V, W, T**（原始变量）。
     """
     import os
-    payload = 8 * nx * ny
+    ni, nj, nk = resolve_dimensions(ni, nj, nk)
+    payload = 8 * ni * nj
     rec = 8 + payload
     size = os.path.getsize(path)
-    nbytes = 20 + nvars * nz * rec
+    nbytes = 20 + nvars * nk * rec
     if size != nbytes:
         raise ValueError(
-            f"{path} 大小 {size} 与 nx,ny,nz=({nx},{ny},{nz})、{nvars} 个场的"
+            f"{path} 大小 {size} 与 ni,nj,nk=({ni},{nj},{nk})、{nvars} 个场的"
             f" {nbytes} 不符（每面 {rec} 字节 + 20 字节文件头）")
     buf = np.fromfile(path, dtype=np.uint8)
     head = buf[:20].copy().view("<i4")
@@ -213,11 +248,11 @@ def read_ocfd_field(path, nx, ny, nz, nvars=5):
         raise ValueError(f"{path} 文件头标记不是 12/12（不是原码场文件）")
     out = []
     for f in range(nvars):
-        blk = buf[20 + f * nz * rec:20 + (f + 1) * nz * rec].reshape(nz, rec)
+        blk = buf[20 + f * nk * rec:20 + (f + 1) * nk * rec].reshape(nk, rec)
         marks = blk[:, :4].copy().view("<i4").ravel()
         if not np.all(marks == payload):
             raise ValueError(f"{path} 第 {f} 个场的记录标记不是 {payload}")
-        out.append(blk[:, 4:4 + payload].copy().view("<f8").reshape(nz, ny, nx))
+        out.append(blk[:, 4:4 + payload].copy().view("<f8").reshape(nk, nj, ni))
     return out
 
 

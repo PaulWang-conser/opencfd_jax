@@ -1,0 +1,12 @@
+{
+  "case": { "name": "channel", "forcing_work": "off" },
+  "mesh": {
+    "format": "ocfd",
+    "file": "../../../channel_case_iiA/quick/OCFD3d-Mesh.dat",
+    "field": "../../../channel_case_iiA/quick/opencfd.dat",
+    "infile": "../../../channel_case_iiA/quick/opencfd-scu.in"
+  },
+  "numerics": { "scheme": "WENO7", "vis_order": "CD8", "viscous": true },
+  "time": { "dt": 0.00005, "end_step": 1, "end_time": 0.4 },
+  "output": { "kstep_show": 1, "kstep_save": 1 }
+}

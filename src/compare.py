@@ -3,7 +3,7 @@
 子命令：
   compare.py dat2npz <原版dump目录> [--out dump-npz]
       原版 dump（patches/main_dump.c 的 %.17e 文本）→ npz（统一对拍格式）。
-  compare.py jax-run --case sod --N 128 --steps 3 --dt 0.001 [--fp64] [--out dump-jax]
+  compare.py jax-run --case sod --ni 128 --steps 3 --dt 0.001 [--fp64] [--out dump-jax]
       JAX 侧对照跑：读原版 step0 守恒量作初值，跑同 dt 步数，逐 RK 子步存 du、
       每整步存 cons（npz）。
   compare.py diff <原版npz目录> <jax npz目录>
@@ -37,6 +37,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import boundary
 from .mesh_data import from_case
 
 # 原版 dump 的守恒量标签，顺序 = pf 的第 0..4 分量
@@ -49,7 +50,7 @@ LINE_ME2 = re.compile(
 
 
 def parse_me1(path):
-    """单场文本 → (nz, ny, nx) 数组（内区）。索引为物理 1-based。"""
+    """单场文本 → (nk, nj, ni) 数组（内区）。索引为物理 1-based。"""
     vals = {}
     i_max = j_max = k_max = -10 ** 9
     with open(path) as fh:
@@ -68,7 +69,7 @@ def parse_me1(path):
 
 
 def parse_me2(path, n_var=5):
-    """5 分量文本 → (n_var, nz, ny, nx) 数组（内区）。"""
+    """5 分量文本 → (n_var, nk, nj, ni) 数组（内区）。"""
     vals = {}
     i_max = j_max = k_max = -10 ** 9
     with open(path) as fh:
@@ -99,20 +100,44 @@ def cmd_dat2npz(args):
     os.makedirs(out, exist_ok=True)
     n_cons = 0
     n_du = 0
+    written = set()  # 目标 NPZ 重名检测（同身份多源文件曾静默覆盖——终审 P1）
+
+    def _source_step(basename, pattern, label):
+        """源 .dat 名 fullmatch：畸形名（_backup 等）报错而不是折叠身份。"""
+        m = re.fullmatch(pattern, basename)
+        if m is None:
+            raise SystemExit(
+                f"{label} 源文件名无法解析（按 FAIL 计）：{basename}；"
+                "dat2npz 只接受 cons_<tag>_step<六位>.dat / du_krk<一位>_step<六位>.dat")
+        return m
+
     for tag in CONS_TAGS:
         for path in sorted(glob.glob(os.path.join(args.dump_dir,
                                                  f"cons_{tag}_step*.dat"))):
-            step = int(re.search(r"step(\d+)", os.path.basename(path)).group(1))
+            m = _source_step(os.path.basename(path),
+                             rf"cons_{tag}_step(\d{{6}})\.dat", "cons")
+            step = int(m.group(1))
             arr, (nx, ny, nz) = parse_me1(path)
-            _save_with_meta(os.path.join(out, f"cons_{tag}_step{step:06d}.npz"),
+            target = f"cons_{tag}_step{step:06d}.npz"
+            if target in written:
+                raise SystemExit(f"dat2npz 目标重名（按 FAIL 计）：{target}——"
+                                 "同一步号存在多个源文件（数字别名）")
+            written.add(target)
+            _save_with_meta(os.path.join(out, target),
                             arr, {"nx": nx, "ny": ny, "nz": nz,
                                   "tag": tag, "layout": "inner"})
             n_cons += 1
     for path in sorted(glob.glob(os.path.join(args.dump_dir, "du_krk*_step*.dat"))):
-        m = re.search(r"krk(\d)_step(\d+)", os.path.basename(path))
+        m = _source_step(os.path.basename(path),
+                         r"du_krk(\d)_step(\d{6})\.dat", "du")
         krk, step = int(m.group(1)), int(m.group(2))
         arr, (nx, ny, nz) = parse_me2(path)
-        _save_with_meta(os.path.join(out, f"du_krk{krk}_step{step:06d}.npz"),
+        target = f"du_krk{krk}_step{step:06d}.npz"
+        if target in written:
+            raise SystemExit(f"dat2npz 目标重名（按 FAIL 计）：{target}——"
+                             "同一步号存在多个源文件（数字别名）")
+        written.add(target)
+        _save_with_meta(os.path.join(out, target),
                         arr, {"nx": nx, "ny": ny, "nz": nz, "krk": krk,
                               "layout": "inner"})
         n_du += 1
@@ -126,19 +151,19 @@ def cmd_dat2npz(args):
 def cmd_jax_run(args):
     """从原版 step0 初值出发执行 JAX 对拍，并逐 RK 子步保存 du、逐步保存守恒量。"""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from opencfd_jax import config
+    from . import config
     config.enable_x64()
     import jax
     import jax.numpy as jnp
-    from opencfd_jax.cases import apply_forcing, build_case
-    from opencfd_jax.solver import inviscid_rhs, rk3_step_stages
-    from opencfd_jax.viscous import viscous_rhs
+    from .cases import apply_forcing, build_case
+    from .solver import inviscid_rhs, rk3_step_stages
+    from .viscous import viscous_rhs
 
-    args_case = argparse.Namespace(case=args.case, N=args.N, ny=args.ny,
+    args_case = argparse.Namespace(case=args.case, ni=args.ni, nj=args.nj,
                                    Re=args.Re, Ama=args.Ama,
                                    ref_t=getattr(args, "ref_t", None),
                                    pr=getattr(args, "pr", 0.7),
-                                   nz=getattr(args, "nz", 4),
+                                   nk=getattr(args, "nk", 4),
                                    p_grad=args.p_grad, scheme=args.scheme,
                                    viscous=args.viscous,
                                    forcing_work=getattr(args, "forcing_work", "off"))
@@ -153,8 +178,10 @@ def cmd_jax_run(args):
     case["dxs"] = dxs
     # 对拍入口先覆盖步长，再构造描述，保证描述与后续 RHS 用同一组步长。
     desc = from_case(case)
+    execution = boundary.build_execution(case, desc)
     grid = desc.grid
     dxs = desc.dxs
+    bcs = execution.bcs
     params = case["params"]
     gamma = case["gamma"]
 
@@ -166,11 +193,11 @@ def cmd_jax_run(args):
             raise FileNotFoundError(
                 f"missing reference init: {path}（先跑 compare.py dat2npz）")
         arr = np.load(path)["field"]
-        if arr.shape != (grid.nz, grid.ny, grid.nx):
+        if arr.shape != (grid.nk, grid.nj, grid.ni):
             raise ValueError(
-                f"ref {tag} shape {arr.shape} != grid (nz,ny,nx)="
-                f"{(grid.nz, grid.ny, grid.nx)}——原版 in 文件 GRID_3D 与 JAX 侧"
-                f"网格不一致（用 --N/--ny/--nz 对齐 in 文件的三维）")
+                f"ref {tag} shape {arr.shape} != grid (nk,nj,ni)="
+                f"{(grid.nk, grid.nj, grid.ni)}——原版 in 文件 GRID_3D 与 JAX 侧"
+                f"网格不一致（用 --ni/--nj/--nk 对齐 in 文件的三维）")
         cons = cons.at[(v,) + grid.inner()[1:]].set(jnp.asarray(arr))
 
     metrics = desc.metrics
@@ -178,11 +205,15 @@ def cmd_jax_run(args):
     def rhs(q):
         """按原版 du_comput 的口径组合无粘、粘性和体积力右端项。"""
         # 原码 du_comput 恒算无粘 + 粘性，这里不加 --viscous 条件
-        du = inviscid_rhs(q, grid, gamma=gamma, bcs=desc.bcs,
+        q = execution.prepare(q)
+        du = inviscid_rhs(q, grid, gamma=gamma, bcs=bcs,
                           axes=desc.axes, dx=dxs, scheme=args.scheme,
-                          metrics=metrics)
-        du = du + viscous_rhs(q, grid, params, desc.bcs, axes=desc.axes,
-                              dx=dxs, order=vis_order, metrics=metrics)
+                          metrics=metrics, farfield=execution.farfield,
+                          faces=execution.faces, fill_state_halos=False)
+        du = du + viscous_rhs(q, grid, params, bcs, axes=desc.axes,
+                              dx=dxs, order=vis_order, metrics=metrics,
+                              farfield=execution.farfield,
+                              faces=execution.faces, fill_state_halos=False)
         du = du + apply_forcing(case, q)
         return du
 
@@ -206,57 +237,139 @@ def cmd_jax_run(args):
 
 
 def cmd_diff(args):
-    """逐文件比较原版与 JAX 的 du/cons，报告最大误差、RMS、位置及总体判定。"""
+    """逐文件比较原版与 JAX 的 du/cons，报告最大误差、RMS、位置及总体判定。
+
+    缺场与形状不符**计入失败**而不是静默跳过；含 NaN/inf 的场按最坏处理
+    （NaN 与任何比较都为 False，曾使全场 NaN 时误报 PASS——2026-11-23 修）。
+    """
     worst = 0.0
     worst_name = ""
     checked = 0
+    missing = []
+    malformed = []
+
+    def compare_field(ref, jax_, label):
+        """打印并返回该场的 max|diff|；NaN/inf 记为 inf。"""
+        d = np.abs(ref - jax_)
+        if not np.isfinite(d).all():
+            n_bad = int(np.count_nonzero(~np.isfinite(d)))
+            print(f"{label:<22} NONFINITE {n_bad} 处（按 FAIL 计）")
+            return np.inf
+        pos = np.unravel_index(int(np.argmax(d)), d.shape)
+        print(f"{label:<22} max|diff| = {d.max():.3e}  "
+              f"rms = {np.sqrt((d ** 2).mean()):.3e}  at {pos}")
+        return float(d.max())
+
     for jpath in sorted(glob.glob(os.path.join(args.jax_dir, "jax_du_*.npz"))):
-        m = re.search(r"jax_du_krk(\d)_step(\d+)", os.path.basename(jpath))
+        m = re.fullmatch(r"jax_du_krk(\d)_step(\d{6})\.npz", os.path.basename(jpath))
+        if m is None:
+            malformed.append(os.path.basename(jpath))
+            continue
         krk, step = int(m.group(1)), int(m.group(2))
+        label = f"du krk{krk} step{step}"
         ref_path = os.path.join(args.ref_dir, f"du_krk{krk}_step{step:06d}.npz")
         if not os.path.exists(ref_path):
+            missing.append(label)
             continue
-        du_ref = np.load(ref_path)["field"]
-        du_jax = np.load(jpath)["field"]
+        try:
+            du_ref = np.load(ref_path)["field"]
+            du_jax = np.load(jpath)["field"]
+        except KeyError as exc:
+            malformed.append(f"{os.path.basename(jpath)} 缺键 {exc}")
+            continue
         if du_ref.shape != du_jax.shape:
-            print(f"du krk{krk} step{step:<4d} SHAPE MISMATCH "
-                  f"ref{du_ref.shape} vs jax{du_jax.shape} (skipped)")
+            print(f"{label:<22} SHAPE MISMATCH ref{du_ref.shape} vs "
+                  f"jax{du_jax.shape}（按 FAIL 计）")
+            worst, worst_name = np.inf, label
             continue
-        d = np.abs(du_ref - du_jax)
-        pos = np.unravel_index(int(np.argmax(d)), d.shape)
         checked += 1
-        print(f"du krk{krk} step{step:<4d} max|diff| = {d.max():.3e}  "
-              f"rms = {np.sqrt((d ** 2).mean()):.3e}  at {pos}")
-        if d.max() > worst:
-            worst, worst_name = d.max(), f"du krk{krk} step{step}"
+        dmax = compare_field(du_ref, du_jax, label)
+        if dmax > worst:
+            worst, worst_name = dmax, label
     for jpath in sorted(glob.glob(os.path.join(args.jax_dir, "jax_cons_*.npz"))):
-        m = re.search(r"jax_cons_step(\d+)", os.path.basename(jpath))
+        m = re.fullmatch(r"jax_cons_step(\d{6})\.npz", os.path.basename(jpath))
+        if m is None:
+            malformed.append(os.path.basename(jpath))
+            continue
         step = int(m.group(1))
         for v, tag in enumerate(CONS_TAGS):
+            label = f"cons {tag} step{step}"
             ref_path = os.path.join(args.ref_dir, f"cons_{tag}_step{step:06d}.npz")
             if not os.path.exists(ref_path):
+                missing.append(label)
                 continue
-            ref = np.load(ref_path)["field"]
-            jax_ = np.load(jpath)[f"cons_{v}"]
+            try:
+                ref = np.load(ref_path)["field"]
+                jax_ = np.load(jpath)[f"cons_{v}"]
+            except KeyError as exc:
+                malformed.append(f"{os.path.basename(jpath)} 缺键 {exc}")
+                continue
             if ref.shape != jax_.shape:
-                print(f"cons {tag} step{step:<4d} SHAPE MISMATCH "
-                      f"ref{ref.shape} vs jax{jax_.shape} (skipped)")
+                print(f"{label:<22} SHAPE MISMATCH ref{ref.shape} vs "
+                      f"jax{jax_.shape}（按 FAIL 计）")
+                worst, worst_name = np.inf, label
                 continue
-            d = np.abs(ref - jax_)
-            pos = np.unravel_index(int(np.argmax(d)), d.shape)
             checked += 1
-            print(f"cons {tag} step{step:<4d} max|diff| = {d.max():.3e}  "
-                  f"rms = {np.sqrt((d ** 2).mean()):.3e}  at {pos}")
-            if d.max() > worst:
-                worst, worst_name = d.max(), f"cons {tag} step{step}"
+            dmax = compare_field(ref, jax_, label)
+            if dmax > worst:
+                worst, worst_name = dmax, label
+    if missing:
+        print(f"\n缺 {len(missing)} 个参考场（不可静默跳过）：" +
+              ", ".join(missing[:8]) + ("..." if len(missing) > 8 else ""))
+    # 双向核对：参考侧有、JAX 侧漏输出的场同样计入失败（step0 只作初值，
+    # 不参与比较）。此前遍历只由 JAX 文件驱动，JAX 漏一个 RK 阶段检不出。
+    # 文件名用全名匹配：畸形名（backup/临时文件等）报告并计失败，而不是
+    # 被未锚定正则当成合法步号或抛 AttributeError（Astra 2026-11-23 复审）。
+    seen = set()
+    for jpath in sorted(glob.glob(os.path.join(args.jax_dir, "jax_du_*.npz"))):
+        m = re.fullmatch(r"jax_du_krk(\d)_step(\d{6})\.npz", os.path.basename(jpath))
+        if m:
+            seen.add(f"du krk{int(m.group(1))} step{int(m.group(2))}")
+    for jpath in sorted(glob.glob(os.path.join(args.jax_dir, "jax_cons_*.npz"))):
+        m = re.fullmatch(r"jax_cons_step(\d{6})\.npz", os.path.basename(jpath))
+        if m:
+            for tag in CONS_TAGS:
+                seen.add(f"cons {tag} step{int(m.group(1))}")
+    extra_ref = []
+    for rpath in sorted(glob.glob(os.path.join(args.ref_dir, "du_*.npz"))):
+        m = re.fullmatch(r"du_krk(\d)_step(\d{6})\.npz", os.path.basename(rpath))
+        if m is None:
+            malformed.append(f"ref/{os.path.basename(rpath)}")
+            continue
+        label = f"du krk{int(m.group(1))} step{int(m.group(2))}"
+        if label not in seen:
+            extra_ref.append(label)
+    for rpath in sorted(glob.glob(os.path.join(args.ref_dir, "cons_*.npz"))):
+        m = re.fullmatch(r"cons_(\w+)_step(\d{6})\.npz", os.path.basename(rpath))
+        if m is None:
+            malformed.append(f"ref/{os.path.basename(rpath)}")
+            continue
+        tag, step = m.group(1), int(m.group(2))
+        if step == 0:
+            continue  # 初值参考，JAX 侧无对应输出
+        if f"cons {tag} step{step}" not in seen:
+            extra_ref.append(f"cons {tag} step{step}")
+    if extra_ref:
+        print(f"参考侧有 {len(extra_ref)} 组输出 JAX 侧缺失：" +
+              ", ".join(sorted(set(extra_ref))[:8]))
+    if malformed:
+        print(f"{len(malformed)} 个畸形/无法解析的文件名（按 FAIL 计）：" +
+              ", ".join(malformed[:8]))
+    incomplete = bool(missing or extra_ref or malformed)
     if checked == 0:
         print("\n没有可比对的场：检查 ref/jax 目录的文件名与步号是否对齐")
         return 1
-    verdict = ("PASS" if worst < 1e-12 else
-               "FAIL（进入定位流程：换格式二分 / 查该场对应环节）")
+    # 判定文字与退出码同源：场不齐（缺参考/漏输出）一律 FAIL，不再出现
+    # "打印 PASS 但返回 1" 的分歧（2026-11-23 修）
+    ok = worst < 1e-12 and not incomplete
+    verdict = ("PASS" if ok else
+               "FAIL（" + ("场不齐：" + (f"缺{len(missing)}参考/" if missing else "")
+                + (f"漏{len(set(extra_ref))}组JAX输出" if extra_ref else "")
+                if incomplete else "数值超差"
+                ) + "；进入定位流程：换格式二分 / 查该场对应环节）")
     print(f"\ncompared {checked} fields, worst = {worst:.3e} @ {worst_name}\n"
           f"判定：{verdict}")
-    return 0 if worst < 1e-12 else 1
+    return 0 if ok else 1
 
 
 def main():
@@ -275,10 +388,10 @@ def main():
                      help="原码场文件（opencfd.dat / OCFD000xx.dat），channel 初场")
     sp2.add_argument("--mesh", default=None,
                      help="原码 OCFD3d-Mesh.dat；给出则按 JAC_BOUND=1 接入度量")
-    sp2.add_argument("--N", type=int, default=128)
-    sp2.add_argument("--ny", type=int, default=8)
-    sp2.add_argument("--nz", type=int, default=4,
-                     help="z 向网格数，必须等于 in 文件 GRID_3D 的第三个数")
+    sp2.add_argument("--ni", type=int, default=128)
+    sp2.add_argument("--nj", type=int, default=8)
+    sp2.add_argument("--nk", type=int, default=4,
+                     help="k 向网格数，必须等于 in 文件 GRID_3D 的第三个数")
     sp2.add_argument("--steps", type=int, default=3)
     sp2.add_argument("--dt", type=float, default=0.001)
     sp2.add_argument("--Re", type=float, default=1000.0)

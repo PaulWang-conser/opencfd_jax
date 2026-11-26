@@ -27,8 +27,11 @@
 
 import jax.numpy as jnp
 
-from .fields import (LAP, PLATE, WALL, fill_halos_x, fill_halos_y, fill_halos_z,
-                     fill_wall_y, spatial_array_axis, zero_nonperiodic_ghosts)
+from .boundary import (LAP, PLATE, WALL, _EV_WALL_SIGNS,
+                       fill_ev_axis, fill_ev_faces, fill_ev_plate_j,
+                       fill_ev_wall_j, fill_faces, fill_halos_i, fill_halos_j,
+                       fill_halos_k, fill_wall_j, zero_nonperiodic_ghosts)
+from .fields import array_axis
 
 _CD6_A = (45.0, -9.0, 1.0)
 _CD6_DEN = 60.0
@@ -133,89 +136,55 @@ def dif_bound_for_axis(dif_bound, axis, dif_axis_map=(0, 1, 2)):
     return (int(dif_bound[i]), int(dif_bound[j]))
 
 
-_EV_WALL_SIGNS = {
-    0: (+1.0, -1.0, +1.0, -1.0),   # x 方向 Ev=(s11,s12,s13,E1)：y 镜像物理推导
-    1: (-1.0, +1.0, -1.0, -1.0),   # y 方向 Ev=(s12,s22,s23,E2)：原码符号
-}
+# Ev 与状态壁面的实现都在 boundary.py；本模块仅保留旧测试使用的别名导入。
 
 
-def _fill_ev_wall_y(f, ny, signs):
-    """粘性通量 Ev（4 分量堆叠，(4,z,y,x)）的 y 壁面镜像。
+def viscous_fluxes(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=None,
+                   dif_bound=None, zero_state_ghosts=False, dif_axis_map=(0, 1, 2),
+                   boundary_execution=None, farfield=None, faces=None,
+                   fill_state_halos=True):
+    """粘性通量 Ev，是 viscous_rhs 的前半段。cons 为含鬼胞尺寸但鬼胞未填的守恒量；
+    内部先填鬼胞（``fill_state_halos=False`` 表示调用方已在 prepare 中准备好状态）。
 
-    对应 OCFD_NS_Jacobian3d.cu:442-461 boundary_symmetry_pole_vis_y_ker
-    （原码符号 Ev1-,Ev2+,Ev3-,Ev4- 是对 y 方向 Ev=(s12,s22,s23,E2)）。
-    signs 按方向给出 4 个分量的镜像符号（y 镜像物理推导见 _EV_WALL_SIGNS）。
-    上壁对齐原码 ker_p（y1 = 2*(ny+LAP-1) - y）：ghost[ny+LAP+q] =
-    f[ny+LAP-2-q]；下壁 ker_m（y1 = 2*LAP - y）：ghost[p] = f[2*LAP-p]。
-    """
-    sign = jnp.array(signs).reshape(4, 1, 1, 1)
-    mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
-    f = f.at[:, :, :LAP, :].set(mir_lo * sign)
-    mir_hi = f[:, :, ny + LAP - 2:ny + LAP - 6:-1, :]
-    f = f.at[:, :, ny + LAP:ny + 2 * LAP, :].set(mir_hi * sign)
-    return f
+    dx: 按计算 i/j/k 排列的三元组（代码名为 dx/dy/dz）。
+    metrics: 可选，`mesh.compute_metrics_from_coords` 的输出。给出时导数换成协变形式
+    ∂f/∂x_l = f_ξ·Ak_l + f_η·Ai_l + f_ζ·As_l，Ev 乘 Ajac 和面积分量（原码
+    OCFD_NS_Jacobian3d.cu:33-52 的口径）。直角度量时与 metrics=None 逐位相同。
+    dif_bound: 原码计算方向的六标志 (i-,i+,j-,j+,k-,k+)。为 1 的一侧，LAP 层导数改走
+    单侧公式（`band_one_sided`），即原码 `OCFD_dy0(u, uy, ..., D0_bound[...])` 的行为；
+    None 等价全 0。
+    farfield: 通用 FARFIELD 的 5 分量来流状态，供状态鬼层使用。
+    faces: 可选六侧描述；给出时按面填状态和 Ev，支持单侧远场。
 
+    返回堆叠数组 (4·len(axes), nk+8, nj+8, ni+8)：``axes`` 里每个计算方向占四个平面，
+    依次是三个动量方向的粘性通量和能量通量，按 ``axes`` 的顺序排列。不求解的方向
+    （``dx[axis] <= 0``）也算出平面，只是 viscous_divergence 不对它求导。
 
-def _fill_ev_plate_y(f, ny, signs):
-    """粘性通量 Ev 的平板 y 向填充：下壁镜像 + 顶部零梯度（自由来流侧）。
-
-    下壁与槽道下壁完全相同（无滑移等温壁 ⇒ 同 `_fill_ev_wall_y` 的下壁分支）；
-    顶部是自由来流，Ev 在均匀来流里为 0、梯度为 0，取零梯度（末行复制）。
-    """
-    sign = jnp.array(signs).reshape(4, 1, 1, 1)
-    mir_lo = f[:, :, 2 * LAP:LAP:-1, :]
-    f = f.at[:, :, :LAP, :].set(mir_lo * sign)
-    f = f.at[:, :, ny + LAP:, :].set(f[:, :, ny + LAP - 1:ny + LAP, :])
-    return f
-
-
-def _fill_axis(f, axis, bc, nxi, is_ev=False):
-    """标准布局 (z,y,x) 3 维场的单轴鬼胞填充，按方向选函数。
-
-    wall 目前仅支持 y 方向（槽道流）；is_ev=True 时 f 为 4 分量堆叠的
-    (4,z,y,x)，用粘性通量的镜像符号规则；x/z 的 wall 待扩展。
-    """
-    if axis == 0:
-        return fill_halos_x(f, bc, nxi)
-    if axis == 1:
-        if bc == WALL:
-            assert is_ev, "cons-level wall fill 应走 fill_wall_y（var 镜像）"
-            return _fill_ev_wall_y(f, nxi, _EV_WALL_SIGNS[axis])
-        if bc == PLATE:
-            assert is_ev, "cons-level plate fill 由 plate.apply 写入"
-            return _fill_ev_plate_y(f, nxi, _EV_WALL_SIGNS[axis])
-        return fill_halos_y(f, bc, nxi)
-    return fill_halos_z(f, bc, nxi)
-
-
-def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=None,
-                dif_bound=None, zero_state_ghosts=False, dif_axis_map=(0, 1, 2)):
-    """粘性 RHS。cons 为含鬼胞尺寸但鬼胞未填的守恒量；内部先填鬼胞。
-
-    dx: 三元组 (dx, dy, dz)。返回与 cons 同 shape 的 du（鬼胞区为 0）。
-    metrics: 可选，`mesh.compute_metrics_from_coords` 的输出。给出时
-    导数换成协变形式 ∂f/∂x_l = f_ξ·Ak_l + f_η·Ai_l + f_ζ·As_l，散度
-    乘 Ajac（原码 OCFD_NS_Jacobian3d.cu:33-52 的口径）。直角度量时与
-    metrics=None **逐位相同**。
-    dif_bound: 原码计算方向的六标志 (i-,i+,j-,j+,k-,k+)。为 1 的一侧，
-    LAP 层导数改走单侧公式（`band_one_sided`），即原码
-    `OCFD_dy0(u, uy, ..., D0_bound[...])` 的行为；None 等价全 0。
+    物理面和块内周期面上的 Ev 鬼胞在这里按单块的规则填好；其余面上的鬼胞是按本块
+    本地的守恒量算出来的值。多块路径在交换守恒量以后调用本函数，再用接口上的交换
+    覆盖那些鬼胞，然后交给 viscous_divergence。
     """
     if dx is None:
-        raise ValueError("viscous_rhs requires dx")
+        raise ValueError("viscous_fluxes requires dx")
+    axes = tuple(axes)                 # 调用方给迭代器时，下面也只遍历这一次
     dxs = (dx, dx, dx) if isinstance(dx, (int, float)) else dx
     # 计算方向统一为 (i,j,k)；标量数组的空间轴为 (k,j,i)。
 
-    # 0. cons 填三轴鬼胞（粘性导数沿三方向都需要）；y 方向支持 wall
-    f = fill_halos_x(cons, bcs[0], grid.nx)
-    if bcs[1] == WALL:
-        f = fill_wall_y(f, grid.ny)
-    else:
-        f = fill_halos_y(f, bcs[1], grid.ny)
-    f = fill_halos_z(f, bcs[2], grid.nz)
-    if zero_state_ghosts:
-        # 原码语义：非周期物理边界的鬼层是 0（没人给它赋值）
-        f = zero_nonperiodic_ghosts(f, bcs, preserve_inflow=True)
+    # 0. cons 填计算 i/j/k 三轴鬼胞；状态准备与否由 fill_state_halos 决定。
+    f = cons
+    if fill_state_halos:
+        if faces is not None:
+            f = fill_faces(f, faces, grid)
+        else:
+            f = fill_halos_i(f, bcs[0], grid.ni, farfield=farfield)
+            if bcs[1] == WALL:
+                f = fill_wall_j(f, grid.nj)
+            else:
+                f = fill_halos_j(f, bcs[1], grid.nj, farfield=farfield)
+            f = fill_halos_k(f, bcs[2], grid.nk, farfield=farfield)
+        if zero_state_ghosts:
+            # 原码语义：非周期物理边界的鬼层是 0（没人给它赋值）
+            f = zero_nonperiodic_ghosts(f, bcs, preserve_inflow=True)
 
     d, rhou, rhov, rhow, rhoE = f
     # 鬼层按原码口径被清 0 时（zero_state_ghosts），这里会出现 0/0；只在鬼层取值，
@@ -227,20 +196,23 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     E_int = rhoE / dsafe - 0.5 * (u * u + v * v + w * w)
     T = E_int / params.Cv
     T = jnp.where(T > 0.0, T, 1.0)
-    if zero_state_ghosts:
+    ghost = jnp.ones_like(d, dtype=bool).at[grid.inner()[1:]].set(False)
+    empty = (d == 0) & (rhou == 0) & (rhov == 0) & (rhow == 0) & (rhoE == 0)
+    T = jnp.where(ghost & empty, 0.0, T)
+    if zero_state_ghosts and fill_state_halos:
         # 派生温度的物理鬼层在原码中为零，导数必须读取这个值。
         T = zero_nonperiodic_ghosts(T, bcs, preserve_inflow=True)
     mu = params.amu_C0 * T ** 1.5 / (params.Tsb + T)
 
     # 1. 导数场（12 个）：cd 沿各轴输出全长。
-    # 与 compute_dt 同一约定：dxs[axis] <= 0 表示该方向不求解（如 2D 算例
+    # 与求解方向约定一致：dxs[axis] <= 0 表示该方向不求解（如 2D 算例
     # 的 z），该轴导数置 0（场沿该轴均匀时物理导数本为 0）。
     def cd_or_zero(g, axis):
         """计算指定计算方向的中心差分；非求解方向直接返回零导数场。"""
         h = dxs[axis]
         if h <= 0.0:
             return jnp.zeros_like(g)
-        return cd_along_axis(g, spatial_array_axis(axis), h, order,
+        return cd_along_axis(g, array_axis(axis), h, order,
                              bound=dif_bound_for_axis(dif_bound, axis, dif_axis_map))
 
     if metrics is None:
@@ -260,7 +232,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
         # 协变导数（原码 vis_flux_s_ker，OCFD_NS_Jacobian3d.cu:126-128 / :190）：
         #   ∂f/∂x_l = f_ξ * Ak_l + f_η * Ai_l + f_ζ * As_l
         # f_ξ/f_η/f_ζ 是参考空间（ξ∈[0,1]，步长 dxs）上的导数；
-        # A*k/A*i/A*s 分别是 ξ/η/ζ 面的面积向量（compute_metrics_from_coords）。
+        # 原码键 Ak/Ai/As 分别对应计算 i/j/k（ξ/η/ζ）方向的余子式向量。
         # 直角度量（A*k=1, A*i=A*s=0）时逐位退化为上面的物理导数。
         def cov(f):
             """由三个参考方向导数和网格度量合成物理坐标导数 ``(f_x,f_y,f_z)``。"""
@@ -292,7 +264,7 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
     E2 = u * s12 + v * s22 + w * s23 + muc * Ty
     E3 = u * s13 + v * s23 + w * s33 + muc * Tz
 
-    # 4. 每方向：Ev 组装 → 填鬼胞 → 再求导 → du[1..4] 正号累加（内区）
+    # 4. 每个方向：Ev 组装 → 填鬼胞
     # 直角（metrics=None）：Ev 分量就是应力本身（Ajac=1）。
     # 曲线（metrics）：照原码 vis_flus_ev_ker（OCFD_NS_Jacobian3d.cu:222-236）：
     #   akx = Ajac*Akx（对应方向那一组面积分量），Ev1 = akx*s11+aky*s12+akz*s13
@@ -316,29 +288,94 @@ def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=No
                     ax * s13 + ay * s23 + az * s33,
                     ax * E1 + ay * E2 + az * E3)
         ev_by_axis = {0: evv(0), 1: evv(1), 2: evv(2)}
-    nxi_by_axis = {0: grid.nx, 1: grid.ny, 2: grid.nz}
-    du = jnp.zeros(grid.shape, dtype=cons.dtype)
-    sl_inner = grid.inner()
+    nxi_by_axis = {0: grid.ni, 1: grid.nj, 2: grid.nk}
+    fluxes = []
     for axis in axes:
-        Evs = ev_by_axis[axis]
-        Ev_stack = jnp.stack(Evs)                  # (4, z, y, x)
-        Ev_stack = _fill_axis(Ev_stack, axis, bcs[axis], nxi_by_axis[axis],
-                              is_ev=True)
+        Ev_stack = jnp.stack(ev_by_axis[axis])      # (4, z, y, x)
+        mixed_axis = (boundary_execution is not None and
+                      any(f.axis == axis for f in boundary_execution.mixed_outflow))
+        if faces is not None:
+            Ev_stack = fill_ev_faces(Ev_stack, faces, grid)
+        elif mixed_axis:
+            Ev_stack = boundary_execution.fill_mixed_outflow(Ev_stack, axis)
+        else:
+            Ev_stack = fill_ev_axis(Ev_stack, axis, bcs[axis], nxi_by_axis[axis],
+                                    is_ev=True)
         if zero_state_ghosts:
             # 原码粘性通量 kernel 同样只跑内区，Ev 鬼层没被算过（是 0）；
             # 顶部（z+ 未打开 DIF_BOUND）那个中心差分会读到它 —— 这正是原码
             # 顶部 k=255 出现 ±2.2e6 的来源。
             Ev_stack = zero_nonperiodic_ghosts(Ev_stack, bcs)
+        fluxes.append(Ev_stack)
+    if not fluxes:                     # 没有计算方向：给一个空的堆叠数组，求导那一段自然得零
+        return jnp.zeros((0, *grid.shape[1:]), dtype=s11.dtype)
+    return jnp.concatenate(fluxes, axis=0)
+
+
+def viscous_divergence(fluxes, grid, axes=(0,), dx=None, order=6, metrics=None,
+                       dif_bound=None, dif_axis_map=(0, 1, 2), dtype=None):
+    """粘性右端项，是 viscous_rhs 的后半段：对每个计算方向的 Ev 求导，正号累加进
+    du[1..4]（内区）。
+
+    ``fluxes`` 是 viscous_fluxes 的输出，形状 (4·len(axes), nk+8, nj+8, ni+8)。返回与
+    守恒量同 shape 的 du（鬼胞区为 0）。axes、dx、order、metrics、dif_bound、dif_axis_map
+    要与算这份 ``fluxes`` 时传的相同：平面的排法由 ``axes`` 定。
+
+    ``dtype`` 是累加右端项用的精度，缺省与 ``fluxes`` 相同。单块的 ``viscous_rhs`` 传
+    守恒量的精度，与拆分以前一致：守恒量是 FP32 而度量是 FP64 时，原函数按 FP32 累加，
+    最后乘 Ajac 才升到 FP64。
+    """
+    if dx is None:
+        raise ValueError("viscous_divergence requires dx")
+    axes = tuple(axes)
+    dxs = (dx, dx, dx) if isinstance(dx, (int, float)) else dx
+    du = jnp.zeros(grid.shape, dtype=fluxes.dtype if dtype is None else dtype)
+    sl_inner = grid.inner()
+    for position, axis in enumerate(axes):
         for i, var in enumerate((1, 2, 3, 4)):
             if dxs[axis] <= 0.0:
                 continue                           # 该方向不求解
             # 原码 du_viscous_Jacobian3d_y_final（OCFD_NS_Jacobian3d.cu:363-366）
             # 的 Ev 求导同样带 D0_bound[2i]/[2i+1]：边界带换单侧
-            dEv = cd_along_axis(Ev_stack[i], spatial_array_axis(axis), dxs[axis], order,
-                                bound=dif_bound_for_axis(dif_bound, axis, dif_axis_map))
+            dEv = cd_along_axis(fluxes[4 * position + i], array_axis(axis), dxs[axis],
+                                order, bound=dif_bound_for_axis(dif_bound, axis, dif_axis_map))
             add = dEv[sl_inner[1:]]                # 内区（3 维）
             du = du.at[(var,) + sl_inner[1:]].add(add)
     if metrics is not None:
         # 原码 vis_flux 的散度同样只带 Ajac（与无粘同口径）
         du = du * metrics["Ajac"]
     return du
+
+
+def viscous_rhs(cons, grid, params, bcs, axes=(0,), dx=None, order=6, metrics=None,
+                dif_bound=None, zero_state_ghosts=False, dif_axis_map=(0, 1, 2),
+                boundary_execution=None, farfield=None, faces=None,
+                fill_state_halos=True):
+    """粘性 RHS。cons 为含鬼胞尺寸但鬼胞未填的守恒量；内部先填鬼胞。
+
+    dx: 按计算 i/j/k 排列的三元组（代码名为 dx/dy/dz）。返回与 cons 同 shape 的 du（鬼胞区为 0）。
+    metrics: 可选，`mesh.compute_metrics_from_coords` 的输出。给出时
+    导数换成协变形式 ∂f/∂x_l = f_ξ·Ak_l + f_η·Ai_l + f_ζ·As_l，散度
+    乘 Ajac（原码 OCFD_NS_Jacobian3d.cu:33-52 的口径）。直角度量时与
+    metrics=None **逐位相同**。
+    dif_bound: 原码计算方向的六标志 (i-,i+,j-,j+,k-,k+)。为 1 的一侧，
+    LAP 层导数改走单侧公式（`band_one_sided`），即原码
+    `OCFD_dy0(u, uy, ..., D0_bound[...])` 的行为；None 等价全 0。
+    farfield: 通用 FARFIELD 的 5 分量来流状态，供状态鬼层和 Ev 零梯度使用。
+    faces: 可选六侧描述；给出时按面填状态和 Ev，支持单侧远场。
+    fill_state_halos: False 表示调用方已在 prepare 中准备好状态。
+
+    它是 viscous_fluxes 和 viscous_divergence 的顺序组合，两段之间只多传一个堆叠
+    数组；单块路径在一次 jit 里调用它。
+    """
+    if dx is None:                              # 报自己的名字，与拆分之前相同
+        raise ValueError("viscous_rhs requires dx")
+    axes = tuple(axes)           # 拆分以前只遍历一次 axes；两段拿到的要是同一组方向
+    return viscous_divergence(
+        viscous_fluxes(cons, grid, params, bcs, axes=axes, dx=dx, order=order,
+                       metrics=metrics, dif_bound=dif_bound,
+                       zero_state_ghosts=zero_state_ghosts, dif_axis_map=dif_axis_map,
+                       boundary_execution=boundary_execution, farfield=farfield,
+                       faces=faces, fill_state_halos=fill_state_halos),
+        grid, axes=axes, dx=dx, order=order, metrics=metrics, dif_bound=dif_bound,
+        dif_axis_map=dif_axis_map, dtype=cons.dtype)

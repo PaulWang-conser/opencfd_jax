@@ -18,18 +18,14 @@ _REPO_TAX = Path(__file__).resolve().parents[2]
 if str(_REPO_TAX) not in sys.path:
     sys.path.insert(0, str(_REPO_TAX))
 
-try:  # 正常包路径（python -m pytest 从仓库根跑）
-    from opencfd_jax.src import cases, mesh_data, run
-    from opencfd_jax.src.fields import (INFLOW, OUTFLOW, PERIODIC, PLATE,
-                                        WALL, Grid)
-except ModuleNotFoundError:  # 兼容仓库现有的 opencfd_jax = src 别名跑法
-    from opencfd_jax import cases, mesh_data, run
-    from opencfd_jax.fields import INFLOW, OUTFLOW, PERIODIC, PLATE, WALL, Grid
+from opencfd_jax.src import boundary, cases, mesh_data, main
+from opencfd_jax.src.fields import (INFLOW, OUTFLOW, PERIODIC, PLATE,
+                                    WALL, Grid)
 
 
 def _ns(**kw):
     """构造 build_case 所需的最小 CLI 命名空间，缺省值保持仓库原状。"""
-    defaults = dict(case="sod", N=16, ny=8, nz=4, Re=10.0, Ama=0.1,
+    defaults = dict(case="sod", ni=16, nj=8, nk=4, Re=10.0, Ama=0.1,
                     ref_t=None, pr=0.7, forcing_work="off")
     defaults.update(kw)
     return argparse.Namespace(**defaults)
@@ -39,12 +35,12 @@ def _ns(**kw):
 def built():
     """五个内置算例各建一次，供形状/步长/边界的现状冻结断言复用。"""
     return {
-        "sod": cases.build_case(_ns(case="sod", N=16, ny=8, nz=4)),
-        "tg": cases.build_case(_ns(case="tg", N=16, ny=16, nz=4)),
+        "sod": cases.build_case(_ns(case="sod", ni=16, nj=8, nk=4)),
+        "tg": cases.build_case(_ns(case="tg", ni=16, nj=16, nk=4)),
         "poiseuille": cases.build_case(
-            _ns(case="poiseuille", N=16, ny=8, nz=4, p_grad=1.0)),
+            _ns(case="poiseuille", ni=16, nj=8, nk=4, p_grad=1.0)),
         "plate": cases.build_case(
-            _ns(case="plate", N=16, ny=8, nz=4, plate_x0=0.1,
+            _ns(case="plate", ni=16, nj=8, nk=4, plate_x0=0.1,
                 plate_x1=1.1, plate_h=0.12,
                 plate_dif_bound="0 0 0 0 1 0")),
         "channel": cases.build_case(
@@ -68,11 +64,11 @@ def test_existing_cases_keep_shape_steps_axes(built):
     assert set(built) == set(expected)
     for name, case in built.items():
         grid = case["grid"]
-        assert (grid.nx, grid.ny, grid.nz) == expected[name][0], name
+        assert (grid.ni, grid.nj, grid.nk) == expected[name][0], name
         assert case["dxs"] == pytest.approx(expected[name][1]), name
         assert tuple(case["axes"]) == expected[name][2], name
-        assert case["grid"].alloc().shape == (5, grid.nz + 8, grid.ny + 8,
-                                              grid.nx + 8), name
+        assert case["grid"].alloc().shape == (5, grid.nk + 8, grid.nj + 8,
+                                              grid.ni + 8), name
 
 
 def test_description_reuses_case_objects(built):
@@ -92,16 +88,22 @@ def test_description_reuses_case_objects(built):
     assert mesh_data.from_case(built["sod"]).coords is None
 
 
-def test_plate_axis_mapping_and_dif_bound_unchanged(built):
-    """U1：平板保留 dif_axis_map=(0,2,1) 与 DIF_BOUND 的物理轴含义。"""
+def test_plate_axis_mapping_and_dif_bound_derived_from_faces(built):
+    """U1：平板保留 dif_axis_map=(0,2,1)；边界带改由边界 kind 派生。"""
     desc = mesh_data.from_case(built["plate"])
     assert desc.dif_axis_map == (0, 2, 1)
+    # 算例侧旧字段仍留档，但执行配置里的带由 faces 派生。
     assert desc.dif_bound == (0, 0, 0, 0, 1, 0)
-    # 原码 k- 对应 JAX y-：y- 开边界带，y+ 关；x/z 全关。
-    assert desc.face("y-").dif_band is True
-    assert desc.face("y+").dif_band is False
-    assert desc.face("x-").dif_band is False
-    assert desc.face("z-").dif_band is False
+    # 壁面与远场开带（鬼层清零 + 边界点赋值）；入口/出口/周期不开。
+    assert desc.face("i-").dif_band is False
+    assert desc.face("i+").dif_band is False
+    assert desc.face("j-").dif_band is True
+    assert desc.face("j+").dif_band is False  # 显式 plate_dif_bound="0 0 0 0 1 0" 生效（2026-11-23）
+    assert desc.face("k-").dif_band is False
+    assert desc.face("k+").dif_band is False
+    execution = boundary.build_execution(built["plate"], desc)
+    # 原码次序 (x-,x+,y-,y+,z-,z+)，map=(0,2,1)：i→x，j→z，k→y。
+    assert execution.band == (0, 0, 0, 0, 1, 0)
 
 
 def test_compare_style_step_override_is_visible(built):
@@ -111,7 +113,7 @@ def test_compare_style_step_override_is_visible(built):
     case["dxs"] = override
     desc = mesh_data.from_case(case)
     assert desc.dxs == override
-    assert desc.face("y-").dif_band is True
+    assert desc.face("j-").dif_band is True
 
 
 def test_snapshot_does_not_change_after_case_mutation(built):
@@ -128,17 +130,17 @@ def test_build_rhs_reads_description_after_case_update(built, monkeypatch):
     case = dict(built["sod"])
     case["dxs"] = (0.04, 0.04, 0.04)
     seen = []
-    real = run.from_case
+    real = main.from_case
 
     def record(c):
         desc = real(c)
         seen.append(desc)
         return desc
 
-    monkeypatch.setattr(run, "from_case", record)
+    monkeypatch.setattr(main, "from_case", record)
     args = argparse.Namespace(case="sod", scheme="WENO7", vis_order="CD8",
                               viscous=False, weno_tv=False)
-    run.build_rhs(case, args)
+    main.build_rhs(case, args)
     assert seen and seen[-1].dxs == (0.04, 0.04, 0.04)
 
 
@@ -148,26 +150,26 @@ def test_channel_six_faces_and_executor_source(built):
     """U2：槽道双壁、周期 x/z，壁面由回调 + 鬼胞共同执行。"""
     desc = mesh_data.from_case(built["channel"])
     kinds = {f.side: f.kind for f in desc.faces}
-    assert kinds == {"x-": PERIODIC, "x+": PERIODIC, "y-": WALL, "y+": WALL,
-                     "z-": PERIODIC, "z+": PERIODIC}
-    for side in ("y-", "y+"):
+    assert kinds == {"i-": PERIODIC, "i+": PERIODIC, "j-": WALL, "j+": WALL,
+                     "k-": PERIODIC, "k+": PERIODIC}
+    for side in ("j-", "j+"):
         face = desc.face(side)
         assert face.executor == "callback+halo"
-        assert face.dif_band is True  # in 文件 DIF_BOUND=0 0 1 1 0 0
-    for side in ("x-", "x+", "z-", "z+"):
+        assert face.dif_band is True  # 双壁都靠回调写点，原码 DIF_BOUND 也开带
+    for side in ("i-", "i+", "k-", "k+"):
         assert desc.face(side).executor == "halo"
 
 
 def test_plate_faces_are_asymmetric(built):
     """U2：平板入口/出口、下壁/上来流四侧语义不同，且都由平板回调执行。"""
     desc = mesh_data.from_case(built["plate"])
-    assert desc.face("x-").kind == INFLOW
-    assert desc.face("x+").kind == OUTFLOW
-    assert desc.face("y-").kind == WALL
-    assert desc.face("y+").kind == mesh_data.FARFIELD
-    for side in ("x-", "x+", "y-", "y+"):
+    assert desc.face("i-").kind == INFLOW
+    assert desc.face("i+").kind == OUTFLOW
+    assert desc.face("j-").kind == WALL
+    assert desc.face("j+").kind == mesh_data.FARFIELD
+    for side in ("i-", "i+", "j-", "j+"):
         assert desc.face(side).executor == "callback"
-    for side in ("z-", "z+"):
+    for side in ("k-", "k+"):
         assert desc.face(side).kind == PERIODIC
         assert desc.face(side).executor == "halo"
 
@@ -176,9 +178,9 @@ def test_generic_sod_faces(built):
     """U2：普通算例按轴级 bc 展开；sod 的 x 出流、y/z 周期。"""
     desc = mesh_data.from_case(built["sod"])
     kinds = {f.side: f.kind for f in desc.faces}
-    assert kinds == {"x-": OUTFLOW, "x+": OUTFLOW,
-                     "y-": PERIODIC, "y+": PERIODIC,
-                     "z-": PERIODIC, "z+": PERIODIC}
+    assert kinds == {"i-": OUTFLOW, "i+": OUTFLOW,
+                     "j-": PERIODIC, "j+": PERIODIC,
+                     "k-": PERIODIC, "k+": PERIODIC}
     assert all(f.executor == "halo" for f in desc.faces)
 
 
@@ -197,11 +199,11 @@ def test_channel_real_mesh_keeps_inner_coords_and_metrics():
     assert desc.has_metrics and desc.has_coords
     assert set(desc.coords) == {"Axx", "Ayy", "Azz"}
     for key in ("Axx", "Ayy", "Azz"):
-        assert desc.coords[key].shape == (grid.nz, grid.ny, grid.nx)
+        assert desc.coords[key].shape == (grid.nk, grid.nj, grid.ni)
     # case 保存的是内区原始坐标（含鬼胞的副本没有留在 case 里）。
     assert desc.coords["Axx"] is case["coords"]["Axx"]
     assert tuple(desc.metrics["Ajac"].shape) == (
-        grid.nz + 8, grid.ny + 8, grid.nx + 8)
+        grid.nk + 8, grid.nj + 8, grid.ni + 8)
 
 
 def test_channel_without_mesh_keeps_metrics_and_coords_none(built):
@@ -216,8 +218,8 @@ def test_description_is_read_only(built):
     with pytest.raises(FrozenInstanceError):
         desc.dxs = (0.0, 0.0, 0.0)
     case = dict(built["sod"])
-    shape = (built["sod"]["grid"].nz + 8, built["sod"]["grid"].ny + 8,
-             built["sod"]["grid"].nx + 8)
+    shape = (built["sod"]["grid"].nk + 8, built["sod"]["grid"].nj + 8,
+             built["sod"]["grid"].ni + 8)
     case["metrics"] = {k: np.zeros(shape) for k in mesh_data.METRIC_KEYS}
     wrapped = mesh_data.from_case(case).metrics
     with pytest.raises(TypeError):

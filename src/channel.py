@@ -16,7 +16,7 @@
   （外推在 ρT 上做，1/(γMa²) 是公因子，等价于外推 p）
 - 等温壁（Tw>0）：T_wall = Tw、ρ_wall = pw/Tw；绝热壁（Tw≤0）：T 也三点外推。
 - 镜像鬼胞：ρ、T 偶对称；u、v、w 奇对称（等价于守恒量里
-  ρ/ρE 同号、ρu/ρv/ρw 反号，正是 `fields.fill_wall_y` 的 `_WALL_SIGN`）。
+  ρ/ρE 同号、ρu/ρv/ρw 反号，正是 `boundary.fill_wall_j` 的 `_WALL_SIGN`）。
 
 守恒量 ↔ 原始变量用与原码同一条链：`T=(ρE−½ρV²)/(ρ Cv)`、`p=ρT/(γMa²)`。
 
@@ -26,61 +26,7 @@
 
 import jax.numpy as jnp
 
-from .fields import LAP, fill_wall_y
-
-
-def primitive(cons, phys):
-    """守恒量 → 原始变量 (rho, u(3), T)，对应原码 cons_to_pri_kernel。
-
-    除法用 `rho>0` 保护：新 alloc 的场鬼胞是 0，直接除会出 NaN/inf。
-    真实计算里调用前 x/z 鬼胞已由周期填充（见 apply_wall_bc 说明）。
-    """
-    rho = cons[0]
-    rho_safe = jnp.where(rho > 0, rho, 1.0)
-    u = cons[1:4] / rho_safe
-    T = (cons[4] - 0.5 * rho_safe * jnp.sum(u * u, axis=0)) / (rho_safe * phys.Cv)
-    return rho, u, T
-
-
-def _wall_layer(rho, T, j, step, tw):
-    """壁面那一层：返回 (rho_wall, T_wall)，均为 (nz, nx) 形状的场。
-
-    j: 壁面所在 y 索引；step=+1 表示向 +y（下壁），-1 表示向 −y（上壁）。
-    """
-    j1, j2, j3 = j + step, j + 2 * step, j + 3 * step
-    pt1 = rho[:, j1, :] * T[:, j1, :]
-    pt2 = rho[:, j2, :] * T[:, j2, :]
-    pt3 = rho[:, j3, :] * T[:, j3, :]
-    pw = (18.0 * pt1 - 9.0 * pt2 + 2.0 * pt3) / 11.0
-    if tw > 0.0:
-        Tw = jnp.full_like(pw, tw)          # 等温（冷）壁
-    else:
-        Tw = (18.0 * T[:, j1, :] - 9.0 * T[:, j2, :]
-              + 2.0 * T[:, j3, :]) / 11.0   # 绝热壁：T 也三点外推
-    # 角鬼胞（x/z 同时是鬼胞）上 ρT=0，绝热外推会给出 Tw=0；用保护分母避免 NaN，
-    # 这些位置随后会被 x/z 周期填充覆盖，不影响内区。
-    return pw / jnp.where(Tw > 0, Tw, 1.0), Tw
-
-
-def apply_wall_bc(cons, grid, phys, Tw_bottom=1.0, Tw_top=1.0):
-    """把 IBC=200 的双壁条件写进 cons（壁面层 + 镜像鬼胞），返回新 cons。
-
-    调用时机与原码一致：每个 RK 子步 `du_comput` **之前**（等价于原码
-    `get_duvwT()`+`OCFD_bc()` 在上一子步末尾做的事）。x/z 鬼胞应已由周期
-    填充（`fields.fill_halos_x/z`）；本函数只管 y 向壁面与镜像。
-    """
-    ny = grid.ny
-    rho, _, T = primitive(cons, phys)
-    Cv = phys.Cv
-
-    for j, step, tw in ((LAP, +1, Tw_bottom), (LAP + ny - 1, -1, Tw_top)):
-        rho_w, Tw = _wall_layer(rho, T, j, step, tw)
-        cons = cons.at[0, :, j, :].set(rho_w)                       # rho
-        cons = cons.at[1:4, :, j, :].set(0.0)                      # 无滑移
-        cons = cons.at[4, :, j, :].set(rho_w * Cv * Tw)            # ρE = ρ Cv T
-
-    # 镜像鬼胞：ρ/ρE 偶、ρu/ρv/ρw 奇（与原码 for i in 0..LAP-1 / 1..LAP 同索引）
-    return fill_wall_y(cons, ny)
+from .boundary import LAP, primitive, _wall_layer, apply_channel_wall_bc as apply_wall_bc
 
 
 def cons_from_primitive(prim, grid, phys):

@@ -1,5 +1,7 @@
 # 候选目录是临时的：每次重构后重新生成，不随仓库保管
 candidate/
+candidate_json/
 candidate_yami_check/
+candidate_boundary_fix/
 __pycache__/
 *.pyc
