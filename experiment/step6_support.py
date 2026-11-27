@@ -171,6 +171,37 @@ def same_bits(got, want, label=""):
     assert got.tobytes() == want.tobytes(), label
 
 
+def computed_on(value):
+    """算出 ``value`` 的设备：((平台, 编号), …)。jax 数组看它所在的设备，没取值的也看得到；
+    NumPy 数组是存下来的数据或者取回主机的结果，按 CPU 算。"""
+    devices = getattr(value, "devices", None)
+    if devices is None:
+        return (("cpu", 0),)
+    return tuple(sorted((device.platform, device.id) for device in devices()))
+
+
+def exact(got, want, label="", got_on=None, want_on=None):
+    """两份结果应当相同，比法由它们各自算在哪台设备上决定。
+
+    在同一台设备上算出来的（CPU 也好、GPU 也好）逐位比，最低位翻了都算不同。一份是存下来的
+    数据（NumPy，按 CPU 算）、另一份在 GPU 上算的，按验收的阈值比（:func:`compare`）：GPU 和
+    CPU 的浮点运算顺序不同，不逐位相同，差在舍入量级。一维的抽样没有分量可分，整条按一个
+    分量算容差。
+
+    设备要在转成 NumPy 以前看：传进来的已经是 NumPy 数组时，用 ``got_on``、``want_on`` 给出
+    :func:`computed_on` 先前记下的设备。
+    """
+    got_on = computed_on(got) if got_on is None else got_on
+    want_on = computed_on(want) if want_on is None else want_on
+    got, want = np.asarray(got), np.asarray(want)
+    if got_on == want_on:
+        same_bits(got, want, label)
+    elif want.ndim == 1:
+        compare(want[None, :], got[None, :], label, count=1)
+    else:
+        compare(want, got, label)
+
+
 def with_record(zones, zone, conn, **changes):
     """把 ``zone`` 里名为 ``conn`` 的方向记录改掉，返回新的合成网格。"""
     return [replace(spec, connections=tuple(

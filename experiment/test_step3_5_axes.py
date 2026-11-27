@@ -33,8 +33,7 @@ def _resolve(argv):
     """按 main.main 的顺序执行默认值 + 显式 CLI 合并。"""
     defaults = main.build_parser().parse_args([])
     parser = main.build_parser(explicit_only=True)
-    config_path, explicit = main.resolve_cli(
-        vars(parser.parse_args(argv)), parser)
+    config_path, explicit = main.resolve_cli(vars(parser.parse_args(argv)))
     assert config_path is None
     return runtime_config.resolve_args(explicit, None, defaults)
 

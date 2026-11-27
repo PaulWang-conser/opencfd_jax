@@ -14,6 +14,7 @@ from typing import Any, Mapping
 
 from . import boundary, config
 from .cases import build_case
+from .errors import SetupError
 from .mesh_data import BlockMesh, from_case
 
 # specificboundary 脚本目录（4.n 规格：值只填该目录下的脚本名）
@@ -44,8 +45,9 @@ def attach_specificboundary(args, case) -> None:
 
     脚本契约（4.n）：入口 ``build_special_boundary(case)`` 返回带
     ``name``/``bc_apply`` 的对象（``faces`` 可选，缺省继承已解析六侧）。
-    非法文件名、非 .py、目录外目标（symlink 逃逸）、缺脚本、缺入口、
-    与 plate/channel 冲突都在此报错。
+    非法文件名、非 .py、目录外目标（symlink 逃逸）、缺脚本、缺入口、缺回调、
+    与 plate/channel 冲突、脚本自己出的错，都在此报 ``SetupError``，消息带出处：
+    ``specificboundary（命令行 --specificboundary，JSON specificboundary）：原因``。
 
     信任边界：文件名校验不提供执行隔离——脚本由 ``exec_module`` 以求解器
     进程权限执行，**必须**由运行者信任并部署到 ``SPECIAL_BOUNDARY_DIR``；
@@ -54,42 +56,50 @@ def attach_specificboundary(args, case) -> None:
     name = getattr(args, "specificboundary", None)
     if not name:
         return
+
+    def fail(text: str) -> None:
+        from . import runtime_config          # main 引用本模块，用到时再导入
+        raise SetupError(runtime_config.blame(
+            getattr(args, "config_sources", None), "specificboundary", text))
+
     if (name != Path(name).name or "/" in name or "\\" in name
             or name in (".", "..")):
-        raise ValueError(
-            f"specificboundary 只接受 {SPECIAL_BOUNDARY_DIR} 下的纯文件名，"
-            f"得到 {name!r}")
+        fail(f"只接受 {SPECIAL_BOUNDARY_DIR} 下的纯文件名，得到 {name!r}")
     if not name.endswith(".py"):
-        raise ValueError(
-            f"specificboundary 只接受 .py 脚本，得到 {name!r}")
+        fail(f"只接受 .py 脚本，得到 {name!r}")
     case_name = str(getattr(args, "case", "") or "").strip().lower()
     if (case.get("plate") is not None or case.get("channel_bc") is not None
             or case_name in ("plate", "channel")):
-        raise ValueError(
-            "specificboundary 与 plate/channel 特殊边界互斥"
-            f"（case={getattr(args, 'case', None)!r}）")
+        fail("与 plate/channel 特殊边界互斥"
+             f"（case={getattr(args, 'case', None)!r}）")
     path = SPECIAL_BOUNDARY_DIR / name
     if not path.is_file():
-        raise FileNotFoundError(
-            f"specificboundary 脚本不存在：{path}（只接受该目录下的 .py 文件名）")
+        fail(f"脚本不存在：{path}（只接受该目录下的 .py 文件名）")
     # resolve 后仍在目录内：挡 symlink 指向目录外的执行（Astra 复审）
     resolved = path.resolve()
     if resolved.parent != SPECIAL_BOUNDARY_DIR.resolve():
-        raise ValueError(
-            f"specificboundary 解析到目录外：{resolved}（不允许 symlink 逃逸）")
+        fail(f"解析到目录外：{resolved}（不允许 symlink 逃逸）")
     spec = importlib.util.spec_from_file_location(
         f"opencfd_jax_special_boundaries.{path.stem}", resolved)
     if spec is None or spec.loader is None:
-        raise ValueError(f"无法为 {resolved} 构建模块加载器")
+        fail(f"无法为 {resolved} 构建模块加载器")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # 脚本是用户自己的代码，抛什么类型都有可能：点名脚本，带着原始异常的类型和文字
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        fail(f"特殊边界脚本 {name} 载入时出错：{type(exc).__name__}: {exc}")
     entry = getattr(module, "build_special_boundary", None)
     if not callable(entry):
-        raise ValueError(f"{path} 缺少入口 build_special_boundary(case)")
-    special = entry(case)
+        fail(f"{path} 缺少入口 build_special_boundary(case)")
+    try:
+        special = entry(case)
+    except Exception as exc:
+        fail(f"特殊边界脚本 {name} 的 build_special_boundary(case) 出错："
+             f"{type(exc).__name__}: {exc}")
     callback = getattr(special, "bc_apply", None)
     if not callable(callback):
-        raise ValueError(f"{path} 的 build_special_boundary 返回对象缺少 bc_apply")
+        fail(f"{path} 的 build_special_boundary 返回对象缺少 bc_apply")
     case["special_boundary"] = special
     case["bc_apply"] = callback
 

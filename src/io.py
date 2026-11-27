@@ -100,6 +100,8 @@ def load_checkpoint(path, phys=None, inner=None):
             if "_meta" not in data.files:
                 raise CheckpointError(f"{path} 缺少 _meta")
             meta = json.loads(data["_meta"].tobytes().decode("utf-8"))
+            if not isinstance(meta, dict):
+                raise CheckpointError(f"{path} 的 _meta 不是对象")
             listed = "_blocks" in data.files
             keys = [name for name in data.files if name not in ("_meta", "_blocks")]
             if keys and all(_BLOCK_KEY.fullmatch(name) for name in keys):
@@ -119,6 +121,8 @@ def load_checkpoint(path, phys=None, inner=None):
             else:
                 raise CheckpointError(f"{path} 不是检查点：数组的名字是 {sorted(keys)}")
             blocks = (json.loads(data["_blocks"].tobytes().decode("utf-8")) if listed else {})
+            if not isinstance(blocks, dict):
+                raise CheckpointError(f"{path} 的块清单不是对象")
     except CheckpointError:
         raise
     except (OSError, ValueError, KeyError, TypeError, EOFError,

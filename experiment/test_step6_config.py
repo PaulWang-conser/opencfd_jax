@@ -2,9 +2,9 @@
 
 锁六件事：
   1. 放行的多块配置返回拓扑并打印接口报告；
-  2. 没验收过的开关都在读坐标之前被拦住：生效值（粘性导数的阶数、精度、格式、步长、
-     算例、特殊边界脚本）和显式给出的参数（``--weno-tv``、``--outlet-ghost``、网格尺寸、
-     内置 plate 专用的几个参数）各查各的；粘性本身从第七步起放行，只放行 CD8；
+  2. 没验收过的开关都在读坐标之前被拦住：生效值（精度、格式、步长、算例、特殊边界脚本）
+     和显式给出的参数（``--weno-tv``、``--outlet-ghost``、网格尺寸、内置 plate 专用的
+     几个参数）各查各的；粘性从第七步起放行，粘性导数的阶数 CD6、CD8 都放行；
   3. 参考尺度必须给出、是有限正数、不小于任何一块按自身尺寸算出的分量；没有走
      多块路径时给出了也报错；
   4. 没有多 zone 的时候走原路径，报错与改动前相同；显式给了 ``--cgns-zone ""`` 算
@@ -54,7 +54,7 @@ ConfigError = runtime_config.ConfigError
 def _cli(*argv):
     """按 main.main 的方式把命令行解析成“用户显式给过的参数”。"""
     parser = main.build_parser(explicit_only=True)
-    _, explicit = main.resolve_cli(vars(parser.parse_args(argv)), parser)
+    _, explicit = main.resolve_cli(vars(parser.parse_args(argv)))
     return explicit
 
 
@@ -131,9 +131,8 @@ def test_command_line_can_switch_off_a_viscous_json(tmp_path):
 
 UNRELEASED = [
     # (JSON 的改动, 命令行, 报错里应当出现的字样)
-    # 粘性可以打开（第七步），但粘性导数只放行 CD8：JSON 给的 CD6、命令行给的 CD6 都拦
-    ({"numerics.viscous": True, "numerics.vis_order": "CD6"}, (), "vis_order"),
-    ({}, ("--viscous", "--vis-order", "CD6"), "vis_order"),
+    # 粘性从第七步起放行，粘性导数的阶数 CD6、CD8 都放行（CD6 是补尾巴 C1 加的，见
+    # test_step7_config），所以阶数不在这张表里
     ({"precision": "fp32"}, (), "FP64"),
     ({}, ("--fp32",), "FP64"),
     ({"numerics.scheme": "UP7"}, (), "WENO7"),
@@ -325,10 +324,11 @@ def test_damaged_zone_type_node_is_reported_without_a_raw_exception(tmp_path):
 def test_damaged_mesh_files_never_raise_raw_exceptions(tmp_path):
     """文件残缺的方式很多（Astra 第 18、19 轮各找到几种）。读文件这一层的规则是：
     入口探测只为选路径，探不出来就交回单块路径，由它照旧报错；多块路径上读取和校验
-    出的任何异常都算“多块网格没有通过校验”。多块路径不许漏出裸异常；单块路径保持
-    它自己的报错，残缺的文件可能在那里直接抛出原始异常，与没有多块路径时相同。"""
-    # 单 zone：尺寸数据引用了不存在的外部文件。单块路径自己报什么随 h5py 的版本而变
-    # （有的抛 OSError 被包成 SetupError，有的抛 KeyError），所以拿它直接运行时的报错当基准
+    出的任何异常都算“多块网格没有通过校验”。多块路径不许漏出裸异常；单块路径经运行
+    入口跑时，建算例出的任何异常都包成初始化错误，原始异常的类型写在消息里。"""
+    # 单 zone：尺寸数据引用了不存在的外部文件。直接调 init.prepare 时报什么随 h5py 的版本
+    # 而变（有的抛 OSError，有的抛 KeyError），所以拿它的报错当基准：已经是 SetupError 的
+    # 原样往上走，其余的包起来
     one = tmp_path / "external.cgns"
     shutil.copyfile(PLATE, one)
     with h5py.File(one, "r+") as f:
@@ -339,9 +339,13 @@ def test_damaged_mesh_files_never_raise_raw_exceptions(tmp_path):
     args = _resolve(tmp_path, {"numerics.flux_scale": None}, mesh=one)
     assert multiblock.enter(args) is None
     with pytest.raises(Exception) as direct:
-        init.prepare(args)                       # 没有多块路径时的初始化
-    with pytest.raises(type(direct.value)):
+        init.prepare(args)                       # 不经运行入口时的初始化
+    with pytest.raises(SetupError) as wrapped:
         main.run(args)
+    if isinstance(direct.value, SetupError):
+        assert str(wrapped.value) == str(direct.value)
+    else:
+        assert type(direct.value).__name__ in str(wrapped.value)
     # 多 zone：坐标写成了组；坐标是文字
     for damage in ("group", "text"):
         many = tmp_path / f"coords_{damage}.cgns"
@@ -383,14 +387,14 @@ def test_multiblock_path_runs_in_fp64(tmp_path):
 def test_unreleased_run_from_the_command_line_reports_one_line(tmp_path):
     path = tmp_path / "case.json"
     path.write_text(json.dumps(_config(support.mesh_path("x2"), {
-        "numerics.viscous": True, "numerics.vis_order": "CD6"})), encoding="utf-8")
+        "numerics.viscous": True, "numerics.scheme": "UP7"})), encoding="utf-8")
     done = subprocess.run(
         [sys.executable, "-m", "opencfd_jax.src.main", "--config", str(path)],
         cwd=PROJECT, capture_output=True, text=True)
     assert done.returncode == 2, done.stderr
     assert "Traceback" not in done.stderr
     reported = [line for line in done.stderr.splitlines() if "初始化错误" in line]
-    assert len(reported) == 1 and "vis_order" in reported[0]
+    assert len(reported) == 1 and "scheme" in reported[0]
 
 
 def test_unreadable_mesh_from_the_command_line_keeps_one_line(tmp_path):

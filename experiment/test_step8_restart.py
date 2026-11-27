@@ -344,10 +344,10 @@ def test_restart_rejects_a_multiblock_checkpoint(tmp_path):
 
 
 @pytest.mark.parametrize("damage", ["not-npz", "truncated", "no-meta", "bad-meta",
-                                   "no-step", "no-time"])
+                                   "meta-list", "no-step", "no-time"])
 def test_restart_rejects_damaged_checkpoints(tmp_path, damage):
-    """读不了、写到一半中断、不是检查点、缺 _meta、_meta 不是 JSON、缺步号或时间：
-    初始化错误。"""
+    """读不了、写到一半中断、不是检查点、缺 _meta、_meta 不是 JSON、_meta 不是对象、缺步号或
+    时间：初始化错误。"""
     args = _builtin("sod", tmp_path, "--end-step", "2")
     state = init.prepare(args)
     path = tmp_path / "c.npz"
@@ -362,6 +362,9 @@ def test_restart_rejects_damaged_checkpoints(tmp_path, damage):
         np.savez(path, **fields)
     elif damage == "bad-meta":
         np.savez(path, **fields, _meta=np.frombuffer(b"{ not json", dtype=np.uint8))
+    elif damage == "meta-list":
+        # 合法的 JSON，但不是对象：以前会绕过 CheckpointError 裸抛（sol 第 1 轮）
+        np.savez(path, **fields, _meta=np.frombuffer(b"[1, 2, 3]", dtype=np.uint8))
     elif damage == "no-step":
         io.save_checkpoint(str(path), fields, {k: v for k, v in meta.items() if k != "step"})
     elif damage == "no-time":
@@ -582,9 +585,9 @@ def test_multiblock_restart_rejects_a_single_block_checkpoint(tmp_path):
         main.run(_restarting(args, restart=str(single)))
 
 
-@pytest.mark.parametrize("damage", ["not-npz", "no-step"])
+@pytest.mark.parametrize("damage", ["not-npz", "no-step", "blocks-list"])
 def test_multiblock_restart_rejects_damaged_checkpoints(tmp_path, damage):
-    """坏文件、缺步号：与单块的报法相同。"""
+    """坏文件、缺步号：与单块的报法相同。块清单是合法的 JSON、但不是对象：也是初始化错误。"""
     args = support.run_args("x2", out_dir=str(tmp_path), end_step=1, kstep_save=1, kstep_show=1)
     built = support.blocks("x2")
     params = step7.reference().case["params"]
@@ -599,8 +602,11 @@ def test_multiblock_restart_rejects_damaged_checkpoints(tmp_path, damage):
                       if name not in ("_meta", "_blocks")}
             meta = json.loads(z["_meta"].tobytes().decode("utf-8"))
             blocks = json.loads(z["_blocks"].tobytes().decode("utf-8"))
-        io.save_checkpoint(str(path), fields, {k: v for k, v in meta.items() if k != "step"},
-                           blocks=blocks)
+        if damage == "blocks-list":
+            blocks = [1, 2, 3]                  # 以前会裸抛 AttributeError（sol 第 1 轮）
+        else:
+            meta = {k: v for k, v in meta.items() if k != "step"}
+        io.save_checkpoint(str(path), fields, meta, blocks=blocks)
     with pytest.raises(SetupError, match="检查点"):
         main.run(_restarting(args, restart=str(path)))
 
@@ -677,3 +683,109 @@ def test_meta_records_the_actual_zone_name(tmp_path):
     assert meta["mesh"]["zone"] == "blk-1"
     main.run(_restarting(args, cgns_zone=None, restart=str(checkpoint), end_step=2,
                          kstep_save=2, kstep_show=2))
+
+
+# ---- 8. 续算的两处不一致（补尾巴 A4）----
+#
+# JSON 的 ``time.restart`` 写空字符串，等于没给，和命令行的 ``--restart ""`` 一致。
+# 读 JSON 时只解析它的相对路径、不核对存在：命令行给了 ``--restart`` 时 JSON 的这一个不生效，
+# 合并以后只核对最终生效的那一个。其余路径字段（``mesh.file``）照旧在读 JSON 时就核对。
+
+SMALL = ("--ni", "16", "--nj", "8", "--nk", "4", "--end-step", "1", "--kstep-save", "1")
+
+
+def _case_json(tmp_path, restart):
+    """只带续算路径的配置；``restart`` 按原样写进 JSON（None 表示不写这一项）。"""
+    path = tmp_path / f"case-{len(list(tmp_path.iterdir()))}.json"
+    time = {"dt": 1e-4} if restart is None else {"dt": 1e-4, "restart": restart}
+    path.write_text(json.dumps({"case": {"name": "sod"}, "time": time}), encoding="utf-8")
+    return path
+
+
+def _resolved(path, *argv):
+    """按 main.main 的顺序解析：默认值、显式命令行、JSON。"""
+    parser = main.build_parser(explicit_only=True)
+    _, explicit = main.resolve_cli(vars(parser.parse_args(argv)))
+    return runtime_config.resolve_args(explicit, runtime_config.load_config(str(path)),
+                                       main.build_parser().parse_args([]))
+
+
+def test_empty_restart_in_json_is_merged_as_not_given(tmp_path):
+    """JSON 的空字符串合并成没给；命令行给了空字符串时压掉 JSON 里的路径。"""
+    assert _resolved(_case_json(tmp_path, "")).restart is None
+    args = _resolved(_case_json(tmp_path, "c.npz"), "--restart", "")
+    assert args.restart == ""
+    args = _resolved(_case_json(tmp_path, "c.npz"), "--restart", "d.npz")
+    assert args.restart == "d.npz"                       # 命令行的为准
+
+
+def test_empty_restart_in_json_runs_from_the_start(tmp_path, capsys):
+    """Covers AE3。JSON 里给了空字符串，或者 JSON 里有路径而命令行给了空字符串：都从头算，
+    启动信息里没有 ``restart:`` 那一行。"""
+    out = tmp_path / "out"
+    runs = (
+        ["--config", str(_case_json(tmp_path, "")), "--dt", "1e-4", *SMALL,
+         "--out-dir", str(out)],
+        ["--config", str(_case_json(tmp_path, "c.npz")), "--restart", "", *SMALL,
+         "--out-dir", str(out)],
+    )
+    for argv in runs:
+        main.main(argv)
+        lines = capsys.readouterr().out.splitlines()
+        assert not [line for line in lines if line.startswith("restart")]
+    assert [p.name for p in out.iterdir()] == [io.checkpoint_name("sod", 1)]
+
+
+def test_stale_restart_in_json_does_not_block_a_command_line_restart(tmp_path, capsys):
+    """Covers AE4。JSON 里的路径已经失效，命令行给了存在的检查点：读 JSON 时不报错，
+    按命令行的续算。"""
+    first = tmp_path / "first"
+    first.mkdir()
+    main.run(_builtin("sod", first, "--end-step", "1"))
+    [good] = first.glob("*.npz")
+    path = _case_json(tmp_path, "moved-away.npz")
+    out = tmp_path / "out"
+    main.main(["--config", str(path), "--restart", str(good), "--ni", "16", "--nj", "8",
+               "--nk", "4", "--end-step", "2", "--kstep-save", "1", "--out-dir", str(out)])
+    lines = capsys.readouterr().out.splitlines()
+    assert any(line.startswith(f"restart: file={good} step=1 ") for line in lines)
+    assert [p.name for p in out.iterdir()] == [io.checkpoint_name("sod", 2)]
+
+
+def test_missing_restart_file_names_which_side_gave_it(tmp_path, capsys):
+    """最终生效的那个不存在：配置错误，原因里写它是命令行给的还是 JSON 给的。"""
+    out = tmp_path / "out"
+    for how, origin in (("cli", "命令行给的"), ("json", "JSON 给的")):
+        missing = tmp_path / f"missing-{how}.npz"
+        with pytest.raises(SystemExit) as info:
+            if how == "cli":
+                main.main(["--restart", str(missing), "--dt", "1e-4", *SMALL,
+                           "--out-dir", str(out)])
+            else:
+                main.main(["--config", str(_case_json(tmp_path, missing.name)), *SMALL,
+                           "--out-dir", str(out)])
+        assert info.value.code == 2
+        lines = capsys.readouterr().err.splitlines()
+        assert lines == ["配置错误：restart（命令行 --restart，JSON time.restart）："
+                         f"{origin}文件不存在或不可读：{missing}"]
+        assert not out.exists() or not list(out.iterdir())
+
+
+def test_restart_path_that_is_a_directory_is_a_config_error(tmp_path, capsys):
+    with pytest.raises(SystemExit) as info:
+        main.main(["--restart", str(tmp_path), "--dt", "1e-4", *SMALL,
+                   "--out-dir", str(tmp_path / "out")])
+    assert info.value.code == 2
+    assert capsys.readouterr().err.splitlines() == [
+        "配置错误：restart（命令行 --restart，JSON time.restart）："
+        f"命令行给的不是普通文件：{tmp_path}"]
+
+
+def test_a_stale_mesh_file_in_json_is_reported_when_the_json_is_read(tmp_path):
+    """``mesh.file`` 的行为不变：JSON 里失效的路径在读 JSON 时就报错，不看命令行。"""
+    path = tmp_path / "case.json"
+    path.write_text(json.dumps({"case": {"name": "plate"},
+                                "mesh": {"format": "cgns", "file": "nope.cgns"}}),
+                    encoding="utf-8")
+    with pytest.raises(runtime_config.ConfigError, match="mesh.file 指向的文件不存在"):
+        runtime_config.load_config(str(path))

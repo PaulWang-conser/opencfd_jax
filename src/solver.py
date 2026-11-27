@@ -277,7 +277,7 @@ def rk3_q3(cons, dt, q2, du3):
     return cons / 3.0 + (2.0 / 3.0) * (q2 + dt * du3)
 
 
-def rk3_step_stages(cons, dt, rhs_fn, bc_apply=None):
+def rk3_step_stages(cons, dt, rhs_fn):
     """SSP-RK3 一步，同时返回三个子步的 RHS。
 
     返回 (q_new, (du1, du2, du3))，其中 du1 = L(Q^n)、du2 = L(Q*)、
@@ -287,28 +287,21 @@ def rk3_step_stages(cons, dt, rhs_fn, bc_apply=None):
 
     三个阶段的组合是 :func:`rk3_q1`、:func:`rk3_q2`、:func:`rk3_q3`。多块路径
     分阶段逐块求右端项，不能把 RHS 写成一个回调，直接调用这三个函数。
+    边界在每个子步的 ``rhs_fn`` 里由物理准备走一遍，这里不收边界回调。
     """
-    if bc_apply is not None:
-        cons = bc_apply(cons)
     # stage1: Q*  = Q^n + dt*L(Q^n)
     du1 = rhs_fn(cons)
     q1 = rk3_q1(cons, dt, du1)
-    if bc_apply is not None:
-        q1 = bc_apply(q1)
     # stage2: Q** = 3/4*Q^n + 1/4*(Q* + dt*L(Q*))
     du2 = rhs_fn(q1)
     q2 = rk3_q2(cons, dt, q1, du2)
-    if bc_apply is not None:
-        q2 = bc_apply(q2)
     # stage3: Q^{n+1} = 1/3*Q^n + 2/3*(Q** + dt*L(Q**))
     du3 = rhs_fn(q2)
     q3 = rk3_q3(cons, dt, q2, du3)
-    if bc_apply is not None:
-        q3 = bc_apply(q3)
     return q3, (du1, du2, du3)
 
 
-def rk3_step(cons, dt, rhs_fn, bc_apply=None):
+def rk3_step(cons, dt, rhs_fn):
     """SSP-RK3 一步（只返回推进后的状态；子步 RHS 见 rk3_step_stages）。"""
-    q3, _ = rk3_step_stages(cons, dt, rhs_fn, bc_apply=bc_apply)
+    q3, _ = rk3_step_stages(cons, dt, rhs_fn)
     return q3

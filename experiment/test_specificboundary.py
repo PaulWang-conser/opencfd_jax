@@ -3,6 +3,7 @@
 覆盖：合法脚本挂载并走 custom 执行链、非法文件名、缺脚本、缺入口、
 与 plate 互斥、load_config 顶层键解析。脚本目录用 monkeypatch 指向
 临时目录，不污染 src/special_boundaries/。
+这些配置错一律报 SetupError，消息带出处（补尾巴 A 组，jisen 2026-11-27 定的）。
 """
 
 from pathlib import Path
@@ -18,6 +19,7 @@ import jax.numpy as jnp  # noqa: E402
 
 from opencfd_jax.src import boundary, init, runtime_config  # noqa: E402
 from opencfd_jax.src.cases import build_case  # noqa: E402
+from opencfd_jax.src.errors import SetupError  # noqa: E402
 from opencfd_jax.src.mesh_data import from_case  # noqa: E402
 
 VALID_SCRIPT = '''
@@ -65,14 +67,14 @@ def test_valid_script_mounts_custom_execution(tmp_path, monkeypatch):
 def test_rejects_pathlike_name(tmp_path, monkeypatch):
     monkeypatch.setattr(init, "SPECIAL_BOUNDARY_DIR", _make_script(tmp_path))
     args = _base_args(specificboundary="../escape.py")
-    with pytest.raises(ValueError, match="纯文件名"):
+    with pytest.raises(SetupError, match="纯文件名"):
         init.attach_specificboundary(args, build_case(args))
 
 
 def test_rejects_missing_script(tmp_path, monkeypatch):
     monkeypatch.setattr(init, "SPECIAL_BOUNDARY_DIR", _make_script(tmp_path))
     args = _base_args(specificboundary="absent.py")
-    with pytest.raises(FileNotFoundError, match="不存在"):
+    with pytest.raises(SetupError, match="不存在"):
         init.attach_specificboundary(args, build_case(args))
 
 
@@ -80,14 +82,14 @@ def test_rejects_missing_entry(tmp_path, monkeypatch):
     d = _make_script(tmp_path, text="X = 1\n", name="noentry.py")
     monkeypatch.setattr(init, "SPECIAL_BOUNDARY_DIR", d)
     args = _base_args(specificboundary="noentry.py")
-    with pytest.raises(ValueError, match="build_special_boundary"):
+    with pytest.raises(SetupError, match="build_special_boundary"):
         init.attach_specificboundary(args, build_case(args))
 
 
 def test_rejects_conflict_with_plate(tmp_path, monkeypatch):
     monkeypatch.setattr(init, "SPECIAL_BOUNDARY_DIR", _make_script(tmp_path))
     args = _base_args(case="plate", specificboundary="demo.py")
-    with pytest.raises(ValueError, match="互斥"):
+    with pytest.raises(SetupError, match="互斥"):
         init.attach_specificboundary(args, build_case(args))
 
 
@@ -131,7 +133,7 @@ def test_rejects_non_py_and_directory_escape(tmp_path, monkeypatch):
     monkeypatch.setattr(init, "SPECIAL_BOUNDARY_DIR", _make_script(tmp_path))
     for bad in ("README.md", "demo.PY ", "sub/dir.py"):
         args = _base_args(specificboundary=bad.strip() if bad != "sub/dir.py" else bad)
-        with pytest.raises((ValueError,)):
+        with pytest.raises((SetupError,)):
             init.attach_specificboundary(args, build_case(args))
 
 
@@ -140,7 +142,7 @@ def test_rejects_cgns_plate_by_case_name(tmp_path, monkeypatch):
     monkeypatch.setattr(init, "SPECIAL_BOUNDARY_DIR", _make_script(tmp_path))
     args = _base_args(case="plate", specificboundary="demo.py",
                       mesh_format="cgns", mesh="x.cgns")
-    with pytest.raises(ValueError, match="互斥"):
+    with pytest.raises(SetupError, match="互斥"):
         init.attach_specificboundary(args, {"plate": None})  # CGNS case 无 marker
 
 

@@ -13,6 +13,7 @@
 
 import argparse
 import os
+import sys
 import time
 
 import jax
@@ -181,10 +182,10 @@ _NEGATIVE_FLAGS = (("no_viscous", "viscous"),
                    ("no_weno_tv", "weno_tv"))
 
 
-def resolve_cli(parsed, parser):
+def resolve_cli(parsed):
     """把一次显式命令行解析结果整理成配置合并所需的字典。
 
-    负向开关（``--no-*``）在这里折叠成对应布尔参数；互相冲突的显式开关直接报错。
+    负向开关（``--no-*``）在这里折叠成对应布尔参数；互相冲突的显式开关抛 ``ConfigError``。
     返回 ``(config_path, explicit)``。
     """
     explicit = dict(parsed)
@@ -194,8 +195,8 @@ def resolve_cli(parsed, parser):
     for negative, positive in _NEGATIVE_FLAGS:
         if explicit.pop(negative, False):
             if explicit.get(positive):
-                parser.error(f"--{positive.replace('_', '-')} 与 "
-                             f"--{negative.replace('_', '-')} 不能同时给出")
+                raise runtime_config.ConfigError(
+                    runtime_config.blame(None, positive, "不能同时给出"))
             explicit[positive] = False
     return config_path, explicit
 
@@ -274,11 +275,16 @@ def run(args):
         return multiblock.run(args, multi)
     for name in ("kstep_show", "kstep_save"):
         if getattr(args, name, 0) <= 0:
-            raise runtime_config.ConfigError(
-                f"输出间隔 {name} 必须是正数，得到 {getattr(args, name)}")
+            raise runtime_config.ConfigError(runtime_config.blame(
+                getattr(args, "config_sources", None), name,
+                f"输出间隔 {name} 必须是正数，得到 {getattr(args, name)}"))
+    # 建算例这一步出的任何异常都算初始化失败：读的是用户的文件，还执行用户的特殊边界脚本，
+    # 抛什么类型枚举不完。已经分好类的两类原样往上走。
     try:
         state = init.prepare(args)
-    except (ValueError, OSError) as exc:
+    except (SetupError, runtime_config.ConfigError):
+        raise
+    except Exception as exc:
         raise SetupError(
             "初始化失败："
             f"case={args.case} "
@@ -304,7 +310,8 @@ def run(args):
     bcs = execution.bcs
 
     if args.dt is None or not (np.isfinite(args.dt) and args.dt > 0.0):
-        raise ValueError("固定 dt 必须显式给出，且为正的有限数")
+        raise runtime_config.ConfigError(runtime_config.blame(
+            getattr(args, "config_sources", None), "dt", "固定 dt 必须显式给出，且为正的有限数"))
     dt_mode = f"fixed({args.dt})"
     try:
         rhs(cons)
@@ -366,53 +373,79 @@ def run(args):
         if step % args.kstep_show == 0:
             print(diagnostic_line(cons, grid, t, step, time.time() - t0))
         if io.time_to_save(step, args.kstep_save, t >= args.end_time):
-            io.save_checkpoint(
-                f"{args.out_dir}/{io.checkpoint_name(prefix, step)}",
-                {"b0": io.primitive_field(cons, grid, params)},
-                meta=io.checkpoint_meta(args, params, t, step, dt,
-                                        viscous=effective_viscous,
-                                        mesh=_mesh_meta(args, grid), ni=grid.ni))
+            path = f"{args.out_dir}/{io.checkpoint_name(prefix, step)}"
+            try:
+                io.save_checkpoint(
+                    path,
+                    {"b0": io.primitive_field(cons, grid, params)},
+                    meta=io.checkpoint_meta(args, params, t, step, dt,
+                                            viscous=effective_viscous,
+                                            mesh=_mesh_meta(args, grid), ni=grid.ni))
+            except Exception as exc:
+                raise RuntimeExecutionError(
+                    "运行期错误（存盘）："
+                    f"case={args.case} step={step} t={t} dt={dt} "
+                    f"grid={grid.ni}x{grid.nj}x{grid.nk} "
+                    f"输出路径={path} 原始异常={type(exc).__name__}: {exc}") from exc
     print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")
 
 
-def _validate_input_paths(args, parser):
+def _validate_input_paths(args):
     """启动前检查输入文件；避免进入 JIT 后才因缺文件报错。"""
+    sources = getattr(args, "config_sources", None)
     if args.dt is None or not (np.isfinite(args.dt) and args.dt > 0.0):
-        parser.error("固定 dt 必须显式给出，且为正的有限数")
+        raise runtime_config.ConfigError(runtime_config.blame(
+            sources, "dt", "固定 dt 必须显式给出，且为正的有限数"))
     if getattr(args, "mesh_format", None) == "cgns" \
             and not getattr(args, "mesh", None):
-        parser.error("mesh_format=cgns 需要 --mesh / mesh.file")
-    value = getattr(args, "mesh", None)
-    if value and not os.path.isfile(value):
-        parser.error(f"--mesh 指向的文件不存在或不可读：{value}")
-    value = getattr(args, "restart", None)
-    if value and not os.path.isfile(value):
-        parser.error(f"配置错误：--restart 指向的文件不存在或不可读：{value}")
+        raise runtime_config.ConfigError(runtime_config.blame(
+            sources, "mesh", "mesh_format=cgns 需要 --mesh / mesh.file"))
+    for name in ("mesh", "restart", "inflow_profile"):
+        value = getattr(args, name, None)
+        if value and not os.path.isfile(value):
+            wrong = "文件不存在或不可读" if not os.path.exists(value) else "不是普通文件"
+            raise runtime_config.ConfigError(
+                f"{runtime_config.where(name)}："
+                f"{runtime_config.given_by(sources, name)}{wrong}：{value}")
+
+
+def _make_out_dir(out_dir: str) -> None:
+    """建输出目录；建不出来是配置错误。"""
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+    except OSError as exc:
+        entries = "，".join(runtime_config.origins("out_dir"))
+        raise runtime_config.ConfigError(
+            f"建输出目录：{out_dir}（{entries}）：{exc}") from exc
 
 
 def main(argv=None):
-    """解析命令行与 JSON 配置，创建输出目录，并交给 :func:`run` 执行。"""
+    """解析命令行与 JSON 配置，创建输出目录，并交给 :func:`run` 执行。
+
+    解析命令行以后，配置错误和初始化错误各只往 stderr 写一行、退出码 2，不带用法说明；
+    用法说明只在命令行本身解析不了时由 argparse 打印。运行期异常（含
+    ``RuntimeExecutionError``）不在这里捕获，保留原始类型和 traceback。
+    """
     defaults = build_parser().parse_args([])
     explicit_parser = build_parser(explicit_only=True)
-    config_path, explicit = resolve_cli(
-        vars(explicit_parser.parse_args(argv)), explicit_parser)
-
     try:
+        config_path, explicit = resolve_cli(vars(explicit_parser.parse_args(argv)))
         cfg = runtime_config.load_config(
             config_path, case=explicit.get("case")) if config_path else None
         args = runtime_config.resolve_args(explicit, cfg, defaults)
-    except runtime_config.ConfigError as exc:
-        explicit_parser.error(f"配置错误：{exc}")
-
-    _validate_input_paths(args, explicit_parser)
-    os.makedirs(args.out_dir, exist_ok=True)
-    try:
+        _validate_input_paths(args)
+        _make_out_dir(args.out_dir)
         run(args)
-    except SetupError as exc:
-        explicit_parser.error(f"初始化错误：{exc}")
     except runtime_config.ConfigError as exc:
-        explicit_parser.error(f"配置错误：{exc}")
-    # 运行期异常（含 RuntimeExecutionError）不在这里捕获，保留原始类型和 traceback。
+        _fail("配置错误", exc)
+    except SetupError as exc:
+        _fail("初始化错误", exc)
+
+
+def _fail(kind: str, exc: Exception) -> None:
+    """启动错误只写一行，退出码 2。"""
+    sys.stderr.write(f"{kind}：{str(exc).replace(chr(10), ' ')}\n")
+    sys.exit(2)
 
 
 if __name__ == "__main__":

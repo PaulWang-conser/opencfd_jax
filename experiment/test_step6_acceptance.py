@@ -77,15 +77,22 @@ def _worst(worst):
     return f"cons_{v} 差 {worst[v][0]:.2e}（容差的 {100 * share:.3g}%）"
 
 
-def _check(label, reference, built, note, pieces, near):
-    """先逐块比（报错时能点名块），再拼回比分三层比。返回这个量的报告行。"""
+def _check(label, reference, built, note, pieces, near, band=None):
+    """先逐块比（报错时能点名块），再拼回比分层比。返回这个量的报告行。
+
+    分层是全域、接口邻域、其余；给出 ``band``（物理边界带，第七步）时多比一层，其余也不含它。
+    """
     interiors = _interiors(built, pieces)
     for entry in note["blocks"]:
         support.compare(reference[_window(entry)], interiors[entry["name"]],
                         f"{label} {entry['name']}")
     back = support.reassemble(note, interiors)
+    rest = near if band is None else near | band
+    layers = [("全域", None), ("接口邻域", near)]
+    if band is not None:
+        layers.append(("物理边界带", band))
     parts = []
-    for name, mask in (("全域", None), ("接口邻域", near), ("其余", ~near)):
+    for name, mask in [*layers, ("其余", ~rest)]:
         worst = support.compare(reference, back, f"{label} {name}", mask=mask)
         parts.append(f"{name} {_worst(worst)}")
     return f"{label}：" + "；".join(parts)

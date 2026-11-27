@@ -1313,13 +1313,13 @@ def run(args, setup: MultiSetup) -> None:
     whole = _global_sizes(args.mesh)
     try:
         built = build_blocks(setup.topology, args, whole)
+        # plate 不强制粘性，生效的粘性就是 args.viscous；导数的阶数与单块同一张表
+        vis_order = CD_ORDER[args.vis_order] if args.viscous else None
+        kernels = compile_blocks(built, setup.flux_scale, vis_order)
     except mesh_cgns.CgnsError as exc:       # 交换表建完后的自检
         raise SetupError(f"多块网格没有通过校验：{exc}") from exc
-    except ValueError as exc:
+    except Exception as exc:
         raise SetupError(f"多块网格装配失败：{exc}") from exc
-    # plate 不强制粘性，生效的粘性就是 args.viscous；导数的阶数与单块同一张表
-    vis_order = CD_ORDER[args.vis_order] if args.viscous else None
-    kernels = compile_blocks(built, setup.flux_scale, vis_order)
     params = physical_params(args)
     prefix = getattr(args, "out_prefix", None) or args.case
     listing = _block_list(built.blocks, _sidecar(args.mesh))
@@ -1341,6 +1341,16 @@ def run(args, setup: MultiSetup) -> None:
         for message in messages:
             print(f"提示：{message}")
     t0 = time.time()
+    # 进循环以前先用起点状态空跑一步、结果丢掉：所有编译都在这一步完成，编译出的错
+    # 和第一步跑出来的错分得开。solve_step 是纯函数，不改变 cons。
+    try:
+        solve_step(kernels, cons, args.dt)
+    except Exception as exc:
+        raise RuntimeExecutionError(
+            "运行期错误（RHS 预热）："
+            f"case={args.case} step=0 t={t} dt={args.dt} "
+            f"blocks={len(built.blocks)} "
+            f"原始异常={type(exc).__name__}: {exc}") from exc
     while t < args.end_time and step < args.end_step:
         dt = min(args.dt, args.end_time - t)
         try:
@@ -1358,32 +1368,39 @@ def run(args, setup: MultiSetup) -> None:
                 print(f"{block.name}: " + diagnostic_line(
                     cons[block.name], block.grid, t, step, time.time() - t0))
         if io.time_to_save(step, args.kstep_save, t >= args.end_time):
-            io.save_checkpoint(
-                f"{args.out_dir}/{io.checkpoint_name(prefix, step)}",
-                {f"b{index}": io.primitive_field(cons[block.name], block.grid, params)
-                 for index, block in enumerate(built.blocks)},
-                meta=io.checkpoint_meta(
-                    args, params, t, step, dt, viscous=bool(args.viscous),
-                    mesh={"format": "cgns", "file": args.mesh}),
-                blocks=listing)
+            path = f"{args.out_dir}/{io.checkpoint_name(prefix, step)}"
+            try:
+                io.save_checkpoint(
+                    path,
+                    {f"b{index}": io.primitive_field(cons[block.name], block.grid, params)
+                     for index, block in enumerate(built.blocks)},
+                    meta=io.checkpoint_meta(
+                        args, params, t, step, dt, viscous=bool(args.viscous),
+                        mesh={"format": "cgns", "file": args.mesh}),
+                    blocks=listing)
+            except Exception as exc:
+                raise RuntimeExecutionError(
+                    "运行期错误（存盘）："
+                    f"case={args.case} step={step} t={t} dt={dt} "
+                    f"blocks={len(built.blocks)} "
+                    f"输出路径={path} 原始异常={type(exc).__name__}: {exc}") from exc
     print(f"done: t={t:.4f}, steps={step}, wall={time.time() - t0:.2f}s")
 
 
 # ---- 入口判定与放行校验 ----
 
-# 多块模式只放行缺省值、显式给出就报错的参数：参数名 → 用户给它的入口
-_NOT_GIVEN = {
-    "weno_tv": "--weno-tv / --no-weno-tv",
-    "boundary_outlet_ghost": "--outlet-ghost（boundary.outlet_ghost）",
-    "ni": "--ni", "nj": "--nj", "nk": "--nk",
-    "tw": "--tw（physics.tw）",
-    "inflow_profile": "--inflow-profile（case.inflow_profile）",
-    "plate_x0": "--plate-x0（case.plate_x0）",
-    "plate_x1": "--plate-x1（case.plate_x1）",
-    "plate_h": "--plate-h（case.plate_h）",
-    "plate_dif_bound": "--plate-dif-bound",
-}
-FLUX_SCALE = "numerics.flux_scale（命令行 --flux-scale）"
+# 多块模式只放行缺省值、显式给出就报错的参数；出处由 runtime_config.where 反查
+_NOT_GIVEN = (
+    "weno_tv",
+    "boundary_outlet_ghost",
+    "ni", "nj", "nk",
+    "tw",
+    "inflow_profile",
+    "plate_x0",
+    "plate_x1",
+    "plate_h",
+    "plate_dif_bound",
+)
 
 
 @dataclass(frozen=True)
@@ -1401,59 +1418,61 @@ def _given(args, name) -> bool:
 
 def _check_release(args) -> None:
     """放行校验：生效值不在放行清单里、或显式给出了不参与的参数，都报错。"""
-    def stop(text: str) -> None:
-        raise SetupError(f"多块模式不放行：{text}")
+    sources = getattr(args, "config_sources", None)
+
+    def stop(name: str, text: str) -> None:
+        raise SetupError(f"多块模式不放行：{runtime_config.blame(sources, name, text)}")
 
     if getattr(args, "case", None) != "plate":
-        stop(f"算例是 {getattr(args, 'case', None)!r}，只放行 plate")
+        stop("case", f"算例是 {getattr(args, 'case', None)!r}，只放行 plate")
     if getattr(args, "scheme", None) != "WENO7":
-        stop(f"格式是 {getattr(args, 'scheme', None)!r}，只放行 WENO7")
+        stop("scheme", f"格式是 {getattr(args, 'scheme', None)!r}，只放行 WENO7")
     if getattr(args, "fp32", False):
-        stop("精度是 FP32，只放行 FP64")
+        stop("fp32", "精度是 FP32，只放行 FP64")
     dt = getattr(args, "dt", None)
     if dt is None or not np.isfinite(dt) or dt <= 0.0:
-        stop(f"步长 dt={dt!r}，需要有限正数的固定步长")
-    if getattr(args, "viscous", False) and getattr(args, "vis_order", None) != "CD8":
-        stop(f"粘性项是开的，粘性导数的阶数 vis_order={getattr(args, 'vis_order', None)!r}，"
-             "只放行 CD8")
+        stop("dt", f"步长 dt={dt!r}，需要有限正数的固定步长")
     if getattr(args, "specificboundary", None):
-        stop(f"带了特殊边界脚本 {args.specificboundary!r}（specificboundary），"
-             "多块暂不支持")
-    for name, entry in _NOT_GIVEN.items():
+        stop("specificboundary",
+             f"带了特殊边界脚本 {args.specificboundary!r}（specificboundary），多块暂不支持")
+    for name in _NOT_GIVEN:
         if _given(args, name):
-            stop(f"显式给出了 {entry}；多块模式只放行它的缺省值，"
-                 "取值与缺省相同时也算给出")
+            stop(name, "显式给出了这个参数；多块模式只放行它的缺省值，取值与缺省相同时也算给出")
 
 
 def _check_flux_scale(args, meta) -> tuple[float, float, float]:
     """参考尺度要给出、是有限正数，并且不小于任何一块按自身尺寸算出的分量。"""
+    sources = getattr(args, "config_sources", None)
+
+    def stop(text: str) -> None:
+        raise runtime_config.ConfigError(
+            runtime_config.blame(sources, "flux_scale", text))
+
     scale = getattr(args, "flux_scale", None)
     if scale is None:
-        raise runtime_config.ConfigError(
-            f"多块运行必须给出三轴参考尺度 {FLUX_SCALE}：取等价单块的全局顶点数里"
-            "其余两轴 (N-1) 的乘积，100×40×40 对应 1521 3861 3861")
+        stop("多块运行必须给出三轴参考尺度：取等价单块的全局顶点数里"
+             "其余两轴 (N-1) 的乘积，100×40×40 对应 1521 3861 3861")
     scale = tuple(float(value) for value in scale)
     bad = [f"{value:g}" for value in scale if not np.isfinite(value) or value <= 0.0]
     if bad:
-        raise runtime_config.ConfigError(
-            f"{FLUX_SCALE} 的每个分量都要是有限正数，得到 {bad}")
+        stop(f"每个分量都要是有限正数，得到 {bad}")
     bounds = [scales_from_sizes(zone.vertex_size) for zone in meta]
     for axis, name in enumerate(AXIS_NAMES):
         widest = int(np.argmax([bound[axis] for bound in bounds]))
         if scale[axis] < bounds[widest][axis]:
-            raise runtime_config.ConfigError(
-                f"{FLUX_SCALE} 在 {name} 向的分量 {scale[axis]:g} 小于按块 "
-                f"{meta[widest].name} 自身尺寸算出的 {bounds[widest][axis]:g}；"
-                "参考尺度取等价单块的全局顶点数，不能按某一块的尺寸填")
+            stop(f"在 {name} 向的分量 {scale[axis]:g} 小于按块 "
+                 f"{meta[widest].name} 自身尺寸算出的 {bounds[widest][axis]:g}；"
+                 "参考尺度取等价单块的全局顶点数，不能按某一块的尺寸填")
     return scale
 
 
 def _check_config(args, meta) -> tuple[float, float, float]:
     """配置层面的要求：输出间隔为正，边条状态齐全，壁温为正，参考尺度有着落。"""
+    sources = getattr(args, "config_sources", None)
     for name in ("kstep_show", "kstep_save"):
         if getattr(args, name, 0) <= 0:
-            raise runtime_config.ConfigError(
-                f"输出间隔 {name} 必须是正数，得到 {getattr(args, name)}")
+            raise runtime_config.ConfigError(runtime_config.blame(
+                sources, name, f"输出间隔 {name} 必须是正数，得到 {getattr(args, name)}"))
     labels = (("boundary_inflow", "inflow"),
               ("boundary_farfield", "farfield"),
               ("boundary_wall_temperature", "wall_temperature"))
@@ -1464,9 +1483,10 @@ def _check_config(args, meta) -> tuple[float, float, float]:
             f"plate 的多块运行缺少 boundary 参数 {missing}；入口、远场和壁温由 "
             "JSON 给出，命令行没有对应的选项")
     if args.boundary_wall_temperature <= 0:
-        raise runtime_config.ConfigError(
+        raise runtime_config.ConfigError(runtime_config.blame(
+            sources, "boundary_wall_temperature",
             "plate 的多块运行要求等温壁的 boundary.wall_temperature 大于 0，得到 "
-            f"{args.boundary_wall_temperature:g}")
+            f"{args.boundary_wall_temperature:g}"))
     return _check_flux_scale(args, meta)
 
 
@@ -1489,9 +1509,10 @@ def enter(args) -> MultiSetup | None:
             meta = None
     if meta is None or len(meta) < 2:
         if getattr(args, "flux_scale", None) is not None:
-            raise runtime_config.ConfigError(
-                f"{FLUX_SCALE} 只在多块网格上使用：内置网格、单 zone 的文件和显式"
-                "选了 --cgns-zone 的运行不要给出")
+            raise runtime_config.ConfigError(runtime_config.blame(
+                getattr(args, "config_sources", None), "flux_scale",
+                "只在多块网格上使用：内置网格、单 zone 的文件和显式选了 --cgns-zone "
+                "的运行不要给出"))
         return None
     problems = [zone.problem for zone in meta if zone.problem is not None]
     if problems:

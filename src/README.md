@@ -65,6 +65,11 @@ output/sod-istep-00000100.npz
 错误。这次的输出会把那张检查点覆盖掉时（它被改过名，文件名里的步号比它记的大），也报
 配置错误。续算的起点以初场 `cons0` 为底，只把内区换成检查点的值。
 
+`time.restart` 有两条规则。写空字符串等于没给，和 `--restart ""` 一样从头算。读 JSON 时
+只把它的相对路径解析出来，不核对文件在不在：命令行给了 `--restart` 时以命令行的为准，
+JSON 里那一个不看；合并以后只核对最终生效的那一个，不存在时报配置错误，原因里写它是
+命令行给的还是 JSON 给的。别的路径字段（`mesh.file`）不是这样，读 JSON 时就核对。
+
 阈值内一致有前提：两边是同一套数值配置（格式、步长、粘性、物性、边界），并且走过的步长
 序列相同。末步会按剩余时间截短，所以要用终止步数在保存步切开，不要靠终止时间。比如
 一口气跑 100 步、每 50 步存一次，与先跑 50 步、再从第 50 步的检查点续到第 100 步，
@@ -87,12 +92,12 @@ output/sod-istep-00000100.npz
 | `--dt`                    | 固定时间步长，**必填且必须为正的有限数**；CFL 自适应已删除              |
 | `--end-time`              | 终止物理时间                                                  |
 | `--end-step`              | 最大整步数；与终止时间谁先满足就停止                                      |
-| `--viscous`               | 对 Sod、Taylor–Green、平板启用粘性项；Poiseuille 始终计算粘性项；多块 plate 也可以，导数须为 `CD8`（7.1.2） |
-| `--vis-order`             | 粘性导数格式：`CD6` 或 `CD8`；多块下粘性打开时只放行 `CD8`              |
+| `--viscous`               | 对 Sod、Taylor–Green、平板启用粘性项；Poiseuille 始终计算粘性项；多块 plate 也可以，导数取 `CD6` 或 `CD8`（7.1.2） |
+| `--vis-order`             | 粘性导数格式：`CD6` 或 `CD8`；多块下粘性打开时两种都放行                 |
 | `--Re --Ama --ref-t --pr` | Reynolds 数、参考 Mach 数、有量纲参考温度和 Prandtl 数                 |
 | `--kstep-show`            | 每隔多少整步打印一次诊断；必须是正整数                           |
 | `--kstep-save`            | 每隔多少整步保存一次；必须是正整数；到达终止时间的那一步也会保存           |
-| `--restart`               | 从这张检查点续算；不给就从初始场算起                              |
+| `--restart`               | 从这张检查点续算；不给或给空字符串，就从初始场算起                     |
 | `--out-dir`               | 输出目录，默认 `output`                                        |
 | `--fp32`                  | 改用 FP32，主要用于性能测试；逐点验证建议保留默认 FP64                        |
 
@@ -106,23 +111,38 @@ python -m opencfd_jax.src.main --help
 
 ### 1.1 用 `input.json` 统一配置（第 3 步）
 
+`src/input.json` 是一份标准的配置：单块的 plate，网格用仓库里的 `Grid/testcgnstest.cgns`，
+WENO7 加 CD8 的粘性项，跑一步。在工作区根目录下直接用它：
+
+```powershell
+python -m opencfd_jax.src.main --config opencfd_jax/src/input.json
+```
+
+要改参数，在命令行上覆盖，或者复制一份再改。JSON 里的相对路径相对 JSON 所在的目录，
+所以它的 `output.dir` 写 `../../output`，和命令行缺省的 `output/` 是同一个地方。多块比它
+多一项 `numerics.flux_scale`，见 7.1.2 的多块例子。
+
 `--config path/to/input.json` 可以一次给出运行参数；命令行仍是最高优先级，不写
 JSON 的字段保持程序默认值：
 
 ```powershell
-python -m opencfd_jax.src.main --config experiment\cases\sod_1step.json
+python -m opencfd_jax.src.main --config opencfd_jax/experiment/cases/sod_1step.json
 ```
 
-JSON 只分六组，外加顶层 `precision`：
+JSON 分七组，另有顶层的两个单值字段：
 
 | 组 | 字段 |
 |---|---|
-| `mesh` | `format`（`builtin`/`cgns`）、`file` |
-| `physics` | `Re`、`Ama`、`ref_t`、`pr`、`tw`（壁温，无量纲，缺省与来流同温） |
-| `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv`、`flux_scale`（多块的三轴参考尺度，见 7.1.2） |
-| `time` | `dt`（必填）、`end_time`、`end_step` |
 | `case` | `name`、`inflow_profile`（OCFD 1D 剖面文件，空着用自由来流常数）、`p_grad`、`forcing_work`、`plate_x0`、`plate_x1`、`plate_h` |
+| `mesh` | `format`（`builtin`/`cgns`）、`file` |
+| `boundary` | `inflow`、`farfield`（各含 `rho`、`u`、`v`、`w`、`T`）、`wall_temperature`（CGNS 壁面的温度）、`outlet_ghost`（出口状态鬼层，`keep` 是缺省，`copy` 是零梯度）；这几项只有 JSON 能给 |
+| `physics` | `Re`、`Ama`、`ref_t`、`pr`、`tw`（内置网格的 plate 用的壁温，缺省与来流同温） |
+| `numerics` | `scheme`、`vis_order`、`viscous`、`weno_tv`（只有 WENO7-SYMBO 用）、`flux_scale`（多块的三轴参考尺度，见 7.1.2） |
+| `time` | `dt`（必填）、`end_time`、`end_step`、`restart` |
 | `output` | `dir`、`kstep_show`、`kstep_save` |
+
+顶层的两个单值字段是 `precision`（`fp64` 或 `fp32`）和 `specificboundary`
+（`src/special_boundaries/` 下的脚本名，与 plate、channel 互斥）。
 
 优先级：程序默认值 → JSON → 显式命令行。显式与否由“参数是否出现在命令行”判断，
 不靠与默认值比较。需要显式关闭 JSON 里的布尔项时用 `--no-viscous`、
@@ -139,6 +159,143 @@ CGNS 路径适用于 `poiseuille` 和 `plate`：`mesh.file` 指向 HDF5/CGNS 文
 不属于当前算例的字段、`CellCenter`、`Rind>0`、`PointList`、二维 zone 和单侧对称面都会在启动前
 或 reader 中报错。多 zone 的文件在没有给 `--cgns-zone` 时走多块路径：只放行 `plate`，
 并且要给 `numerics.flux_scale`（7.1.2）；给了 `--cgns-zone` 就只读那一块，照旧走单块。
+
+### 1.2 在 WSL 的 GPU 上运行
+
+以后的计算都在 WSL 的 GPU 上跑。环境（2026-11-26 建好，Ubuntu 24.04）：先装
+`python3.12-venv`，建虚拟环境 `/root/venv-jax`，再装 `jax[cuda13]==0.12.1`、`numpy==2.5.5`、
+`h5py==3.16.0`、`scipy==1.18.1`、`pytest==9.2.0`，版本和 Windows 的 `.venv` 相同。
+
+```
+/root/venv-jax/bin/python -c "import jax; print(jax.devices())"     # 应当打印出一块 CudaDevice
+```
+
+工作区在 WSL 里是 `/mnt/d/Desktop/ocfd2jax`。命令和 Windows 上的一样，只是把
+`.venv/Scripts/python.exe` 换成 `/root/venv-jax/bin/python`：
+
+```
+cd /mnt/d/Desktop/ocfd2jax
+/root/venv-jax/bin/python -m opencfd_jax.src.main --config opencfd_jax/src/input.json
+```
+
+跑测试前要关掉显存预分配。测试里有 16 处另起进程跑命令行入口，父进程把显存占满以后，
+子进程起不来：
+
+```
+XLA_PYTHON_CLIENT_PREALLOCATE=false /root/venv-jax/bin/python -m pytest opencfd_jax/tests/ opencfd_jax/experiment/ -q -p no:cacheprovider
+```
+
+GPU 和 CPU 的结果不逐位相同，差在舍入量级（一步下来密度、温度的最大相对差约 5e-16），
+因为两边的浮点运算顺序不同。测试里和 CPU 存下的数据比的那些断言，在 GPU 上按验收的
+阈值比；同一台设备上算出来的两份结果（CPU 也好、GPU 也好）照旧逐位比。入口是
+`experiment/step6_support.py` 的 `exact`。只检验 FP64：状态是 FP32 的调用方式，在 GPU 上不和
+存下的值比。
+
+GPU 上第一次编译比 CPU 慢得多（plate 的 CGNS 网格约 15 秒，CPU 约 3 秒），编译完以后
+每步约 0.05 秒（CPU 约 0.29 秒）。全量测试在 GPU 上单独跑约 23 分钟。不要和 CPU 上的
+全量同时跑：这一遍自己就占约 10 GB 内存，同时跑会把机器的内存挤爆。
+
+### 1.3 用 CGNS 网格时边条怎么设
+
+边条分两处写：CGNS 文件说每个面是什么类型，`input.json` 说这种类型取什么值。
+
+**CGNS 文件里写类型。** 单块网格的一个面只能有一条边条，六个面都要有边条盖满。程序认这几种：
+
+| CGNS 里的类型 | 当作 | 怎么赋值 | `plate` 算例时 `input.json` 里要给什么 |
+| --- | --- | --- | --- |
+| `BCInflow` | 入口 | 边界点和外面四层鬼胞都写成入口状态 | `boundary.inflow` |
+| `BCWall` | 壁面 | 壁面点按无滑移、等温写；壁面旁的四层用单侧差分公式 | `boundary.wall_temperature` |
+| `BCFarfield` | 远场 | 最外面一层内点写成远场状态 | `boundary.farfield` |
+| `BCOutflow`、`BCExtrapolate`、`BCOutflowSubsonic` | 出口 | 不赋值，见下面“出口” | `boundary.outlet_ghost`，可以不给 |
+| `BCOutflowSupersonic` | 无反射出口 | 见下面“无反射出口” | 不用给 |
+| `BCSymmetryPolar`，同一个轴的正、负两个面成对 | 周期 | 鬼胞拷对面内区的值 | 不用给 |
+
+限制：壁面只能放在 j 方向的两个面上；周期必须同轴成对。`BCWallViscous*`、`BCSymmetryPlane`
+和 `BCInflow` 以外的 `BCInflow*` 不认，启动时报错。多块网格的要求见 7.1.2，一个面可以由
+几段同类型的边条拼成。
+
+**`input.json` 里写给多少。**
+
+```json
+"boundary": {
+  "inflow":  {"rho": 1, "u": 1, "v": 0, "w": 0, "T": 1},
+  "farfield": {"rho": 1, "u": 1, "v": 0, "w": 0, "T": 1},
+  "wall_temperature": 1.0,
+  "outlet_ghost": "keep"
+}
+```
+
+`inflow` 和 `farfield` 各是五个无量纲数：密度、三个速度分量、温度。`wall_temperature` 是
+壁面的无量纲温度。这几项只有 JSON 能给，命令行没有对应的选项。`plate` 算例的前三项必须
+给。`src/input.json` 是一份完整的例子：单块的 plate，网格是仓库里的 `Grid/testcgnstest.cgns`。
+
+**出口。** 缺省的 `keep` 是原码的做法：出口外面不赋值，鬼胞保持它原来的值；plate 的初场里
+这些鬼胞是零。要零梯度出口，写 `"outlet_ghost": "copy"`：四层鬼胞取紧挨着的那层内点的值。它只改状态的鬼胞，粘性通量的出口鬼胞照旧清零。两种做法在出口附近的结果
+差别很大，做定量对照时要留意选的是哪一种。
+
+**无反射出口。** 把那一面的边条写成 `BCOutflowSupersonic`。它按原码 `NON_REFLETION` 的做法：
+紧贴这个面的内点，沿这个方向只累加一半的分裂通量差。它不是特征形式的无反射边界。
+WENO7-SYMBO 不支持它。
+
+**入口给剖面。** 不给剖面时，入口和远场都用上面那两个常数状态。要给剖面，在 `input.json`
+的 `case` 里加 `"inflow_profile": "剖面文件"`（命令行是 `--inflow-profile`），路径相对
+`input.json` 所在的目录。文件是文本：第一行是表头，不读；后面每行五个数 `y rho u v T`，用
+空格或逗号分开；行数必须等于网格 j 方向的点数，程序不插值；`w` 取 0。只有 `plate` 能用。
+
+**多块网格**的边条也是这样设。多块只放行 `plate` 这一种算例，还必须在 `input.json` 里给
+`numerics.flux_scale`，例子见 9.1 的“多块 plate”。
+
+#### 特殊边界脚本
+
+上面这些都是程序里现成的边条。要在每个子步的常规处理之后再改一些点（比如在远场加一个
+激波），用特殊边界脚本。
+
+1. 脚本放在 `src/special_boundaries/` 下，别的位置不认。例如新建 `src/special_boundaries/demo.py`：
+
+   ```python
+   from types import SimpleNamespace
+
+
+   def build_special_boundary(case):
+       """把 i- 侧四层鬼胞里的密度固定成 2。"""
+
+       def bc_apply(q):
+           return q.at[0, :, :, :4].set(2.0)
+
+       return SimpleNamespace(name="demo", bc_apply=bc_apply)
+   ```
+
+2. 在 `input.json` 顶层写上脚本名：`"specificboundary": "demo.py"`（命令行是
+   `--specificboundary demo.py`）。
+
+3. 其余照常。用 `sod`、`tg` 时网格是程序内置的长方体，点数用 `--ni`、`--nj`、`--nk` 给。
+
+脚本的约定：
+
+- 入口固定是 `build_special_boundary(case)`。它返回一个对象，`name` 是字符串，`bc_apply` 是回调。
+- 回调拿到的是带鬼胞的守恒量数组，形状 `(5, nk+8, nj+8, ni+8)`，三根空间轴依次是 k、j、i。
+  它返回同样形状的数组。里面只能做数组的运算：不能读写文件，不能按数值分支。
+- 回调在每个 RK 子步的常规处理之后调用。常规处理各管一层（入口写边界点和鬼胞，壁面写壁面点，
+  远场写最外面一层内点，出口和周期不写），回调只改它要改的地方。
+- 脚本的配置写错了（名字带路径、脚本不存在、缺入口函数）报一行：
+  `初始化错误：specificboundary（命令行 --specificboundary，JSON specificboundary）：原因`。
+
+这个例子是可以检查的：`sod` 算例、16×8×4 的网格、`"specificboundary": "demo.py"`，跑一步，
+和不挂脚本相比，内区的密度最大差 7e-5，出现在靠 i- 的一侧。
+
+限制：
+
+- 脚本和 `plate` 算例互斥。所以拿 CGNS 网格跑 plate 时挂不了脚本。能挂的是内置网格的
+  `sod`、`tg`；`poiseuille` 配 CGNS 网格也能挂上，但没有验收过。
+- 多块不放行脚本。
+- 带脚本的运行能续算，但不保证和不中断的运行在阈值内一致，启动时会提示一句。
+- 脚本以求解器进程的权限运行。`src/special_boundaries/` 里只能放自己看过、信得过的脚本。
+
+#### 现在设不了的
+
+- `BCWallViscous*`、`BCSymmetryPlane`（对称面）。
+- 单块网格的一个面上分几段。
+- 湍流模型：程序只能算层流。
 
 
 
@@ -214,10 +371,28 @@ CGNS 路径适用于 `poiseuille` 和 `plate`：`mesh.file` 指向 HDF5/CGNS 文
 | 9  | 保存结果            | `io.py::save_checkpoint`          | 每块一个数组的原始变量 ρ、u、v、w、T（只有内区）加 `_meta`（时间、步号、步长、算例、格式、物性、粘性开关、阶数、精度、网格）写入 NPZ |
 | 10 | 重复推进            | `main.py::run`                     | 回到步骤 5，直到达到终止时间或最大步数                            |
 
-错误分层：配置解析错误由 `runtime_config.ConfigError` 转成 `配置错误`；`init.prepare`
-的失败在 `run` 边界包装成 `errors.SetupError`，由 `main` 转成 `初始化错误` 并
-`parser.error`；时间推进中的异常包装成 `errors.RuntimeExecutionError`，保留原始
-异常链与 `case/step/t/dt/grid` 上下文，不再被转成启动参数错误。
+报错分三种。
+
+命令行本身解析不了（不认识的选项、缺值），由 argparse 报，带用法说明。
+
+启动时的错误只往 stderr 写一行，退出码 2，不带用法说明：
+
+- `配置错误：<出处>：<原因>`。JSON 的字段不对、合并后的校验没过、输入文件不存在、
+  输出目录建不出来。由 `runtime_config.ConfigError` 转成。
+- `初始化错误：<出处>：<原因>`。建算例、多块的放行校验和网格校验、装配各块、读续算的
+  检查点。由 `errors.SetupError` 转成。建算例时出的任何异常都算初始化失败，特殊边界
+  脚本自己抛的也算，消息里点名脚本。
+
+出处是参数时写成 `<参数名>（命令行 <选项>，JSON <键>）`，原因的后面注明这个值是命令行
+给的还是 JSON 给的，例如
+`配置错误：restart（命令行 --restart，JSON time.restart）：命令行给的文件不存在或不可读：…`。
+出处不是哪个参数时写阶段：`读 JSON 配置`、`建输出目录`，或者消息里原有的开头
+（`初始化失败`、`多块模式不放行`、`多块网格没有通过校验`、`续算的检查点`）。
+
+进入计算以后的错误是 `errors.RuntimeExecutionError`，保留 traceback 和原始异常链，
+消息的开头是阶段：`运行期错误（装配 RHS）`、`（RHS 预热）`、`（时间推进）`、`（存盘）`，
+后面跟 `case/step/t/dt/grid` 和原始异常；存盘的那一条多一项输出路径。多块在进循环以前
+先用起点状态空跑一步，编译都在这一步完成，算 RHS 预热。
 
 下面展开最耗计算量的第 5～7 步。
 
@@ -269,7 +444,7 @@ Q(n+1) = 1/3 Qn + 2/3 [Q** + dt L(Q**)]
 ```
 
 边界只在 `prepare` 里走一遍：鬼层、边界点、特殊回调各管一层，互不重写。
-RK 外层不再重复调用 `bc_apply`（旧的重复调用已被去掉）。
+RK 的两个函数不收边界回调。
 
 
 
@@ -465,14 +640,15 @@ CGNS plate 的入口、远场原始量和壁温由 JSON 的 `boundary` 提供；
 1. **放行**：多块路径只验收过一组配置，不在清单里的在读坐标之前报错。这一步只读
    各 zone 的名字、类型和尺寸；文件里不止一个 zone 而其中有读不出来的（不是
    `Structured`、节点残缺、尺寸解不出），也在这里按多块网格的校验报错。只有一个
-   zone 的文件出了任何问题都交回单块路径，报错与没有多块路径时相同：单块路径自己
-   报什么仍由它决定，残缺的文件可能在那里直接抛出原始异常。
+   zone 的文件出了任何问题都交回单块路径，由它报初始化错误：消息以“初始化失败”开头，
+   带着原始异常的类型和文字。
    - 生效值：算例 `plate`、格式 `WENO7`、FP64、固定的正步长、不带特殊边界脚本。
-   - 粘性项可以打开（第 7 步）。打开时粘性导数的阶数必须是 `CD8`；是 `CD6` 的在读坐标
-     之前报错，消息里点出 `vis_order`。粘性关闭时阶数不参与计算，是 `CD6` 也放行。
+   - 粘性项可以打开（第 7 步）。打开时粘性导数的阶数取 `CD6` 或 `CD8` 都放行（CD6 是
+     补尾巴 C1 加的）；粘性关闭时阶数不参与计算。
    - 不能显式给出，取值与缺省相同也不行：`--weno-tv`、`--outlet-ghost`、`--ni`、`--nj`、
      `--nk`、`--tw`、`--inflow-profile`、`--plate-x0`、`--plate-x1`、`--plate-h`、
-     `--plate-dif-bound`。
+     `--plate-dif-bound`（单块的内置 plate 用它显式给 DIF_BOUND 的六个开关，写法是六个 0 或 1，
+     用空格或逗号分开）。
    - 入口、远场状态和壁温只从 JSON 的 `boundary` 读，壁温要大于 0，命令行没有对应的
      选项。
    - 参考尺度（`numerics.flux_scale` 或 `--flux-scale SX SY SZ`，多块必填）：WENO 的
@@ -542,9 +718,12 @@ NaN，内区三个阶段的粘性分项逐位不变；把块角的坐标换成 N
 粘性右端项与各自的等价单块比较，最大差 4e-16。不换 `Ev`、换 `Ev` 时取错层、切口面
 被套上单侧公式、RK 组合用了准备过的状态，这四种错误都被验收发现。
 
-还没做的：多块下粘性导数取 CD6（只放行 CD8）、plate 以外算例的粘性、和原码多块结果的
-对拍（这台机器没有 MPI 的编译器）、翻转和轴交换的连接（第 10 步再定）、特殊边界脚本配
-多块。
+粘性导数的阶数 CD6 也放行（补尾巴 C1）。上面两层验收和四种注错对 CD6 各验了一遍；比较
+分四层：全域、接口邻域、物理边界带、其余。物理边界带是各块里紧挨着打开了单侧公式的那
+一面的几层，验收网格上只有壁面；切口面不套单侧公式，有测试盯着。
+
+还没做的：plate 以外算例的粘性、和原码多块结果的对拍（这台机器没有 MPI 的编译器）、
+翻转和轴交换的连接（第 10 步再定）、特殊边界脚本配多块。
 
 ### 7.2 统一边界执行与扩展入口（第 2 步）
 
@@ -596,7 +775,8 @@ NaN，内区三个阶段的粘性分项逐位不变；把块角的坐标换成 N
 3. 两者都没有（旧式特殊入口）时不赋值，整段交给算例回调。
 
 
-**新增 case 特殊边界**：case 侧显式提供一个对象，并同时把它的 `apply` 设为
+运行时用脚本文件挂接特殊边界的做法见 1.3 的“特殊边界脚本”。下面是直接在算例字典上
+挂接的写法，给改程序的人看：case 侧显式提供一个对象，并把它的 `apply` 设为
 `case["bc_apply"]`：
 
 ```python
@@ -695,8 +875,8 @@ python -m opencfd_jax.src.main --config 多块目录\input.json --kstep-show 1
 ```
 
 物性与单块用同一个函数组装。启动时多打印一行 `vis-order=CD8 Re=1000.0 Ama=0.1
-Ref_T=288.15 Pr=0.7`；`ref_t` 没给时取 288.15 K，并像单块一样给出提示。`vis_order` 是
-`CD6` 时启动就报错。存盘的文件名与无粘时相同，`_meta` 只差粘性开关一项。
+Ref_T=288.15 Pr=0.7`；`ref_t` 没给时取 288.15 K，并像单块一样给出提示。`vis_order` 取
+`CD6` 或 `CD8` 都放行，这一行和 `_meta` 里记的就是它。存盘的文件名与无粘时相同，`_meta` 只差粘性开关一项。
 
 旧 `channel` 的外部文件链（`--in`、`--field`、`--mesh` OCFD dat）已删除；`infile.py`、
 `mesh.read_ocfd_mesh/read_ocfd_field`、`channel.py` 只保留为内部库和旧测试依赖，
@@ -809,7 +989,7 @@ python -m opencfd_jax.src.compare diff dump-npz dump-jax
 
 1. **RHS 不等于状态更新**：`main.build_rhs()` 只构造 `L(Q)`；真正更新状态的是 `solver.rk3_step*()`。
 
-2. **滤波不在 RK 子步内**：它在整个 RK3 完成后按整步频率执行。
+2. **没有滤波**：激波选择性滤波已在 2026-11-23 从正式入口删除，RK 整步之后不再做后处理。
 
 3. **输出不含鬼胞**：内存数组每方向多 8 层，NPZ 只有物理内区。
 

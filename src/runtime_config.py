@@ -65,7 +65,7 @@ _SCHEMA = {
         "dt": ("dt", "dt"),
         "end_time": ("number", "end_time"),
         "end_step": ("int", "end_step"),
-        "restart": ("path", "restart"),
+        "restart": ("restart", "restart"),
     },
     "case": {
         "name": ("str", "case"),
@@ -97,6 +97,52 @@ _CASE_SCOPE = {
     "case.plate_h": {"plate"},
     "numerics.flux_scale": {"plate"},
 }
+
+# 参数名 → JSON 键。精度由 fp32、fp64 两个参数合用顶层的 precision
+_JSON_KEY = {dest: f"{section}.{name}"
+             for section, spec in _SCHEMA.items() for name, (_, dest) in spec.items()}
+_JSON_KEY.update({"specificboundary": "specificboundary", "fp32": "precision",
+                  "fp64": "precision"})
+
+
+def origins(name: str) -> list[str]:
+    """参数的各个入口：``"命令行 <选项>"``、``"JSON <键>"``，没有的那一边不列。
+
+    命令行选项从 ``main.build_parser`` 的选项表反查，JSON 键从 ``_SCHEMA`` 反查。
+    ``--no-viscous``、``--no-weno-tv`` 是把参数关掉的开关，和它关掉的参数算同一个。
+    """
+    from . import main                  # main 引用本模块，只能在用到时再导入
+    negatives = tuple(negative for negative, positive in main._NEGATIVE_FLAGS
+                      if positive == name)
+    options = [option for action in main.build_parser()._actions
+               if action.dest in (name, *negatives) for option in action.option_strings]
+    key = _JSON_KEY.get(name)
+    return [text for text in ("命令行 " + " 和 ".join(options) if options else "",
+                              f"JSON {key}" if key else "") if text]
+
+
+def where(name: str) -> str:
+    """参数的出处：``<参数名>（命令行 <选项>，JSON <键>）``，只有一边有的只写那一边。"""
+    listed = origins(name)
+    return f"{name}（{'，'.join(listed)}）" if listed else name
+
+
+def given_by(sources, name: str) -> str:
+    """这个参数的值是哪一边给的：``"命令行给的"`` 或 ``"JSON 给的"``。
+
+    ``sources`` 是 ``args.config_sources`` 那样的“参数名 → 来源”表。取的是缺省值、
+    或者没有这张表时返回空串。
+    """
+    source = (sources or {}).get(name)
+    if source == "cli":
+        return "命令行给的"
+    return "" if not source or source == "default" else "JSON 给的"
+
+
+def blame(sources, name: str, reason: str) -> str:
+    """配置错误的原因加上出处：``<出处>：<原因>``，值的来源查得到时在后面注明。"""
+    who = given_by(sources, name)
+    return f"{where(name)}：{reason}" + (f"（{who}）" if who else "")
 
 
 @dataclass
@@ -150,11 +196,24 @@ def _check_bool(value: Any, dotted: str) -> bool:
     return value
 
 
-def _resolve_path(value: str, directory: Path, dotted: str) -> str:
-    """相对路径按配置文件目录解析；绝对路径原样返回。"""
+def _check_dif_bound(raw: Any, sources: dict[str, str] | None) -> None:
+    """命令行显式给出的 DIF_BOUND 六开关：六个 0 或 1，用空格或逗号分开。
+
+    在配置阶段就校验，报的是带出处的配置错误；等到建算例时才报，就说不出是哪个参数。
+    """
+    tokens = str(raw).replace(",", " ").split()
+    if len(tokens) != 6 or any(token not in ("0", "1") for token in tokens):
+        reason = "只能是 0 或 1" if len(tokens) == 6 else "要写成六个 0 或 1"
+        raise ConfigError(blame(sources, "plate_dif_bound", f"{reason}，得到 {raw!r}"))
+
+
+def _resolve_path(value: str, directory: Path, dotted: str, *, check: bool = True) -> str:
+    """相对路径按配置文件目录解析，绝对路径原样返回。``check`` 为假时不核对文件在不在。"""
     path = Path(value)
     resolved = path if path.is_absolute() else (directory / path)
     resolved = Path(os.path.normpath(str(resolved)))
+    if not check:
+        return str(resolved)
     if not resolved.exists():
         raise ConfigError(f"{dotted} 指向的文件不存在：{resolved}")
     if not resolved.is_file():
@@ -179,6 +238,11 @@ def _validate_value(kind: str, value: Any, dotted: str, directory: Path) -> Any:
         return _check_string(value, dotted)
     if kind == "path":
         return _resolve_path(_check_string(value, dotted), directory, dotted)
+    if kind == "restart":
+        # 空字符串等于没给，和命令行的 --restart "" 一致。其余按 path 解析相对路径，但不在
+        # 这里核对存在：命令行给了 --restart 时 JSON 的这一个不生效，合并以后只核对生效的那个
+        return (None if value == "" else
+                _resolve_path(_check_string(value, dotted), directory, dotted, check=False))
     if kind == "outpath":
         return _resolve_out_dir(_check_string(value, dotted), directory)
     if kind == "number":
@@ -204,18 +268,21 @@ def _validate_value(kind: str, value: Any, dotted: str, directory: Path) -> Any:
     raise AssertionError(f"未实现的字段类型 {kind}")
 
 
-def _validate_applicability(values: dict[str, Any], case: str) -> None:
+def _validate_applicability(values: dict[str, Any], case: str,
+                            sources: dict[str, str] | None = None) -> None:
     """JSON 中已给出的字段是否适用于最终生效的算例。"""
     fmt = values.get("mesh_format")
     if fmt == "cgns" and case not in CGNS_CASES:
-        raise ConfigError(
-            f"{case} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille/plate")
+        raise ConfigError(blame(
+            sources, "case",
+            f"{case} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille/plate"))
     for dotted, allowed in _CASE_SCOPE.items():
         section, name = dotted.split(".")
         dest = _SCHEMA[section][name][1]
         if dest in values and case not in allowed:
-            raise ConfigError(
-                f"{section}.{name} 只适用于算例 {sorted(allowed)}，当前为 {case!r}")
+            raise ConfigError(blame(
+                sources, dest,
+                f"{section}.{name} 只适用于算例 {sorted(allowed)}，当前为 {case!r}"))
 
 
 def _semantic_checks(values: dict[str, Any], sources: dict[str, str],
@@ -223,43 +290,48 @@ def _semantic_checks(values: dict[str, Any], sources: dict[str, str],
     """字段取值域与算例适用范围校验。"""
     case = values.get("case", fallback_case)
     if case not in CASE_NAMES:
-        raise ConfigError(
-            f"case.name 需要 {CASE_NAMES} 之一，得到 {case!r}")
+        raise ConfigError(blame(
+            sources, "case", f"case.name 需要 {CASE_NAMES} 之一，得到 {case!r}"))
     if "scheme" in values and values["scheme"] not in SCHEMES:
-        raise ConfigError(
-            f"numerics.scheme 不支持 {values['scheme']!r}；可选 {SCHEMES}")
+        raise ConfigError(blame(
+            sources, "scheme",
+            f"numerics.scheme 不支持 {values['scheme']!r}；可选 {SCHEMES}"))
     if "boundary_outlet_ghost" in values and values["boundary_outlet_ghost"] not in OUTLET_GHOSTS:
-        raise ConfigError(
-            f"boundary.outlet_ghost 不支持 {values['boundary_outlet_ghost']!r}；可选 {OUTLET_GHOSTS}")
+        raise ConfigError(blame(
+            sources, "boundary_outlet_ghost",
+            f"boundary.outlet_ghost 不支持 {values['boundary_outlet_ghost']!r}；可选 {OUTLET_GHOSTS}"))
     if "vis_order" in values and values["vis_order"] not in VIS_ORDERS:
-        raise ConfigError(
-            f"numerics.vis_order 不支持 {values['vis_order']!r}；可选 {VIS_ORDERS}")
+        raise ConfigError(blame(
+            sources, "vis_order",
+            f"numerics.vis_order 不支持 {values['vis_order']!r}；可选 {VIS_ORDERS}"))
 
     fmt = values.get("mesh_format")
     if fmt is not None and fmt not in MESH_FORMATS:
-        raise ConfigError(f"mesh.format 需要 {MESH_FORMATS} 之一，得到 {fmt!r}")
+        raise ConfigError(blame(
+            sources, "mesh_format", f"mesh.format 需要 {MESH_FORMATS} 之一，得到 {fmt!r}"))
     if fmt is None:
         fmt = "cgns" if "mesh" in values else "builtin"
         values["mesh_format"] = fmt
         sources["mesh_format"] = "mesh.format(推断)"
     if "mesh" in values and fmt != "cgns":
-        raise ConfigError("mesh.file 只在 mesh.format=\"cgns\" 时可用")
+        raise ConfigError(blame(sources, "mesh", "mesh.file 只在 mesh.format=\"cgns\" 时可用"))
     if fmt == "cgns" and "mesh" not in values:
-        raise ConfigError("mesh.format=\"cgns\" 需要 mesh.file")
+        raise ConfigError(blame(sources, "mesh", "mesh.format=\"cgns\" 需要 mesh.file"))
     if fmt == "cgns" and case == "plate":
         missing = [k for k in ("boundary_inflow", "boundary_farfield", "boundary_wall_temperature") if k not in values]
         if missing:
             raise ConfigError(f"plate CGNS 缺少 boundary 参数: {missing}")
 
-    _validate_applicability(values, case)
+    _validate_applicability(values, case, sources)
 
     if values.get("plate_x0") is not None and values.get("plate_x1") is not None:
         if values["plate_x0"] >= values["plate_x1"]:
-            raise ConfigError(
+            raise ConfigError(blame(
+                sources, "plate_x0",
                 f"case.plate_x0 必须小于 plate_x1，得到 {values['plate_x0']:g} "
-                f"和 {values['plate_x1']:g}")
+                f"和 {values['plate_x1']:g}"))
     if "end_step" in values and values["end_step"] < 1:
-        raise ConfigError("time.end_step 至少为 1")
+        raise ConfigError(blame(sources, "end_step", "time.end_step 至少为 1"))
 
 
 def load_config(path: str | os.PathLike[str],
@@ -271,13 +343,16 @@ def load_config(path: str | os.PathLike[str],
     """
     config_path = Path(path).expanduser()
     if not config_path.is_file():
-        raise ConfigError(f"找不到配置文件：{config_path}")
+        raise ConfigError(f"读 JSON 配置：{config_path}：找不到配置文件")
     try:
         raw = json.loads(config_path.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ConfigError(f"{config_path} 不是合法 UTF-8 JSON：{exc}") from exc
+        raise ConfigError(
+            f"读 JSON 配置：{config_path}：不是合法 UTF-8 JSON：{exc}") from exc
+    except OSError as exc:
+        raise ConfigError(f"读 JSON 配置：{config_path}：读不了：{exc}") from exc
     if not isinstance(raw, dict):
-        raise ConfigError(f"{config_path} 顶层必须是对象")
+        raise ConfigError(f"读 JSON 配置：{config_path}：顶层必须是对象")
 
     directory = config_path.resolve().parent
     values: dict[str, Any] = {}
@@ -292,11 +367,12 @@ def load_config(path: str | os.PathLike[str],
     # 4.n 规格）：不走节→字段机制，单独解析。
     if "specificboundary" in raw:
         value = raw["specificboundary"]
-        if not isinstance(value, str) or not value.strip():
-            raise ConfigError(
-                "specificboundary 需要是 src/special_boundaries/ 下的脚本名字符串")
-        values["specificboundary"] = value.strip()
         sources["specificboundary"] = "specificboundary"
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(blame(
+                sources, "specificboundary",
+                "specificboundary 需要是 src/special_boundaries/ 下的脚本名字符串"))
+        values["specificboundary"] = value.strip()
 
     for section, spec in _SCHEMA.items():
         block = raw.get(section)
@@ -310,23 +386,26 @@ def load_config(path: str | os.PathLike[str],
         for name, value in block.items():
             kind, dest = spec[name]
             dotted = f"{section}.{name}"
-            values[dest] = _validate_value(kind, value, dotted, directory)
             sources[dest] = dotted
+            try:
+                values[dest] = _validate_value(kind, value, dotted, directory)
+            except ConfigError as exc:
+                raise ConfigError(blame(sources, dest, str(exc))) from exc
 
     if "precision" in raw:
         precision = raw["precision"]
         if precision not in ("fp64", "fp32"):
-            raise ConfigError(
-                f"precision 需要 \"fp64\" 或 \"fp32\"，得到 {precision!r}")
+            raise ConfigError(blame(
+                {"fp32": "precision"}, "fp32",
+                f"precision 需要 \"fp64\" 或 \"fp32\"，得到 {precision!r}"))
         values["fp32"] = precision == "fp32"
         values["fp64"] = precision == "fp64"
-        sources["fp32"] = "precision"
-        sources["fp64"] = "precision"
+        sources["fp32"] = sources["fp64"] = "precision"
 
     if "case" in values and values["case"] not in CASE_NAMES:
-        raise ConfigError(
-            f"case.name 必须是 {', '.join(CASE_NAMES)} 之一，"
-            f"得到 {values['case']!r}")
+        raise ConfigError(blame(
+            sources, "case",
+            f"case.name 必须是 {', '.join(CASE_NAMES)} 之一，得到 {values['case']!r}"))
 
     _semantic_checks(values, sources, case or "sod")
     return Config(path=config_path, values=values, sources=sources)
@@ -372,7 +451,7 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
     # config.values——`--case sod --outlet-ghost copy` 能通过解析（Astra
     # 第十轮）。
     given = {**(config.values if config is not None else {}), **explicit}
-    _validate_applicability(given, merged.get("case", "sod"))
+    _validate_applicability(given, merged.get("case", "sod"), sources)
 
     fmt = merged.get("mesh_format")
     if fmt is None:
@@ -380,34 +459,42 @@ def resolve_args(explicit: Mapping[str, Any], config: Config | None,
         merged["mesh_format"] = fmt
         sources["mesh_format"] = "mesh.format(推断)"
     if fmt not in MESH_FORMATS:
-        raise ConfigError(f"mesh.format 需要 {MESH_FORMATS} 之一，得到 {fmt!r}")
+        raise ConfigError(blame(
+            sources, "mesh_format", f"mesh.format 需要 {MESH_FORMATS} 之一，得到 {fmt!r}"))
     if merged.get("mesh") and fmt != "cgns":
-        raise ConfigError("mesh.file 只在 mesh.format=\"cgns\" 时可用")
+        raise ConfigError(blame(sources, "mesh", "mesh.file 只在 mesh.format=\"cgns\" 时可用"))
     if fmt == "cgns" and not merged.get("mesh"):
-        raise ConfigError("mesh.format=\"cgns\" 需要 mesh.file")
+        raise ConfigError(blame(sources, "mesh", "mesh.format=\"cgns\" 需要 mesh.file"))
     if fmt == "cgns" and merged.get("case", "sod") not in CGNS_CASES:
-        raise ConfigError(
-            f"{merged.get('case')} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille/plate")
+        raise ConfigError(blame(
+            sources, "case",
+            f"{merged.get('case')} 不支持 CGNS 网格；mesh.format=\"cgns\" 只适用于 poiseuille/plate"))
     # outlet_ghost 只有 CGNS 装配分支消费。内置网格的 plate 显式给出时此前
     # 静默通过，用户会以为跑了零梯度出口（Astra 第十一轮）。
     if fmt != "cgns" and "boundary_outlet_ghost" in given:
-        raise ConfigError(
-            "boundary.outlet_ghost 只适用于 CGNS 网格的 plate：内置网格不消费该开关")
+        raise ConfigError(blame(
+            sources, "boundary_outlet_ghost",
+            "boundary.outlet_ghost 只适用于 CGNS 网格的 plate：内置网格不消费该开关"))
 
     # 网格尺寸只保留 i/j/k 入口。JSON 不提供维数（Step 3 口径），
     # 命令行与默认值必须给出正整数。
     for canonical in ("ni", "nj", "nk"):
         if merged[canonical] < 1:
-            raise ConfigError(
-                f"网格尺寸 {canonical} 必须为正整数，得到 {merged[canonical]!r}")
+            raise ConfigError(blame(
+                sources, canonical,
+                f"网格尺寸 {canonical} 必须为正整数，得到 {merged[canonical]!r}"))
 
     if merged.get("case") == "plate":
         if merged["plate_x0"] >= merged["plate_x1"]:
-            raise ConfigError(
+            raise ConfigError(blame(
+                sources, "plate_x0",
                 f"plate_x0 必须小于 plate_x1，得到 {merged['plate_x0']:g} "
-                f"和 {merged['plate_x1']:g}")
+                f"和 {merged['plate_x1']:g}"))
         if merged["plate_h"] <= 0.0:
-            raise ConfigError(f"plate_h 必须为正数，得到 {merged['plate_h']:g}")
+            raise ConfigError(blame(
+                sources, "plate_h", f"plate_h 必须为正数，得到 {merged['plate_h']:g}"))
+    if merged.get("plate_dif_bound") is not None:
+        _check_dif_bound(merged["plate_dif_bound"], sources)
 
     case_name = merged.get("case", "sod")
     merged["out_prefix"] = derive_prefix(merged.get("mesh"), case_name)

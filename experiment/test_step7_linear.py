@@ -3,7 +3,7 @@
 锁五件事：
   1. 五个合成小网格放上线性场，一步的粘性右端项与各自的等价单块在阈值内一致。各块内区
      的坐标与等价单块上对应下标的坐标逐位相同（``step7_support.windows`` 核对）。
-  2. 阶梯和一格宽条带两个网格上，离接口 4 层以内的点和其余的点分开比，都在阈值内。
+  2. 接口邻域、物理边界带、其余三块分开比，都在阈值内；哪一块非空且不满，就比哪一块。
   3. 常数来流：多块与等价单块在阈值内一致，不断言为零。物理面的状态鬼胞是清零或镜像
      的，紧挨物理面的内区点粘性右端项不为零。零值断言放在全周期的 per3 上。
   4. CD6：两块切口的小网格编译时传阶数 6，多块与等价单块在阈值内一致。线性场上 CD6 和
@@ -11,8 +11,9 @@
      单块参考在它上面确有可测的差别。
   5. 判别力：只把 Ev 的交换换成恒等，守恒量的交换照旧，阶梯网格上的差远超阈值。
 
-比较项是多块第一步的粘性分项（``trace.viscous[0]``，各块内区拼回等价单块）和单块在
-起点上的粘性右端项。阈值用第六步的 ``step6_support.compare``。
+前两条、第三条和第五条对 CD8、CD6 各验一遍（CD6 是补尾巴 C1 加的）。比较项是多块第一步
+的粘性分项（``trace.viscous[0]``，各块内区拼回等价单块）和单块在起点上的粘性右端项。
+阈值用第六步的 ``step6_support.compare``。
 """
 
 import sys
@@ -39,6 +40,7 @@ import step7_support as step7  # noqa: E402
 DT = 1e-4
 KEYS = step7.SYNTHETIC_KEYS
 NAMES = step7.SYNTHETIC_NAMES
+ORDERS = ("CD8", "CD6")
 pytestmark = pytest.mark.skipif(not support.SOURCE.exists(), reason="缺少源网格")
 
 _same = support.same_bits
@@ -66,36 +68,42 @@ def _alone(state, field):
         state.desc.grid.inner()]
 
 
-# ---- 1、2. 线性场 ----
+# ---- 1、2. 线性场，分区比 ----
 
+@pytest.mark.parametrize("vis_order", ORDERS)
 @pytest.mark.parametrize("key", KEYS, ids=NAMES)
-def test_linear_field_matches_the_equivalent_single_block(key):
-    built, state, trace = _run(key, step7.linear_field)
+def test_linear_field_matches_the_equivalent_single_block(key, vis_order):
+    built, state, trace = _run(key, step7.linear_field, vis_order)
     note = step7.windows(built, state)             # 各块内区的坐标与单块逐位相同
     want, got = _alone(state, step7.linear_field), _back(built, note, trace)
     assert np.any(want[1:5] != 0.0) and np.any(got[1:5] != 0.0)
-    support.compare(want, got, f"{NAMES[KEYS.index(key)]}的粘性右端项")
-    if key in ("stair", "strip"):                   # 离接口 4 层以内与其余分开比
-        near = step7.near_interfaces(built, note)
-        assert near.any() and not near.all()
-        support.compare(want, got, "接口邻域", mask=near)
-        support.compare(want, got, "其余部分", mask=~near)
+    label = NAMES[KEYS.index(key)]
+    support.compare(want, got, f"{label}的粘性右端项")
+    near, band = step7.near_interfaces(built, note), step7.physical_band(built, note)
+    for name, mask in (("接口邻域", near), ("物理边界带", band), ("其余", ~(near | band))):
+        if mask.any() and not mask.all():          # 空的、或者盖满全局的区域没有单独比的意义
+            support.compare(want, got, f"{label}的{name}", mask=mask)
+    if key in ("stair", "strip"):
+        assert near.any() and not near.all()       # 这两个网格上接口邻域单独比过
 
 
 # ---- 3. 常数来流 ----
 
+@pytest.mark.parametrize("vis_order", ORDERS)
 @pytest.mark.parametrize("key", KEYS, ids=NAMES)
-def test_constant_free_stream_matches_without_being_asserted_zero(key):
-    built, state, trace = _run(key, step7.free_stream)
+def test_constant_free_stream_matches_without_being_asserted_zero(key, vis_order):
+    built, state, trace = _run(key, step7.free_stream, vis_order)
     want = _alone(state, step7.free_stream)
     got = _back(built, step7.windows(built, state), trace)
     assert np.any(want[1:5] != 0.0)                 # 物理面旁不为零，所以不拿零当标准
     support.compare(want, got, f"{NAMES[KEYS.index(key)]}的常数来流")
 
 
-def test_viscous_terms_are_zero_for_a_constant_field_on_the_fully_periodic_mesh():
+@pytest.mark.parametrize("vis_order", ORDERS)
+def test_viscous_terms_are_zero_for_a_constant_field_on_the_fully_periodic_mesh(vis_order):
     item = step7.preset("per3")
-    kernels = multiblock.compile_blocks(item.built, item.scale, vis_order=8)
+    kernels = multiblock.compile_blocks(item.built, item.scale,
+                                        vis_order=multiblock.CD_ORDER[vis_order])
     trace, = multiblock.solve(
         kernels, DT, 1, initial=step7.states_from_field(item.built, step7.free_stream))
     interiors = [support.interiors(item.built, trace.viscous[stage]) for stage in range(3)]
@@ -123,14 +131,16 @@ def test_cd6_on_the_two_block_mesh_matches_the_equivalent_single_block():
 
 # ---- 5. 判别力 ----
 
-def test_turning_off_only_the_ev_exchange_is_caught(monkeypatch):
-    built, state, trace = _run("stair", step7.linear_field)
+@pytest.mark.parametrize("vis_order", ORDERS)
+def test_turning_off_only_the_ev_exchange_is_caught(monkeypatch, vis_order):
+    built, state, trace = _run("stair", step7.linear_field, vis_order)
     note = step7.windows(built, state)
     want = _alone(state, step7.linear_field)
     right = _back(built, note, trace)
     monkeypatch.setattr(multiblock, "exchange",
                         step7.exchange_without_ev(multiblock.exchange))
-    kernels = multiblock.compile_blocks(built, step7.SYNTHETIC_SCALE, vis_order=8)
+    kernels = multiblock.compile_blocks(built, step7.SYNTHETIC_SCALE,
+                                        vis_order=multiblock.CD_ORDER[vis_order])
     start = step7.states_from_field(built, step7.linear_field)
     broken = multiblock.solve_step(kernels, start, DT, order=list(range(len(kernels.tables))))
     got = _back(built, note, broken)

@@ -46,23 +46,24 @@ def viscous_args(mesh, vis_order="CD8"):
     return argparse.Namespace(**{**base, "viscous": True, "vis_order": vis_order})
 
 
-def reference():
+def reference(vis_order: str = "CD8"):
     """打开粘性的单块参考：验收网格的源（y 向拉伸的 plate，100×40×40），装配一次并缓存。
+    ``vis_order`` 是粘性导数的阶数名，每种阶数各建一份。
 
     第六步的单块参考缓存着按无粘编好的右端项，它的配置不能原地改，所以另建一份。
     """
-    if "viscous" not in _BUILT:
+    if ("viscous", vis_order) not in _BUILT:
         from opencfd_jax.src import init
-        _BUILT["viscous"] = init.prepare(viscous_args(SOURCE))
-    return _BUILT["viscous"]
+        _BUILT[("viscous", vis_order)] = init.prepare(viscous_args(SOURCE, vis_order))
+    return _BUILT[("viscous", vis_order)]
 
 
-def periodic_reference():
+def periodic_reference(vis_order: str = "CD8"):
     """per3 的等价单块，粘性打开：25×25×25 的全周期立方体，走正式入口的装配。
 
     把立方体写成六个面全是 ``BCSymmetryPolar`` 的单 zone，与第六步的同名测试做法相同。
     """
-    if "periodic" not in _BUILT:
+    if ("periodic", vis_order) not in _BUILT:
         from Grid.split_cgns import periodic_source
         from opencfd_jax.src import init
         source = periodic_source()
@@ -75,8 +76,8 @@ def periodic_reference():
                 bcs.append((f"{letter}{sign}", "BCSymmetryPolar", (tuple(lo), tuple(hi))))
         path = _written(support.MESH_DIR / "step7-periodic.cgns", [
             _zone("Zone 1", source.coords, bcs)])
-        _BUILT["periodic"] = init.prepare(viscous_args(path))
-    return _BUILT["periodic"]
+        _BUILT[("periodic", vis_order)] = init.prepare(viscous_args(path, vis_order))
+    return _BUILT[("periodic", vis_order)]
 
 
 def viscous_stage(state, prepared):
@@ -326,6 +327,33 @@ def near_interfaces(built, note: dict, layers: int = 4) -> np.ndarray:
                 index[2 - a] = slice(entry["start"][a], entry["stop"][a])
             index[2 - axis] = slice(max(plane - layers + 1, 0),
                                     min(plane + layers - 1, shape[2 - axis] - 1) + 1)
+            mask[tuple(index)] = True
+    return mask
+
+
+def physical_band(built, note: dict, layers: int = None) -> np.ndarray:
+    """等价单块上的物理边界带：各块里紧挨着打开了单侧公式的那一面的 ``layers`` 层内区点，
+    形状 (Nk, Nj, Ni)。``layers`` 缺省取鬼胞的层数 LAP，与 :func:`viscous.band_one_sided`
+    覆盖的层数相同。
+
+    哪一面开了单侧公式看 ``block.execution.band``。验收网格上只有壁面是开的，切口面和
+    周期面不开。
+    """
+    from opencfd_jax.src.boundary import LAP
+    layers = LAP if layers is None else layers
+    shape = note["global_vertices"][::-1]
+    mask = np.zeros(shape, dtype=bool)
+    for entry in note["blocks"]:
+        for side, flag in enumerate(built[entry["name"]].execution.band):
+            if not flag:
+                continue
+            axis, high = side // 2, side % 2              # 计算轴，0 是低侧、1 是高侧
+            count = entry["stop"][axis] - entry["start"][axis]
+            plane = entry["start"][axis] + (count - 1 if high else 0)
+            index = [slice(start, stop) for start, stop in                  # 数组轴序 (k, j, i)
+                     zip(entry["start"][::-1], entry["stop"][::-1])]
+            index[2 - axis] = (slice(plane - layers + 1, plane + 1) if high
+                               else slice(plane, plane + layers))
             mask[tuple(index)] = True
     return mask
 

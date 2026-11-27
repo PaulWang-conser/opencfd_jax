@@ -146,8 +146,7 @@ def test_pure_cli_scope_is_rejected():
     defaults = main.build_parser().parse_args([])
     explicit_parser = main.build_parser(explicit_only=True)
     _, explicit = main.resolve_cli(
-        vars(explicit_parser.parse_args(["--case", "sod", "--outlet-ghost", "copy"])),
-        explicit_parser)
+        vars(explicit_parser.parse_args(["--case", "sod", "--outlet-ghost", "copy"])))
     with pytest.raises(runtime_config.ConfigError, match="outlet_ghost"):
         runtime_config.resolve_args(explicit, None, defaults)
 
@@ -162,8 +161,7 @@ def test_builtin_plate_with_outlet_ghost_is_rejected():
     explicit_parser = main.build_parser(explicit_only=True)
     with pytest.raises(runtime_config.ConfigError, match="outlet_ghost"):
         _, explicit = main.resolve_cli(
-            vars(explicit_parser.parse_args(["--case", "plate", "--outlet-ghost", "copy"])),
-            explicit_parser)
+            vars(explicit_parser.parse_args(["--case", "plate", "--outlet-ghost", "copy"])))
         runtime_config.resolve_args(explicit, None, defaults)
     builtin = {"case": {"name": "plate"}}
     for cfg_json in (dict(builtin, boundary={"outlet_ghost": "copy"}),

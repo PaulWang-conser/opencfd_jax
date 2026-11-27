@@ -7,6 +7,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -29,8 +30,7 @@ def parse(argv):
     """按 main.main 的顺序解析：默认值、显式 CLI、可选 JSON。"""
     defaults = main.build_parser().parse_args([])
     parser = main.build_parser(explicit_only=True)
-    config_path, explicit = main.resolve_cli(
-        vars(parser.parse_args(argv)), parser)
+    config_path, explicit = main.resolve_cli(vars(parser.parse_args(argv)))
     cfg = runtime_config.load_config(
         config_path, case=explicit.get("case")) if config_path else None
     return runtime_config.resolve_args(explicit, cfg, defaults)
@@ -165,7 +165,8 @@ def test_negative_switch_overrides_json(tmp_path):
 
 def test_positive_and_negative_switch_conflict(tmp_path):
     cfg = write_json(tmp_path, {"case": {"name": "sod"}})
-    with pytest.raises(SystemExit):
+    # 冲突的开关抛 ConfigError，由 main.main 写成一行配置错误；不再走 argparse 的 error
+    with pytest.raises(runtime_config.ConfigError, match="不能同时给出"):
         parse(["--config", cfg, "--viscous", "--no-viscous"])
 
 
@@ -192,8 +193,9 @@ def test_precision_merge(tmp_path):
 
 
 def test_output_prefix_from_mesh_and_case():
-    assert runtime_config.derive_prefix(r"a\b\OCFD3d-Mesh.dat", "poiseuille") \
-        == "OCFD3d-Mesh"
+    # 路径用 os.path.join 拼：Linux 上 os.path 不把反斜杠当分隔符
+    assert runtime_config.derive_prefix(os.path.join("a", "b", "OCFD3d-Mesh.dat"),
+                                        "poiseuille") == "OCFD3d-Mesh"
     assert runtime_config.derive_prefix("mesh.v2.dat", "poiseuille") == "mesh.v2"
     assert runtime_config.derive_prefix(None, "plate") == "plate"
     with pytest.raises(runtime_config.ConfigError):

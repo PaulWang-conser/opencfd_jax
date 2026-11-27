@@ -176,39 +176,46 @@ def _pick(value):
 
 
 def _samples(preset):
-    """粘性关闭时求解函数的输出抽样，{字段/块名: 抽样}。per3 只取第一步的量，就只跑一步。"""
+    """粘性关闭时求解函数的输出抽样。per3 只取第一步的量，就只跑一步。
+
+    返回 ({字段/块名: 抽样}, 算出它们的设备)。设备在取回主机以前看。
+    """
     item = step7.preset(preset)
     kernels = multiblock.compile_blocks(item.built, item.scale)
     traces = multiblock.solve(kernels, DT, 1 if preset == "per3" else 2, initial=item.initial)
+    on = support.computed_on(next(iter(traces[0].final.values())))
     whole = {"du0": traces[0].du[0], "du1": traces[0].du[1], "du2": traces[0].du[2],
              "q1": traces[0].q1, "q2": traces[0].q2, "final1": traces[0].final}
     if len(traces) > 1:
         whole["final2"] = traces[1].final
     fields = PERIODIC_FIELDS if preset == "per3" else FIELDS
     return {f"{preset}/{field}/{name}": _pick(value)
-            for field in fields for name, value in whole[field].items()}
+            for field in fields for name, value in whole[field].items()}, on
 
 
 @pytest.mark.parametrize("preset", (*PRESETS, "per3"))
 def test_viscous_off_matches_the_samples(preset):
+    """和 CPU 上存下的抽样比：在 CPU 上算的逐位相同，在 GPU 上算的在验收的阈值内。"""
     with np.load(SAMPLES) as data:
         want = {key: data[key] for key in data.files if key.startswith(preset + "/")}
     assert want, f"抽样文件里没有 {preset} 的抽样"
-    got = _samples(preset)
+    got, on = _samples(preset)
     assert sorted(got) == sorted(want)
     for key, value in want.items():
         assert np.any(value != 0.0), f"{key} 的抽样全是零，没有判别力"
-        _same(got[key], value, key)
+        support.exact(got[key], value, key, got_on=on)
 
 
 # ---- 6. 一块的多块打开粘性，对照正式路径 ----
 
-def test_one_block_with_viscosity_matches_the_formal_path():
-    state = step7.reference()
+@pytest.mark.parametrize("vis_order", ("CD8", "CD6"))
+def test_one_block_with_viscosity_matches_the_formal_path(vis_order):
+    state = step7.reference(vis_order)
     zone = mesh_cgns.read_cgns_zone(support.SOURCE)
     single = multiblock.build_blocks(multiblock.build_topology((zone,)), state.args)
     assert single.tables == ()
-    kernels = multiblock.compile_blocks(single, support.FLUX_SCALE, vis_order=8)
+    kernels = multiblock.compile_blocks(single, support.FLUX_SCALE,
+                                        vis_order=multiblock.CD_ORDER[vis_order])
     block, = single.blocks
     start = support.with_field(state, support.acceptance_state)     # 鬼胞为零
     trace = multiblock.solve_step(kernels, {block.name: jnp.asarray(start)}, DT)

@@ -1,17 +1,22 @@
 """第七步的第一层验收：五个验收网格打开粘性，与等价单块逐阶段一致（U6）。
 
-两边都用验收初场，都打开粘性（CD8），各跑两个整步。单块走正式入口的装配，每个阶段的
-粘性分项用 ``viscous_rhs`` 在同一阶段的准备态上另算（KTD9）；多块走求解函数，各块的内区
-按旁记拼回全局再比。比较项：三个 RK 阶段的总项和粘性分项、准备之前的 q1 和 q2、整步后
-的末态。阈值用第六步的；每个量分三层报告：全域、接口邻域、其余部分。
+两边都用验收初场，都打开粘性，各跑两个整步。粘性导数的阶数 CD8、CD6 各验一遍（CD6 是
+补尾巴 C1 加的）。单块走正式入口的装配，每个阶段的粘性分项用 ``viscous_rhs`` 在同一阶段
+的准备态上另算（KTD9）；多块走求解函数，各块的内区按旁记拼回全局再比。比较项：三个 RK
+阶段的总项和粘性分项、准备之前的 q1 和 q2、整步后的末态。
 
-另外锁四件事：
+阈值用第六步的；每个量分四层报告：全域、接口邻域、物理边界带、其余部分。物理边界带是
+各块里紧挨着打开了单侧公式的那一面的几层（壁面、远面）。切口面不套单侧公式，所以它不在
+物理边界带里，只在接口邻域里。
+
+另外锁五件事：
   1. 切口共有的内区点上，各块粘性分项的两份副本一致，并与单块一致；
   2. 比较器比 ``Ev`` 时看得到第 12 个平面；拿缺省的 5 个分量去比 12 平面的数组会直接报错，
      不会悄悄只比前 5 个；
   3. 四种故意引入的错误都被发现：不换 ``Ev``、换 ``Ev`` 时取错层、切口面被套上单侧公式、
-     RK 组合用了准备过的状态。每一条只动要试的那一处；
-  4. 第六步的无粘验收原样通过（在 ``test_step6_acceptance.py`` 里，阈值不变）。
+     RK 组合用了准备过的状态。每一条只动要试的那一处，两种阶数都验；
+  4. 切口面的边界带标志都是 0；
+  5. 第六步的无粘验收原样通过（在 ``test_step6_acceptance.py`` 里，阈值不变）。
 
 报告行、接口邻域和共有的顶点层用 ``test_step6_acceptance`` 里的辅助函数。
 """
@@ -46,15 +51,18 @@ import test_step6_acceptance as acceptance  # noqa: E402
 DT = 1e-4
 STEPS = 2
 PRESETS = acceptance.PRESETS
+ORDERS = ("CD8", "CD6")
 pytestmark = pytest.mark.skipif(not support.SOURCE.exists(), reason="缺少源网格")
 
 _check, _neighbourhood = acceptance._check, acceptance._neighbourhood
+_chains, _solved = {}, {}       # 每种阶数的单块参考和多块运行，各算一次
 
 
-def _kernels(preset):
-    """验收网格粘性打开（CD8）的求解函数。"""
+def _kernels(preset, vis_order="CD8"):
+    """验收网格粘性打开的求解函数；``vis_order`` 是粘性导数的阶数名。"""
     item = step7.preset(preset)
-    return multiblock.compile_blocks(item.built, item.scale, vis_order=8)
+    return multiblock.compile_blocks(item.built, item.scale,
+                                     vis_order=multiblock.CD_ORDER[vis_order])
 
 
 def _stages(trace, reference, inner):
@@ -67,47 +75,74 @@ def _stages(trace, reference, inner):
                     ("末态", trace.final, reference.final[inner])]
 
 
-@pytest.fixture(scope="module")
-def chain():
+def _chain(vis_order):
     """打开粘性的单块两个整步：每步三个阶段的总项、粘性分项、RHS 的三次入参、末态。"""
-    state = step7.reference()
-    start = support.with_field(state, support.acceptance_state)
-    staged, cons = [], start
-    for _ in range(STEPS):
-        trace = support.formal_trace(state, cons, DT)
-        trace.viscous = tuple(
-            step7.viscous_stage(state, state.execution.prepare(jnp.asarray(q)))
-            for q in trace.inputs)
-        staged.append(trace)
-        cons = trace.final
-    return SimpleNamespace(state=state, start=start, staged=staged)
+    if vis_order not in _chains:
+        state = step7.reference(vis_order)
+        start = support.with_field(state, support.acceptance_state)
+        staged, cons = [], start
+        for _ in range(STEPS):
+            trace = support.formal_trace(state, cons, DT)
+            trace.viscous = tuple(
+                step7.viscous_stage(state, state.execution.prepare(jnp.asarray(q)))
+                for q in trace.inputs)
+            staged.append(trace)
+            cons = trace.final
+        _chains[vis_order] = SimpleNamespace(state=state, start=start, staged=staged)
+    return _chains[vis_order]
 
 
-@pytest.fixture(scope="module")
-def runs():
+def _runs(vis_order):
     """五个验收网格各自两个整步的记录。起点是验收初场按旁记切给各块。"""
-    return {preset: multiblock.solve(_kernels(preset), DT, STEPS,
+    if vis_order not in _solved:
+        _solved[vis_order] = {
+            preset: multiblock.solve(_kernels(preset, vis_order), DT, STEPS,
                                      initial=step7.preset(preset).initial)
             for preset in PRESETS}
+    return _solved[vis_order]
 
 
 # ---- 五个网格逐阶段对照 ----
 
+@pytest.mark.parametrize("vis_order", ORDERS)
 @pytest.mark.parametrize("preset", PRESETS)
-def test_every_stage_matches_the_viscous_single_block(preset, chain, runs):
+def test_every_stage_matches_the_viscous_single_block(preset, vis_order):
+    chain, runs = _chain(vis_order), _runs(vis_order)
     built, note = support.blocks(preset), support.sidecar(preset)
     near = _neighbourhood(preset)
+    band = step7.physical_band(built, note)
+    assert near.any() and band.any() and not (near | band).all()
     lines = []
     inner = chain.state.desc.grid.inner()
     for n, (trace, reference) in enumerate(zip(runs[preset], chain.staged)):
         for what, pieces, alone in _stages(trace, reference, inner):
             lines.append(_check(f"{preset} 第 {n + 1} 步 {what}", alone, built, note,
-                                pieces, near))
+                                pieces, near, band))
     print("\n".join(lines))
-    assert all("全域" in line and "接口邻域" in line and "其余" in line for line in lines)
+    assert all(all(region in line for region in ("全域", "接口邻域", "物理边界带", "其余"))
+               for line in lines)
 
 
-def test_viscous_copies_agree_at_the_shared_points(chain, runs):
+def test_physical_band_follows_the_band_flags():
+    """物理边界带跟着各块的边界带标志走。验收网格上只有壁面（j−）打开了单侧公式：带是紧挨
+    壁面的 4 层，入口、远场、出口、周期面旁边都没有。t3 的 ``blk-rhi`` 没有壁面，它的范围里
+    一个点也不在带里。"""
+    built, note = support.blocks("x2"), support.sidecar("x2")
+    band = step7.physical_band(built, note)
+    assert band.shape == (40, 40, 100) == tuple(note["global_vertices"][::-1])
+    assert band[:, :LAP, :].all()
+    assert not band[:, LAP:, :].any()
+    bare, note = support.blocks("t3"), support.sidecar("t3")
+    without = step7.physical_band(bare, note)
+    top = next(entry for entry in note["blocks"] if entry["name"] == "blk-rhi")
+    window = tuple(slice(start, stop) for start, stop in zip(top["start"][::-1], top["stop"][::-1]))
+    assert without.sum() == LAP * 40 * 100                 # 三块里有两块带壁面
+    assert not without[window].any()
+
+
+@pytest.mark.parametrize("vis_order", ORDERS)
+def test_viscous_copies_agree_at_the_shared_points(vis_order):
+    chain, runs = _chain(vis_order), _runs(vis_order)
     inner = chain.state.desc.grid.inner()
     for preset in PRESETS:
         for n, trace in enumerate(runs[preset]):
@@ -136,6 +171,22 @@ def test_compare_sees_the_twelfth_plane_when_asked():
         support.compare(reference, damaged)
 
 
+# ---- 切口面不套单侧公式 ----
+
+@pytest.mark.parametrize("preset", PRESETS)
+def test_cut_faces_do_not_carry_the_physical_band(preset):
+    """切口面用的是邻块换过来的值，不套物理边界的单侧公式：切口两侧的面上，边界带的标志
+    都是 0。"""
+    built = support.blocks(preset)
+    checked = 0
+    for pair in support.topology(preset).interfaces:
+        for zone, side in ((pair.zone, pair.side), (pair.donor_zone, pair.donor_side)):
+            flag = built[zone].execution.band[2 * side_axis(side) + int(side.endswith("+"))]
+            assert flag == 0, (preset, zone, side)
+            checked += 1
+    assert checked
+
+
 # ---- 四种故意引入的错误 ----
 
 def _only_viscosity_changed(trace, kernels, correct):
@@ -150,9 +201,11 @@ def _only_viscosity_changed(trace, kernels, correct):
             rtol=1e-12, atol=1e-12)
 
 
-def test_skipping_the_ev_exchange_is_caught(chain, runs, monkeypatch):
+@pytest.mark.parametrize("vis_order", ORDERS)
+def test_skipping_the_ev_exchange_is_caught(monkeypatch, vis_order):
+    chain, runs = _chain(vis_order), _runs(vis_order)
     built, note = support.blocks("x2"), support.sidecar("x2")
-    kernels = _kernels("x2")
+    kernels = _kernels("x2", vis_order)
     monkeypatch.setattr(multiblock, "exchange",
                         step7.exchange_without_ev(multiblock.exchange))
     trace = multiblock.solve_step(kernels, step7.preset("x2").initial, DT,
@@ -165,9 +218,11 @@ def test_skipping_the_ev_exchange_is_caught(chain, runs, monkeypatch):
     _only_viscosity_changed(trace, kernels, runs["x2"][0])
 
 
-def test_taking_the_wrong_donor_layer_is_caught(chain, runs, monkeypatch):
+@pytest.mark.parametrize("vis_order", ORDERS)
+def test_taking_the_wrong_donor_layer_is_caught(monkeypatch, vis_order):
+    chain, runs = _chain(vis_order), _runs(vis_order)
     built, note = support.blocks("x2"), support.sidecar("x2")
-    kernels = _kernels("x2")
+    kernels = _kernels("x2", vis_order)
     real = multiblock.exchange
 
     def shifted(tables, pieces):
@@ -197,15 +252,18 @@ def test_taking_the_wrong_donor_layer_is_caught(chain, runs, monkeypatch):
     _only_viscosity_changed(trace, kernels, runs["x2"][0])
 
 
-def test_a_one_sided_formula_on_the_cut_face_is_caught(chain, runs):
+@pytest.mark.parametrize("vis_order", ORDERS)
+def test_a_one_sided_formula_on_the_cut_face_is_caught(vis_order):
     """只改粘性用的切口一侧的标志：只给改了边界带的块重编粘性的两段，无粘的部分仍用
     原来那套。"""
+    chain, runs = _chain(vis_order), _runs(vis_order)
     built, note = support.blocks("x2"), support.sidecar("x2")
     cuts = set()
     for pair in support.topology("x2").interfaces:
         if pair.kind == multiblock.CUT:
             cuts |= {(pair.zone, pair.side), (pair.donor_zone, pair.donor_side)}
     assert cuts
+    order = multiblock.CD_ORDER[vis_order]
     changed = []
     for block in built.blocks:
         band = list(block.execution.band)
@@ -213,10 +271,10 @@ def test_a_one_sided_formula_on_the_cut_face_is_caught(chain, runs):
             if zone == block.name:
                 band[2 * side_axis(side) + int(side.endswith("+"))] = 1
         changed.append(replace(block, execution=replace(block.execution, band=tuple(band))))
-    kernels = _kernels("x2")
+    kernels = _kernels("x2", vis_order)
     hybrid = copy.copy(kernels)
-    hybrid.flux = [multiblock.flux_kernel(block, 8) for block in changed]
-    hybrid.divergence = [multiblock.divergence_kernel(block, 8) for block in changed]
+    hybrid.flux = [multiblock.flux_kernel(block, order) for block in changed]
+    hybrid.divergence = [multiblock.divergence_kernel(block, order) for block in changed]
     trace = multiblock.solve_step(hybrid, step7.preset("x2").initial, DT)
     inner = chain.state.desc.grid.inner()
     with pytest.raises(AssertionError, match="粘性分项.*超出容差") as caught:
@@ -226,7 +284,9 @@ def test_a_one_sided_formula_on_the_cut_face_is_caught(chain, runs):
     _only_viscosity_changed(trace, kernels, runs["x2"][0])
 
 
-def test_using_the_prepared_state_in_the_combination_is_caught(chain, runs):
+@pytest.mark.parametrize("vis_order", ORDERS)
+def test_using_the_prepared_state_in_the_combination_is_caught(vis_order):
+    chain, runs = _chain(vis_order), _runs(vis_order)
     built, note = support.blocks("x2"), support.sidecar("x2")
     trace = runs["x2"][0]
     wrong = {name: solver.rk3_q1(trace.prepared[0][name], DT, trace.du[0][name])

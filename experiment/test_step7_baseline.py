@@ -189,12 +189,17 @@ def _warped_metrics(grid):
 
 
 def _sampled(name: str):
-    """算一个调用方式的 ``viscous_rhs``，取抽样点上的值。返回 (抽样值, 网格记号, 各轴下标)。"""
+    """算一个调用方式的 ``viscous_rhs``，取抽样点上的值。
+
+    返回 (抽样值, 网格记号, 各轴下标, 算出它的设备)。设备在取回主机以前看。
+    """
     cons, kwargs = cases()[name]
     grid = kwargs["grid"]
     picks = tuple(_picks(n) for n in grid.n_inner)
-    du = np.asarray(viscous.viscous_rhs(cons, **kwargs))
-    return du[(slice(None),) + np.ix_(*picks)], _tag(grid), picks
+    raw = viscous.viscous_rhs(cons, **kwargs)
+    on = support.computed_on(raw)
+    du = np.asarray(raw)
+    return du[(slice(None),) + np.ix_(*picks)], _tag(grid), picks, on
 
 
 pytestmark = pytest.mark.skipif(
@@ -203,18 +208,24 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("name", CASE_NAMES)
 def test_viscous_rhs_matches_samples(name):
-    got, tag, picks = _sampled(name)
+    """和 CPU 上存下的原值比：在 CPU 上算的逐位相同，在 GPU 上算的在验收的阈值内；
+    状态是 FP32 的调用方式只在前一种情况下比（只检验 FP64）。"""
+    got, tag, picks, on = _sampled(name)
     with np.load(SAMPLES) as data:
         want = data[f"du_{name}"]
         for axis, pick in enumerate(picks):
             np.testing.assert_array_equal(pick, data[f"picks_{('k', 'j', 'i')[axis]}_{tag}"])
     assert got.size and np.any(got != 0.0), f"{name}：抽样全是零，这个调用方式没有判别力"
-    support.same_bits(got, want, f"{name}：viscous_rhs 与存下的原值不逐位相同")
+    # 只检验 FP64（jisen 的决定）：状态是 FP32 的调用方式（cube_mixed_cd8）不在验收范围，
+    # 在 GPU 上不和 CPU 存下的值比。在 CPU 上算的仍然逐位比。
+    if np.asarray(cases()[name][0]).dtype == np.float32 and on != support.computed_on(want):
+        pytest.skip("只检验 FP64：状态是 FP32 的调用方式，跨设备时不比")
+    support.exact(got, want, f"{name}：viscous_rhs 与存下的原值不一致", got_on=on)
 
 
 def test_comparison_notices_a_flipped_bit():
     """比较有判别力：结果副本里翻转一个位，逐位比较必须报错。"""
-    got, _, _ = _sampled("small_faces_cd8")
+    got, _, _, _ = _sampled("small_faces_cd8")
     flipped = got.copy().reshape(-1)
     position = int(np.flatnonzero(flipped != 0.0)[0])
     flipped[position] = np.nextafter(flipped[position], np.inf)      # 最低位翻转

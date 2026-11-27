@@ -233,7 +233,9 @@ def test_sidecar_that_cannot_be_read_is_an_error(tmp_path):
         side.write_text(text, encoding="utf-8")
         with pytest.raises(SetupError, match="旁记"):
             multiblock._global_sizes(mesh)
-    side.write_text("[" * 3000 + "]" * 3000, encoding="utf-8")   # 嵌套太深，解码器自己出错
+    # 不是 UTF-8 的字节：哪个平台上 read_text 都读不出来。原先用嵌套 3000 层的 JSON
+    # 让解码器自己出错，Linux 上的解码器扛得住那个深度
+    side.write_bytes(b'{"global_vertices": [8, 7, "\xff"]}')
     with pytest.raises(SetupError, match="旁记"):
         multiblock._global_sizes(mesh)
 

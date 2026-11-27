@@ -1,15 +1,15 @@
 """第七步的放行与启动信息（U5）。
 
 锁五件事：
-  1. 粘性打开的多块 plate 配置能走通入口。从 ``main.run`` 跑两步，保存时机、文件名和
-     ``_meta`` 与无粘时相同；读回的末态拼回以后，与打开粘性的单块参考在阈值内一致。
-     文件名和 ``_meta`` 相同证明不了粘性生效，所以要有后半句。
-  2. 粘性打开而粘性导数不是 CD8：JSON 给的、命令行给的各拦一次，都在读坐标之前，报错
-     里点出 ``vis_order``。粘性关闭而导数是 CD6 时仍然放行。
+  1. 粘性打开的多块 plate 配置能走通入口，粘性导数的阶数 CD8、CD6 各验一遍（CD6 是补尾巴
+     C1 加的）。从 ``main.run`` 跑两步，保存时机、文件名和 ``_meta`` 与无粘时相同，``_meta``
+     记下阶数；读回的末态拼回以后，与同一阶数的单块参考在阈值内一致。文件名和 ``_meta``
+     相同证明不了粘性生效、也证明不了阶数生效，所以要有后半句。
+  2. 粘性打开而粘性导数是 CD6：JSON 给的、命令行给的都放行。粘性关闭而导数是 CD6 时也放行。
   3. 粘性打开时，别的不放行的配置照旧拦住：FP32、UP7、特殊边界脚本、参考尺度按某一块填。
   4. 粘性打开时启动信息带 Re、Ama、参考温度、Pr 和导数的阶数；参考温度取缺省值时的提示
      与单块的逐字相同，粘性关闭时多块不打印这一行、两边都不提示。
-  5. 命令行入口：粘性导数是 CD6 的运行只输出一行“初始化错误”，退出码 2，没有 traceback。
+  5. 命令行入口：粘性导数是 CD6 的运行跑完，退出码 0，写出的检查点记着 ``CD6``。
 
 JSON 配置的构造、坏网格和入口解析用 ``test_step6_config`` 里的辅助函数。
 """
@@ -66,10 +66,11 @@ def _read_back(out, step=STEPS):
 
 # ---- 1. 粘性打开的运行走通入口 ----
 
-def test_viscous_run_through_the_entry_matches_the_viscous_single_block(tmp_path):
+@pytest.mark.parametrize("vis_order", ("CD8", "CD6"))
+def test_viscous_run_through_the_entry_matches_the_viscous_single_block(tmp_path, vis_order):
     on, plain = tmp_path / "on", tmp_path / "plain"
-    _run(on, viscous=True)
-    _run(plain)
+    _run(on, viscous=True, vis_order=vis_order)
+    _run(plain, vis_order=vis_order)
     name = io.checkpoint_name("x2", STEPS)
     assert sorted(p.name for p in on.iterdir()) == [name]            # 两个整步，最后一步存盘
     assert sorted(p.name for p in plain.iterdir()) == [name]         # 与无粘时相同
@@ -80,9 +81,10 @@ def test_viscous_run_through_the_entry_matches_the_viscous_single_block(tmp_path
     assert {key: value for key, value in on_meta.items() if key != "viscous"} == {
         key: value for key, value in other_meta.items() if key != "viscous"}
     assert on_meta["viscous"] is True and other_meta["viscous"] is False
+    assert on_meta["vis_order"] == vis_order
     # 单块参考：从缺省的初场走两步。plate 的初场内区是入口状态、鬼胞为零，各块的 cons0
     # 是同一个写法
-    state = step7.reference()
+    state = step7.reference(vis_order)
     inner = state.desc.grid.inner()
     start = state.cons0
     inflow = np.asarray(start)[inner][:, :1, :1, :1]
@@ -95,7 +97,7 @@ def test_viscous_run_through_the_entry_matches_the_viscous_single_block(tmp_path
     support.compare(np.asarray(final)[inner], saved, "读回的末态")
 
 
-# ---- 2. 粘性导数只放行 CD8 ----
+# ---- 2. 粘性导数的阶数 CD6 也放行 ----
 
 @pytest.mark.parametrize("overrides, argv", [
     ({"numerics.viscous": True, "numerics.vis_order": "CD6"}, ()),
@@ -103,12 +105,11 @@ def test_viscous_run_through_the_entry_matches_the_viscous_single_block(tmp_path
     ({"numerics.vis_order": "CD6"}, ("--viscous",)),
     ({}, ("--viscous", "--vis-order", "CD6")),
 ], ids=["JSON", "命令行", "JSON 的阶数加命令行的开关", "开关和阶数都在命令行"])
-def test_cd6_with_viscosity_is_rejected_before_coordinates_are_read(
-        tmp_path, overrides, argv):
-    broken = step6._broken_mesh(tmp_path)          # 读坐标会报错；要在那之前拦住
-    with pytest.raises(SetupError, match="vis_order") as info:
+def test_cd6_with_viscosity_is_released_before_coordinates_are_read(tmp_path, overrides, argv):
+    broken = step6._broken_mesh(tmp_path)          # 读坐标会报错
+    with pytest.raises(SetupError, match="多块网格没有通过校验") as info:
         multiblock.enter(step6._resolve(tmp_path, overrides, argv, mesh=broken))
-    assert "'CD6'" in str(info.value) and "CD8" in str(info.value)
+    assert "不放行" not in str(info.value)         # 放行校验过了，拦住的是后面的读坐标
 
 
 def test_cd6_without_viscosity_is_still_released(tmp_path):
@@ -174,15 +175,16 @@ def test_default_reference_temperature_warns_like_the_single_block(tmp_path, cap
 
 # ---- 5. 命令行入口 ----
 
-def test_cd6_given_on_the_command_line_reports_one_line(tmp_path):
+def test_cd6_given_on_the_command_line_runs(tmp_path):
+    """Covers AE7。"""
     path = tmp_path / "case.json"
     path.write_text(json.dumps(step6._config(support.mesh_path("x2"),
                                              {"numerics.viscous": True})), encoding="utf-8")
+    out = tmp_path / "out"
     done = subprocess.run(
         [sys.executable, "-m", "opencfd_jax.src.main", "--config", str(path),
-         "--vis-order", "CD6"],
+         "--vis-order", "CD6", "--out-dir", str(out)],
         cwd=step6.PROJECT, capture_output=True, text=True)
-    assert done.returncode == 2, done.stderr
-    assert "Traceback" not in done.stderr
-    reported = [line for line in done.stderr.splitlines() if "初始化错误" in line]
-    assert len(reported) == 1 and "vis_order" in reported[0]
+    assert done.returncode == 0, done.stderr
+    meta, _, _ = io.load_checkpoint(str(out / io.checkpoint_name("x2", STEPS)))
+    assert meta["viscous"] is True and meta["vis_order"] == "CD6"
